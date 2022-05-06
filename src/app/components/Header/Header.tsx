@@ -1,9 +1,7 @@
 import classes from './Header.module.css'
 
-function Header() {
+export function Header() {
   return (
     <div className={classes.main}>DOOZ</div>
   )
 }
-
-export default Header

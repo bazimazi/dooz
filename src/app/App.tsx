@@ -1,7 +1,7 @@
 import { useState } from "react";
 import classes from "./App.module.css";
-import Board from "./components/Board/Board";
-import Header from "./components/Header/Header";
+import { Board } from "./components/Board/Board";
+import { Header } from "./components/Header/Header";
 
 function App() {
   return (

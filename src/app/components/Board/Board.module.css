@@ -3,11 +3,20 @@
   flex-direction: column;
 }
 
-.row{
+.row {
   display: flex;
 }
 
 .cell {
   border: 1px solid;
-  padding: 10px 15px;
+  height: 40px;
+  width: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.cell:hover {
+  background-color: gray;
 }
