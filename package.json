@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-router": "^0.0.1-beta.83",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },

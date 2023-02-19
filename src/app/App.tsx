@@ -1,13 +1,10 @@
-import { useState } from "react";
 import classes from "./App.module.css";
-import { Board } from "./components/Board/Board";
-import { Header } from "./components/Header/Header";
+import { AppRouter } from "./AppRouter";
 
 function App() {
   return (
     <div className={classes.main}>
-      <Header></Header>
-      <Board></Board>
+      <AppRouter />
     </div>
   );
 }

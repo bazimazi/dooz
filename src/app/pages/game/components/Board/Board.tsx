@@ -8,7 +8,7 @@ interface Props {
   result?: WinResult
 }
 
-export function BoardContent({ boardData, onClick, currentPlayer, result }: Props) {
+export function Board({ boardData, onClick, currentPlayer, result }: Props) {
   return (
     <div className={classes.main}>
       {result ? (
