@@ -5,7 +5,7 @@ import { WinResult } from "~/utils/WinResult";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
-import classes from "./GamePage.module.css";
+import classes from "./GamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
   .fill(null)

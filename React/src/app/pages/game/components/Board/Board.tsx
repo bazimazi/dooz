@@ -1,5 +1,5 @@
 import { WinResult } from "~/utils/WinResult";
-import classes from "./Board.module.css";
+import classes from "./Board.module.scss";
 
 interface Props {
   boardData: string[][];

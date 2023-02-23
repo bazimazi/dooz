@@ -1,4 +1,4 @@
-import classes from "./App.module.css";
+import classes from "./App.module.scss";
 import { AppRouter } from "./AppRouter";
 
 function App() {
