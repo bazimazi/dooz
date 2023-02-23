@@ -1,4 +1,4 @@
-import classes from "./Footer.module.css";
+import classes from "./Footer.module.scss";
 
 export function Footer() {
   return (
@@ -6,7 +6,7 @@ export function Footer() {
       <a className={classes.refresh} onClick={() => window.location.reload()}>
         <img src="static/images/refresh.svg" alt="refresh" />
       </a>
-      
+
       <a className={classes.home} href="/">
         <img src="static/images/home.svg" alt="home" />
       </a>

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import classes from "./HomePage.module.css";
+import classes from "./HomePage.module.scss";
 
 export function HomePage() {
   return (
