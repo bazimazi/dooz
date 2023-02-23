@@ -1,4 +1,4 @@
-import classes from "./Header.module.css";
+import classes from "./Header.module.scss";
 
 export function Header() {
   return (
@@ -10,7 +10,7 @@ export function Header() {
           <img src="static/images/player1.svg" alt="X" />
         </div>
       </div>
-      
+
       <div className={classes.vs}>VS</div>
 
       <div className={classes.player2}>
