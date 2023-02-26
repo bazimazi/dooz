@@ -13,7 +13,18 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "~/*": [
+        "./src/app/*"
+      ],
+      "$/*": [
+        "./src/core/*"
+      ],
+      "#/*": [
+        "./src/components/*"
+      ]
+    }
   },
   "include": ["src"]
 }
