@@ -1,16 +1,19 @@
-export class BaseElement extends HTMLElement {
-  constructor(html: string, css: string) {
+export class ShadowedElement extends HTMLElement {
+  constructor(html: string, css?: string) {
     super();
 
     this.attachShadow({ mode: "open" });
 
-    const template = `
-    <style>
-      ${css}
-    </style>
+    const template = !css ? `${html}` : `
+<style>
+* {
+    box-sizing: border-box;
+}
+${css}
+</style>
 
-    ${html}
-    `;
+${html}
+`;
 
     const templateEl = document.createElement("template");
     templateEl.innerHTML = template;

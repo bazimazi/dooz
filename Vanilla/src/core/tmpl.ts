@@ -1,34 +1,39 @@
-const cache: any = {};
+function parse(template: string) {
+  let result = /{{(.*?)}}/g.exec(template);
+  const arr = [];
+  let firstPos;
 
-export function tmpl(input: string, data: any = null): string {
-  var fn = !/\W/.test(input)
-    ? (cache[input] =
-        cache[input] || tmpl(document.getElementById(input)?.innerHTML ?? ""))
-    : new Function(
-        "obj",
-        "var p=[],print=function(){p.push.apply(p,arguments);};p.push('" +
-          input
-            .replace(/[\r\t\n]/g, " ")
-            //.split("<%").join("\t")
-            .split("{{")
-            .join("\t")
-            //.replace(/((^|%>)[^\t]*)'/g, "$1\r")
-            .replace(/((^|}})[^\t]*)'/g, "$1\r")
-            //.replace(/\t=(.*?)%>/g, "',$1,'")
-            .replace(/\t=(.*?)}}/g, "',$1,'")
-            .split("\t")
-            .join("');")
-            //.split("%>").join("p.push('")
-            .split("}}")
-            .join("p.push('")
-            .split("\r")
-            .join("\\'") +
-          "');return p.join('');"
-      );
+  while (result) {
+    firstPos = result.index;
+    if (firstPos !== 0) {
+      arr.push(template.substring(0, firstPos));
+      template = template.slice(firstPos);
+    }
 
-  return data ? wrap(data) : wrap;
-
-  function wrap(data: any) {
-    return fn.call(data);
+    arr.push(result[0]);
+    template = template.slice(result[0].length);
+    result = /{{(.*?)}}/g.exec(template);
   }
+
+  if (template) arr.push(template);
+  return arr;
+}
+
+function compileToString(template: string) {
+  const ast = parse(template);
+  let fnStr = `""`;
+
+  ast.map(t => {
+    if (t.startsWith("{{") && t.endsWith("}}")) {
+      fnStr += `+data.${t.split(/{{|}}/).filter(Boolean)[0].trim()}`;
+    } else {
+      fnStr += `+"${t}"`;
+    }
+  });
+
+  return fnStr;
+}
+
+export function tmpl(template: string) {
+  return new Function("data", "return " + compileToString(template))
 }

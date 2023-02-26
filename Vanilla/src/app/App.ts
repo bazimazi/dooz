@@ -1,15 +1,27 @@
-import { BaseElement } from "../core/BaseElement";
+import { Router } from "#/router/Router";
+import { ReplacedElement } from "$/ReplacedElement";
 import html from "./App.html?raw";
 import css from "./App.css?raw";
 
-console.log('App...')
-
-class App extends BaseElement {
+export class App extends ReplacedElement {
   constructor() {
     super(html, css);
   }
-}
 
-customElements.define("app-x", App);
-// if (!customElements.get("app-comp")) {
-// }
+  connectedCallback() {
+    var router = new Router({
+      routes: [{
+        url: '/',
+        content: '<home- class="page" />'
+      }, {
+        url: '/game',
+        content: '<game- class="page" />'
+      }, {
+        url: '/haha',
+        content: '<h1>haha</h1>'
+      }]
+    });
+    let main = document.querySelector('div.main')!;
+    router.start((content: string) => main.innerHTML = content);
+  }
+}
