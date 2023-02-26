@@ -42,7 +42,7 @@ export function GamePage() {
   return (
     <div className={classes.page}>
       <div className={classes.header}>
-        <Header />
+        <Header currentPlayer={currentPlayer} />
       </div>
 
       <div className={classes.body}>
