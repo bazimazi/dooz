@@ -1,0 +1,11 @@
+<div class="main">
+    <div class="container">
+        {{#each boardData}}
+        <div class="row">
+            {{#each this}}
+            <div class="cell" id="cell-{{@../index}}-{{@index}}" data-i="{{@../index}}" data-j="{{@index}}"></div>
+            {{/each}}
+        </div>
+        {{/each}}
+    </div>
+</div>
