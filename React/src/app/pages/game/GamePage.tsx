@@ -29,7 +29,7 @@ export function GamePage() {
   };
 
   const checkWinner = () => {
-    const winResult = checkBoard(boardData);
+    const winResult = checkBoard(boardData,currentPlayer);
     if (!winResult) return;
 
     setResult(winResult);
