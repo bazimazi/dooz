@@ -3,8 +3,8 @@
   font-size: 32px;
 }
 
-.player1,
-.player2 {
+ 
+.player {
   position: relative;
   width: 98px;
   height: 130px;
@@ -38,8 +38,7 @@
   max-width: 48px;
 }
 
-.player1 > img,
-.player2 > img {
+.vector {
   max-width: 14px;
   position: absolute;
   bottom: -15px;
@@ -47,7 +46,8 @@
   display: none;
 }
 
-.showVectorPink,
-.showVectorYellow{
-display: block !important;
+.player.playerTwoTurn .vector,
+.player.playerOneTurn .vector{
+  display: block;
 }
+ 
