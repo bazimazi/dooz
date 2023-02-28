@@ -14,6 +14,6 @@ const WIN_LINES = [
 
 export function checkBoard(board: string[][], currentPlayer: string): number[][] | void {
 
-    return WIN_LINES.find(WIN_LINE => WIN_LINE.every(e => board[e[0]][e[1]] == currentPlayer))
+    return WIN_LINES.find(line => line.every(cell => board[cell[0]][cell[1]] == currentPlayer))
 
 }
