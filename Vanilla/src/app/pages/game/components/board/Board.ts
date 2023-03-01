@@ -3,14 +3,13 @@ import { ShadowedElement } from "$/ShadowedElement";
 import html from "./Board.html?raw";
 import css from "./Board.css?raw";
 
-const INITIAL_BOARD = Array(3).fill(null).map(() => Array(3).fill(null));
-
 export class Board extends ShadowedElement {
     private _data: any = {};
 
-    constructor() {
+    connectedCallback() {
         const template = Handlebars.compile(html);
-        super(template({ boardData: INITIAL_BOARD }), css);
+        const s = +this.size;
+        this.render(template({ data: Array(s).fill(null), size: 288/s }), css);
 
         this.shadowRoot?.querySelectorAll('.cell').forEach(div => {
             div.addEventListener('click', e => {
@@ -23,7 +22,7 @@ export class Board extends ShadowedElement {
         });
     }
 
-    static get observedAttributes() { return ['data'] }
+    static get observedAttributes() { return ['data', 'size'] }
 
     get data() { return this._data; }
     set data(value: any) {
@@ -32,4 +31,7 @@ export class Board extends ShadowedElement {
         if (!cell) return;
         cell.innerHTML = `<img src="images/${value.player}.svg" alt="${value.player}" />`
     }
+
+    get size() { return this.getAttribute('size')!; }
+    set size(value: string) { this.setAttribute('size', value); }
 }

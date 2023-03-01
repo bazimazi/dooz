@@ -1,22 +1,26 @@
-export class ShadowedElement extends HTMLElement {
-  constructor(html: string, css?: string) {
+import { ReplacedElement } from "./ReplacedElement";
+
+export class ShadowedElement extends ReplacedElement {
+  constructor(html?: string, css?: string) {
     super();
 
     this.attachShadow({ mode: "open" });
 
-    const template = !css ? `${html}` : `
-<style>
-* {
-    box-sizing: border-box;
-}
-${css}
-</style>
+    this.render(html, css);
+  }
 
-${html}
-`;
+  protected render(html?: string, css?: string) {
+    css = css ? `
+  * {
+    box-sizing: border-box;
+  }
+  ${css}` : css;
+    const template = this.template(html, css);
+    if (!template) return;
 
     const templateEl = document.createElement("template");
     templateEl.innerHTML = template;
     this.shadowRoot!.appendChild(templateEl.content.cloneNode(true));
   }
+
 }

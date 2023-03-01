@@ -1,9 +1,9 @@
 <div class="main">
     <div class="container">
-        {{#each boardData}}
+        {{#each data}}
         <div class="row">
-            {{#each this}}
-            <div class="cell" id="cell-{{@../index}}-{{@index}}" data-i="{{@../index}}" data-j="{{@index}}"></div>
+            {{#each ../data}}
+            <div class="cell" style="width:{{../size}}px;height:{{../size}}px" id="cell-{{@../index}}-{{@index}}" data-i="{{@../index}}" data-j="{{@index}}"></div>
             {{/each}}
         </div>
         {{/each}}

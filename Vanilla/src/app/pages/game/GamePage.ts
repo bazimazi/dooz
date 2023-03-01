@@ -6,10 +6,9 @@ import { P1, P2 } from "$/players";
 import { checkBoard } from "$/check-board";
 import { Board } from "./components/board/Board";
 
-const INITIAL_BOARD = Array(3).fill(null).map(() => Array(3).fill(null));
 
 export class GamePage extends ShadowedElement {
-    private boardData: any[][] = INITIAL_BOARD;
+    private boardData: any[][] = [[]];
     private result: WinResult | null = null;
     private currentPlayer: string = Math.round(Math.random()) ? P1 : P2;
     private board: Board;
@@ -25,11 +24,10 @@ export class GamePage extends ShadowedElement {
     }
 
     connectedCallback() {
-
+        this.boardData = Array(3).fill(null).map(() => Array(3).fill(null));
     }
 
     private handleClick(i: number, j: number) {
-        console.log(i, j);
         if (this.boardData[i][j] || this.result) return;
 
         this.boardData[i][j] = this.currentPlayer;
