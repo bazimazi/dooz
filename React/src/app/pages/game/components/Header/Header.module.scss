@@ -3,13 +3,22 @@
   font-size: 32px;
 }
 
-.player1,
-.player2 {
+ 
+.player {
+  position: relative;
   width: 98px;
   height: 130px;
   padding: 4px;
   border: 1px solid #5570fd;
   border-radius: 24px;
+}
+
+.playerOneTurn {
+  border: 1px solid #F3339E;
+}
+
+.playerTwoTurn {
+  border: 1px solid #F9BD13;
 }
 
 .playerContainer {
@@ -28,3 +37,17 @@
 .playerContainer img {
   max-width: 48px;
 }
+
+.vector {
+  max-width: 14px;
+  position: absolute;
+  bottom: -15px;
+  left: 40px;
+  display: none;
+}
+
+.player.playerTwoTurn .vector,
+.player.playerOneTurn .vector{
+  display: block;
+}
+ 

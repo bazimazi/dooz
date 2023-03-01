@@ -1,11 +1,10 @@
-import { WinResult } from "~/utils/WinResult";
 import classes from "./Board.module.scss";
 
 interface Props {
   boardData: string[][];
   onClick: (i: number, j: number) => void;
   currentPlayer: string;
-  result?: WinResult;
+  result?: number[][];
 }
 
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
