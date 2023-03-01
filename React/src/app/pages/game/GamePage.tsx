@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2 } from "~/utils/players";
-import { WinResult } from "~/utils/WinResult";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
@@ -16,7 +15,7 @@ export function GamePage() {
   const [currentPlayer, setCurrentPlayer] = useState(
     Math.round(Math.random()) ? P1 : P2
   );
-  const [result, setResult] = useState<WinResult>();
+  const [result, setResult] = useState<number[][]>();
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -29,11 +28,11 @@ export function GamePage() {
   };
 
   const checkWinner = () => {
-    const winResult = checkBoard(boardData);
+    const winResult = checkBoard(boardData, currentPlayer);
     if (!winResult) return;
 
     setResult(winResult);
-    winResult.line.forEach((cell) => {
+    winResult.forEach((cell) => {
       boardData[cell[0]][cell[1]] = "🤩";
     });
     setBoardData([...boardData]);
