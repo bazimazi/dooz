@@ -3,22 +3,28 @@
   font-size: 32px;
 }
 
- 
-.player {
+.player1,
+.player2 {
   position: relative;
   width: 98px;
   height: 130px;
   padding: 4px;
   border: 1px solid #5570fd;
   border-radius: 24px;
+
+  &.current {
+    .currentImg {
+      display: block;
+    }
+  }
 }
 
-.playerOneTurn {
-  border: 1px solid #F3339E;
+.player1.current {
+  border-color: #F3339E;
 }
 
-.playerTwoTurn {
-  border: 1px solid #F9BD13;
+.player2.current {
+  border-color: #F9BD13;
 }
 
 .playerContainer {
@@ -32,22 +38,16 @@
   font-size: 16px;
   background-color: #5570fd;
   border-radius: 20px;
+
+  img {
+    max-width: 48px;
+  }
 }
 
-.playerContainer img {
-  max-width: 48px;
-}
-
-.vector {
+.currentImg {
   max-width: 14px;
   position: absolute;
   bottom: -15px;
   left: 40px;
   display: none;
 }
-
-.player.playerTwoTurn .vector,
-.player.playerOneTurn .vector{
-  display: block;
-}
- 

@@ -5,6 +5,7 @@
 
 .player1,
 .player2 {
+    position: relative;
     width: 98px;
     height: 130px;
     padding: 4px;
@@ -12,7 +13,15 @@
     border-radius: 24px;
 }
 
-.playerContainer {
+.player1.current {
+    border-color: #F3339E;
+}
+
+.player2.current {
+    border-color: #F9BD13;
+}
+
+.player-container {
     display: flex;
     flex-direction: column;
     justify-content: space-around;
@@ -25,6 +34,19 @@
     border-radius: 20px;
 }
 
-.playerContainer img {
+.player-container img {
     max-width: 48px;
+}
+
+.current-img {
+    max-width: 14px;
+    position: absolute;
+    bottom: -15px;
+    left: 40px;
+    display: none;
+}
+
+.player1.current .current-img,
+.player2.current .current-img {
+    display: block;
 }
