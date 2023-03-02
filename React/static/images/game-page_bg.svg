@@ -1,12 +1,12 @@
 <svg width="360" height="640" viewBox="0 0 360 640" fill="none" xmlns="http://www.w3.org/2000/svg">
-<circle cx="112.5" cy="9.5" r="58.5" fill="#2D34AD"/>
-<circle cx="112.5" cy="9.5" r="32.5" fill="#232599"/>
-<rect x="270.297" y="41.749" width="31.9989" height="115.196" rx="12" transform="rotate(-81.2925 270.297 41.749)" fill="#2D34AD"/>
-<rect x="336.749" y="94.0098" width="31.9989" height="115.196" rx="12" transform="rotate(-171.293 336.749 94.0098)" fill="#2D34AD"/>
+<circle cx="80.5" cy="9.5" r="58.5" fill="#2D34AD"/>
+<circle cx="80.5" cy="9.49997" r="32.5" fill="#232599"/>
+<rect x="248.804" y="37.6337" width="29.8833" height="107.58" rx="12" transform="rotate(-81.2925 248.804 37.6337)" fill="#2D34AD"/>
+<rect x="310.862" y="86.4394" width="29.8833" height="107.58" rx="12" transform="rotate(-171.293 310.862 86.4394)" fill="#2D34AD"/>
 <rect x="160.9" y="179.955" width="25.0633" height="90.2279" rx="12" transform="rotate(-72.3513 160.9 179.955)" fill="#2D34AD"/>
 <rect x="205.954" y="228.48" width="25.0633" height="90.2279" rx="12" transform="rotate(-162.351 205.954 228.48)" fill="#2D34AD"/>
 <circle cx="53" cy="597" r="65" fill="#2D34AD"/>
-<circle cx="52.9999" cy="597" r="36.1111" fill="#232599"/>
+<circle cx="53" cy="597" r="36.1111" fill="#232599"/>
 <rect x="240.403" y="596.743" width="33.721" height="121.395" rx="12" transform="rotate(-62.9652 240.403 596.743)" fill="#2D34AD"/>
 <rect x="289.562" y="671.044" width="33.721" height="121.395" rx="12" transform="rotate(-152.965 289.562 671.044)" fill="#2D34AD"/>
 </svg>
