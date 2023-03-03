@@ -22,19 +22,17 @@ export function GamePage() {
 
     boardData[i][j] = currentPlayer;
     setBoardData([...boardData]);
-    checkWinner();
-    if (!checkWinner()) {
-      setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
-    }
 
+    if (checkWinner()) return;
 
+    setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
   };
 
   const checkWinner = () => {
     const winResult = checkBoard(boardData, currentPlayer);
-    if (!winResult) return;
+    if (!winResult) return false;
     setResult(winResult);
-    return true
+    return true;
   };
 
   return (
