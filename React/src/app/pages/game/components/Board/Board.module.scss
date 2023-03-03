@@ -5,6 +5,7 @@
   backdrop-filter: blur(3px);
   border-radius: 64px;
   padding: 12px;
+  position: relative;
 }
 
 .container {
@@ -51,4 +52,15 @@
 .row:nth-child(2) :last-child {
   border-left: none;
   border-right: none;
+}
+
+.winnerLine {
+  border: 1px solid inherit;
+  width: 4px;
+  position: absolute;
+  height: 0px;
+  background-color: #FF99F6;
+  transform-origin: center bottom;
+  transition: height 0.4s ease-in-out;
+
 }

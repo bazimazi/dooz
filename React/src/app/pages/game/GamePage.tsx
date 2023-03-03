@@ -22,20 +22,19 @@ export function GamePage() {
 
     boardData[i][j] = currentPlayer;
     setBoardData([...boardData]);
-    setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
-
     checkWinner();
+    if (!checkWinner()) {
+      setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
+    }
+
+
   };
 
   const checkWinner = () => {
     const winResult = checkBoard(boardData, currentPlayer);
     if (!winResult) return;
-
     setResult(winResult);
-    winResult.forEach((cell) => {
-      boardData[cell[0]][cell[1]] = "🤩";
-    });
-    setBoardData([...boardData]);
+    return true
   };
 
   return (
