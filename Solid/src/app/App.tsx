@@ -1,12 +1,11 @@
 import type { Component } from 'solid-js';
+import { AppRouter } from './AppRouter';
 import styles from './App.module.css';
 
-const App: Component = () => {
+export function App() {
   return (
     <div class={styles.main}>
-      DOOZ
+      <AppRouter />
     </div>
   );
 };
-
-export default App;
