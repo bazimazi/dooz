@@ -14,9 +14,9 @@ export function winLineMaker(currentPlayer: string, result?: number[][]) {
     }
 
     let lineStartY = result[0][0];
-    let lineEndY = result[2][0];
+    let lineEndY = result[result.length-1][0];
     let lineStartX = result[0][1];
-    let lineEndX = result[2][1];
+    let lineEndX = result[result.length-1][1];
 
     let angelIndicater = (lineEndY - lineStartY) / (lineEndX - lineStartX);
     let lineLength = Math.sqrt((lineEndY - lineStartY) ** 2 + (lineEndX - lineStartX) ** 2) * 139;
