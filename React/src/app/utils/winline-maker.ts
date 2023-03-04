@@ -1,85 +1,43 @@
-import { P1, P2 } from "./players";
+import { P1 } from "./players";
 
 
-export function winLineMaker(currentPlayer: string,result?: number[][]) {
+export function winLineMaker(currentPlayer: string, result?: number[][]) {
+
+    if (!result) return;
 
     const winLineStyle = {
-        bottom: "",
+        top: "",
         left: "",
         transform: "",
         height: "",
         backgroundColor: (currentPlayer == P1) ? "#FF99F6" : "#FFD334"
     }
 
-    switch (result?.toString()) {
-        case ([[0, 0], [0, 1], [0, 2]]).toString():
+    let lineStartY = result[0][0];
+    let lineEndY = result[2][0];
+    let lineStartX = result[0][1];
+    let lineEndX = result[2][1];
 
-            winLineStyle.bottom = "250px";
-            winLineStyle.left = "14px";
-            winLineStyle.transform = "rotate(90deg)";
-            winLineStyle.height = "279px"
-            break;
+    let angelIndicater = (lineEndY - lineStartY) / (lineEndX - lineStartX);
+    let lineLength = Math.sqrt((lineEndY - lineStartY) ** 2 + (lineEndX - lineStartX) ** 2) * 139;
 
-        case ([[1, 0], [1, 1], [1, 2]]).toString():
+    winLineStyle.height = `${lineLength}px`;
 
-            winLineStyle.bottom = "154px";
-            winLineStyle.left = "14px";
-            winLineStyle.transform = "rotate(90deg)";
-            winLineStyle.height = "279px"
-            break;
-
-        case ([[2, 0], [2, 1], [2, 2]]).toString():
-
-            winLineStyle.bottom = "58px";
-            winLineStyle.left = "14px";
-            winLineStyle.transform = "rotate(90deg)";
-            winLineStyle.height = "279px"
-            break;
-
-        case ([[0, 0], [1, 0], [2, 0]]).toString():
-
-            winLineStyle.bottom = "294px";
-            winLineStyle.left = "58px";
-            winLineStyle.transform = "rotate(180deg)";
-            winLineStyle.height = "279px"
-            break;
-
-        case ([[0, 1], [1, 1], [2, 1]]).toString():
-
-            winLineStyle.bottom = "294px";
-            winLineStyle.left = "152px";
-            winLineStyle.transform = "rotate(180deg)";
-            winLineStyle.height = "279px"
-            break;
-
-        case ([[0, 2], [1, 2], [2, 2]]).toString():
-
-            winLineStyle.bottom = "294px";
-            winLineStyle.left = "248px";
-            winLineStyle.transform = "rotate(180deg)";
-            winLineStyle.height = "279px"
-            break;
-
-        case ([[0, 0], [1, 1], [2, 2]]).toString():
-
-            winLineStyle.bottom = "280px";
-            winLineStyle.left = "27px";
-            winLineStyle.transform = "rotate(135deg)";
-            winLineStyle.height = "354px"
-            break;
-
-        case ([[0, 2], [1, 1], [2, 0]]).toString():
-
-            winLineStyle.bottom = "280px";
-            winLineStyle.left = "280px";
-            winLineStyle.transform = "rotate(225deg)";
-            winLineStyle.height = "354px"
-            break;
-
-        default:
-            break;
+    if (lineStartY == lineEndY) {
+        winLineStyle.left = "14px";
+        winLineStyle.top = `${lineStartY * 95 + 58}px`;
+        winLineStyle.transform = "rotate(-90deg)";
     }
-
+    else if (lineStartX == lineEndX) {
+        winLineStyle.left = `${lineStartX * 95 + 58}px`;
+        winLineStyle.top = "16px";
+        winLineStyle.transform = "rotate(0deg)";
+    }
+    else {
+        winLineStyle.height = `${lineLength - 37}px`
+        winLineStyle.transform = `rotate(${angelIndicater > 0 ? -45 : 45}deg)`;
+        winLineStyle.left = `${lineStartX * 125 + 28}px`;
+        winLineStyle.top = `${lineStartY * 125 + 28}px`;
+    }
     return winLineStyle;
-
 }
