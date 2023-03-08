@@ -1,7 +1,10 @@
 <script>
+  import AppRouter from "./AppRouter.svelte";
 </script>
 
-<div class="main">Hello Svelte!</div>
+<div class="main">
+  <AppRouter />
+</div>
 
 <style>
   .main {
