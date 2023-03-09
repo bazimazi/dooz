@@ -11,10 +11,12 @@ const INITIAL_BOARD = Array(3)
   .map(() => Array(3).fill(null));
 
 export function GamePage() {
+
   const [boardData, setBoardData] = useState(INITIAL_BOARD);
   const [currentPlayer, setCurrentPlayer] = useState(
     Math.round(Math.random()) ? P1 : P2
   );
+
   const [result, setResult] = useState<number[][]>();
 
   const handleClick = (i: number, j: number) => {
@@ -35,6 +37,17 @@ export function GamePage() {
     return true;
   };
 
+  const refreshBoard = () => {
+    boardData.forEach(row => {
+      row.fill(null);
+    });
+    setBoardData([...boardData]);
+    setCurrentPlayer(
+      Math.round(Math.random()) ? P1 : P2
+    );
+    setResult(undefined);
+  }
+
   return (
     <div className={classes.page}>
       <div className={classes.header}>
@@ -51,7 +64,9 @@ export function GamePage() {
       </div>
 
       <div className={classes.footer}>
-        <Footer />
+        <Footer
+          onClick={refreshBoard}
+        />
       </div>
     </div>
   );

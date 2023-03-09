@@ -1,9 +1,13 @@
 import classes from "./Footer.module.scss";
 
-export function Footer() {
+interface Props {
+   onClick: () => void;
+ }
+
+export function Footer({onClick}:Props) {
   return (
     <>
-      <a className={classes.refresh} onClick={() => window.location.reload()}>
+      <a className={classes.refresh} onClick={() => onClick()}>
         <img src="static/images/refresh.svg" alt="refresh" />
       </a>
 

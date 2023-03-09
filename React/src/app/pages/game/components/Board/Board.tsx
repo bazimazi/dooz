@@ -11,7 +11,6 @@ interface Props {
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
 
   const winLineStyle = winLineMaker(currentPlayer, result);
-
   return (
     <div className={classes.main}>
       <div className={classes.container}>
