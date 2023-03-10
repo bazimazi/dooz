@@ -1,14 +1,11 @@
-<script setup lang="ts">
-</script>
-
 <template>
-  <div class="main">
-    Hello Vue!
-  </div>
+  <main>
+    <router-view></router-view>
+  </main>
 </template>
 
 <style scoped>
-.main {
+main {
   display: flex;
   flex-direction: column;
   justify-content: center;
