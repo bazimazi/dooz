@@ -8,7 +8,6 @@ const winLineSize = 3;
 const padding = 12;
 const cellWidth = (boardWidth - 2 * (padding + mainBorderSize)) / boardSize;
 
-
 export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
 
     if (!result) return;
@@ -21,12 +20,10 @@ export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
         backgroundColor: (currentPlayer == P1) ? "#FF99F6" : "#FFD334"
     }
 
-
     let lineStartX = result[0][1];
     let lineStartY = result[0][0];
     let lineEndX = result[result.length - 1][1];
     let lineEndY = result[result.length - 1][0];
-
 
     let angelIndicater = (lineEndY - lineStartY) / (lineEndX - lineStartX);
     let lineLength = winLineSize * cellWidth;
