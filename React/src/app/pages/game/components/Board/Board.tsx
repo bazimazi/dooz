@@ -1,4 +1,4 @@
-import { winLineMaker } from "~/utils/winline-stylemaker"
+import { winLineStyleMaker } from "~/utils/winline-style-maker";
 import classes from "./Board.module.scss";
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
 
-  const winLineStyle = winLineMaker(currentPlayer, result);
+  const winLineStyle = winLineStyleMaker(currentPlayer, result);
 
   return (
     <div className={classes.main}>
