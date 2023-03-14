@@ -4,11 +4,13 @@ import { P1, P2 } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
+import { Modal } from "./components/Modal";
 import classes from "./GamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
+
 
 export function GamePage() {
   const [boardData, setBoardData] = useState(INITIAL_BOARD);
@@ -16,6 +18,7 @@ export function GamePage() {
     Math.round(Math.random()) ? P1 : P2
   );
   const [result, setResult] = useState<number[][]>();
+  const [showModal, setShowModal] = useState(false);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -32,6 +35,9 @@ export function GamePage() {
     const winResult = checkBoard(boardData, currentPlayer);
     if (!winResult) return false;
     setResult(winResult);
+    setTimeout(() => {
+      setShowModal(true);
+    }, 1000);
     return true;
   };
 
@@ -50,8 +56,13 @@ export function GamePage() {
         />
       </div>
 
+      {showModal && <Modal
+        result={result}
+        winner={currentPlayer}
+      />}
+
       <div className={classes.footer}>
-        <Footer />
+        <Footer result={undefined} />
       </div>
     </div>
   );

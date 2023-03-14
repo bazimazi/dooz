@@ -1,0 +1,48 @@
+.backDrop {
+    width: 100%;
+    height: 100%;
+    position: fixed;
+    background: rgba(2, 2, 2, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.main {
+    width: 312px;
+    height: 312px;
+    border: 1px solid #5570fd;
+    // backdrop-filter: blur(1px);
+    border-radius: 56px;
+    padding: 8px;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 50px;
+    width: 100%;
+    height: 100%;
+    background: #5570FD;
+    // backdrop-filter: blur(1px);
+    padding: 40px 0px;
+}
+
+.imageContainer{
+margin-bottom: 16px;
+}
+
+.winText{
+margin-bottom: 31px;
+color: #E9E9E9;
+font-size: 24px;
+}
+
+.footer {
+    margin-bottom: 60px;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    align-items: center;
+}
