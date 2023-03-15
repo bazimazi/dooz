@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { checkBoard } from "~/utils/check-board";
-import { P1, P2 } from "~/utils/players";
+import { P1, P2, randomTurnGenerator } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
@@ -11,15 +11,14 @@ const INITIAL_BOARD = Array(3)
   .map(() => Array(3).fill(null));
 
 export function GamePage() {
-  const [boardData, setBoardData] = useState(INITIAL_BOARD);
+  const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
-    Math.round(Math.random()) ? P1 : P2
+    randomTurnGenerator()
   );
   const [result, setResult] = useState<number[][]>();
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
-
     boardData[i][j] = currentPlayer;
     setBoardData([...boardData]);
 
@@ -34,6 +33,12 @@ export function GamePage() {
     setResult(winResult);
     return true;
   };
+
+  const refreshBoard = () => {
+    setBoardData(structuredClone(INITIAL_BOARD));
+    setCurrentPlayer(randomTurnGenerator());
+    setResult(undefined);
+  }
 
   return (
     <div className={classes.page}>
@@ -51,7 +56,9 @@ export function GamePage() {
       </div>
 
       <div className={classes.footer}>
-        <Footer />
+        <Footer
+          onRefresh={refreshBoard}
+        />
       </div>
     </div>
   );
