@@ -4,6 +4,7 @@ import { P1, P2, randomTurnGenerator } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
+import { Modal } from "./components/Modal";
 import classes from "./GamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -16,6 +17,7 @@ export function GamePage() {
     randomTurnGenerator()
   );
   const [result, setResult] = useState<number[][]>();
+  const [showModal, setShowModal] = useState(false);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -31,6 +33,9 @@ export function GamePage() {
     const winResult = checkBoard(boardData, currentPlayer);
     if (!winResult) return false;
     setResult(winResult);
+    setTimeout(() => {
+      setShowModal(true);
+    }, 500);
     return true;
   };
 
@@ -38,6 +43,7 @@ export function GamePage() {
     setBoardData(structuredClone(INITIAL_BOARD));
     setCurrentPlayer(randomTurnGenerator());
     setResult(undefined);
+    setShowModal(false);
   }
 
   return (
@@ -55,10 +61,14 @@ export function GamePage() {
         />
       </div>
 
+      {showModal && <Modal
+        result={result}
+        winner={currentPlayer}
+        onRefresh={refreshBoard}
+      />}
+
       <div className={classes.footer}>
-        <Footer
-          onRefresh={refreshBoard}
-        />
+        <Footer result={undefined} onRefresh={refreshBoard} />
       </div>
     </div>
   );
