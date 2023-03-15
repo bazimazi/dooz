@@ -1,4 +1,4 @@
-import { winLineMaker } from "~/utils/winline-maker"
+import { winLineStyleMaker } from "~/utils/winline-style-maker";
 import classes from "./Board.module.scss";
 
 interface Props {
@@ -10,21 +10,23 @@ interface Props {
 
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
 
-  const winLineStyle = winLineMaker(currentPlayer, result);
+  const winLineStyle = winLineStyleMaker(currentPlayer, result);
   return (
     <div className={classes.main}>
       <div className={classes.container}>
-        {boardData.map((row, i) => (
-          <div key={`row-${i}`} className={classes.row}>
-            {row.map((col, j) => (
-              <div key={`col-${j}`} className={classes.cell} onClick={() => onClick(i, j)}>
-                {col && <img src={`static/images/${col}.svg`} alt={col} />}
-              </div>
-            ))}
-          </div>
-        ))}
+        <div>
+          {boardData.map((row, i) => (
+            <div key={`row-${i}`} className={classes.row}>
+              {row.map((col, j) => (
+                <div key={`col-${j}`} className={classes.cell} onClick={() => onClick(i, j)}>
+                  {col && <img src={`static/images/${col}.svg`} alt={col} />}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className={classes.winLine} style={winLineStyle} />
       </div>
-      <div className={classes.winLine} style={winLineStyle} />
     </div>
   );
 }
