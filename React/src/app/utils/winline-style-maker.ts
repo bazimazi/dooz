@@ -13,7 +13,6 @@ export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
     if (!result) return;
 
     const winLineStyle = {
-        visibility: "visible",
         top: "",
         left: "",
         transform: "",

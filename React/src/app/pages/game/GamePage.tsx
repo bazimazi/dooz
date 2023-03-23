@@ -62,13 +62,12 @@ export function GamePage() {
       </div>
 
       {showModal && <Modal
-        result={result}
         winner={currentPlayer}
         onRefresh={refreshBoard}
       />}
 
       <div className={classes.footer}>
-        <Footer result={undefined} onRefresh={refreshBoard} />
+        <Footer onRefresh={refreshBoard} />
       </div>
     </div>
   );

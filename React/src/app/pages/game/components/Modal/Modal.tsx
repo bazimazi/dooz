@@ -1,14 +1,13 @@
 import classes from "./Modal.module.scss";
-import { Footer } from "../Footer";
 import { P1 } from "~/utils/players";
+import { GamePageButtons } from "../GamePageButtons";
 
 interface Props {
-    result: number[][] | undefined;
     winner: string;
     onRefresh: () => void;
 }
 
-export function Modal({ result, winner, onRefresh }: Props) {
+export function Modal({ winner, onRefresh }: Props) {
     return (
         <div className={classes.backDrop}>
             <div className={classes.main} >
@@ -18,7 +17,7 @@ export function Modal({ result, winner, onRefresh }: Props) {
                     </div>
                     <div className={classes.winText}>Player {winner === P1 ? 1 : 2} Won!</div>
                     <div className={classes.footer}>
-                        <Footer result={result} onRefresh={onRefresh} />
+                        <GamePageButtons winner={winner} onRefresh={onRefresh} />
                     </div>
                 </div>
             </div>

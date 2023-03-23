@@ -25,7 +25,7 @@ export function Board({ boardData, onClick, currentPlayer, result }: Props) {
             </div>
           ))}
         </div>
-        <div className={classes.winLine} style={winLineStyle as React.CSSProperties} />
+        <div className={classes.winLine} style={winLineStyle} />
       </div>
     </div>
   );
