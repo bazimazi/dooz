@@ -1,3 +1,4 @@
+import React, { CSSProperties } from "react";
 import { P1 } from "./players";
 
 
@@ -13,6 +14,7 @@ export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
     if (!result) return;
 
     const winLineStyle = {
+        visibility: "visible",
         top: "",
         left: "",
         transform: "",
@@ -45,5 +47,5 @@ export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
         winLineStyle.left = `${(lineStartX + (angelIndicater > 0 ? 0 : 1)) * cellWidth}px`;
         winLineStyle.top = `${lineStartY * cellWidth}px`;
     }
-    return winLineStyle;
+    return winLineStyle as React.CSSProperties;
 }
