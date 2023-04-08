@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { checkBoard } from "~/utils/check-board";
-import { P1, P2, randomTurnGenerator } from "~/utils/players";
+import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Modal } from "./components/Modal";
+import { gameMode } from "~/utils/game-mode";
 import classes from "./GamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -14,7 +15,7 @@ const INITIAL_BOARD = Array(3)
 export function GamePage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
-    randomTurnGenerator()
+    generateRandomTurn()
   );
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
@@ -41,7 +42,7 @@ export function GamePage() {
 
   const refreshBoard = () => {
     setBoardData(structuredClone(INITIAL_BOARD));
-    setCurrentPlayer(randomTurnGenerator());
+    setCurrentPlayer(generateRandomTurn());
     setResult(undefined);
     setShowModal(false);
   }
@@ -51,7 +52,7 @@ export function GamePage() {
       <div className={classes.header}>
         <Header 
         currentPlayer={currentPlayer}
-        gameType = "playLocally"
+        gameMode = {gameMode.playerVsPlayerLocal}
         />
       </div>
 

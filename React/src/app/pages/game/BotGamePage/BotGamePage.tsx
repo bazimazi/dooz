@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { checkBoard } from "~/utils/check-board";
-import { P1, P2, randomTurnGenerator } from "~/utils/players";
+import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "../components/Board";
 import { Footer } from "../components/Footer";
 import { Header } from "../components/Header";
 import { Modal } from "../components/Modal";
+import { gameMode } from "~/utils/game-mode";
 import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -14,22 +15,11 @@ const INITIAL_BOARD = Array(3)
 export function BotGamePage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
-    randomTurnGenerator()
+    generateRandomTurn()
   );
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
-  const stopStrictModeOnMount = useRef(true);
-
-  useEffect(() => {
-    if (stopStrictModeOnMount.current) {
-      if (currentPlayer === P2) {
-        setTimeout(() => {
-          botTurnHandler();
-        }, 1000);
-      }
-    }
-    stopStrictModeOnMount.current = false;
-  }, [stopStrictModeOnMount.current])
+  const isFirstMove = useRef(true);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -43,25 +33,24 @@ export function BotGamePage() {
 
 
       setTimeout(() => {
-        botTurnHandler();
+        handleBot();
       }, 1000);
 
     }
   };
 
-  const botTurnHandler = () => {
+  const handleBot = () => {
     let row = Math.floor(Math.random() * 3);
     let col = Math.floor(Math.random() * 3);
 
     if (boardData[row][col]) {
-      botTurnHandler();
+      handleBot();
     } else {
       boardData[row][col] = P2;
       setBoardData([...boardData]);
       if (checkWinner(P2)) return;
       setCurrentPlayer(P1);
     }
-
   };
 
   const checkWinner = (currentPlayer: string) => {
@@ -74,12 +63,21 @@ export function BotGamePage() {
     return true;
   };
 
+  if (isFirstMove.current) {
+    if (currentPlayer === P2) {
+      setTimeout(() => {
+        handleBot();
+      }, 500);
+    }
+    isFirstMove.current = false;
+  }
+
   const refreshBoard = () => {
-    let newRandomTurnGenerator = randomTurnGenerator();
+    let newRandomTurnGenerator = generateRandomTurn();
     setBoardData(structuredClone(INITIAL_BOARD));
     setCurrentPlayer(newRandomTurnGenerator);
     if (newRandomTurnGenerator === P2) {
-      stopStrictModeOnMount.current = true;
+      isFirstMove.current = true;
     }
     setResult(undefined);
     setShowModal(false);
@@ -90,7 +88,7 @@ export function BotGamePage() {
       <div className={classes.header}>
         <Header
           currentPlayer={currentPlayer}
-          gameType="botGame"
+          gameMode={gameMode.playerVsBot}
         />
       </div>
 
