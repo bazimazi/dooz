@@ -68,7 +68,7 @@ export function GamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameType="playLocally"
+        gameMode = {gameMode.playerVsPlayerLocal}
       />}
 
       <div className={classes.footer}>

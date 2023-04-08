@@ -104,8 +104,8 @@ export function BotGamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameType="botGame"
-      />}
+        gameMode={gameMode.playerVsBot}
+        />}
 
       <div className={classes.footer}>
         <Footer onRefresh={refreshBoard} />
