@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, randomTurnGenerator } from "~/utils/players";
+import { createWinLines } from "../../utils/create-win-lines"
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Modal } from "./components/Modal";
 import classes from "./GamePage.module.scss";
 
+const winLines = createWinLines(3);
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
-
 export function GamePage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
@@ -30,7 +31,7 @@ export function GamePage() {
   };
 
   const checkWinner = () => {
-    const winResult = checkBoard(boardData, currentPlayer);
+    const winResult = checkBoard(boardData, currentPlayer, winLines);
     if (!winResult) return false;
     setResult(winResult);
     setTimeout(() => {

@@ -22,9 +22,9 @@ export function HomePage() {
         />
       </div>
       <div className={classes.body}>
-        <a className={classes.palyNowButton} href="game">
+        <Link className={classes.palyNowButton} to="game">
           Play Now!
-        </a>
+        </Link>
         <button className={classes.palyBotButton}>
           <img src="static/images/bot.svg" />
           Play with bot
