@@ -26,16 +26,9 @@ export function BotGamePage() {
     if (currentPlayer === P1) {
       boardData[i][j] = currentPlayer;
       setBoardData([...boardData]);
-
       if (checkWinner(P1)) return;
-
       setCurrentPlayer(P2);
-
-
-      setTimeout(() => {
-        handleBot();
-      }, 1000);
-
+      handleBot();
     }
   };
 
@@ -67,7 +60,7 @@ export function BotGamePage() {
     if (currentPlayer === P2) {
       setTimeout(() => {
         handleBot();
-      }, 500);
+      }, 0);
     }
     isFirstMove.current = false;
   }
@@ -105,7 +98,7 @@ export function BotGamePage() {
         winner={currentPlayer}
         onRefresh={refreshBoard}
         gameMode={gameMode.playerVsBot}
-        />}
+      />}
 
       <div className={classes.footer}>
         <Footer onRefresh={refreshBoard} />
