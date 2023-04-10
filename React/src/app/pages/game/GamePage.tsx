@@ -10,6 +10,7 @@ import classes from "./GamePage.module.scss";
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
+
 export function GamePage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
