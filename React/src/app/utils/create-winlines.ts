@@ -1,7 +1,7 @@
 export function createWinLines(boardSize: number) {
     let winLines = [];
-    let diagonal1 = [];
-    let diagonal2 = [];
+    let diagonalOne = [];
+    let diagonalTwo = [];
     for (let row = 0; row < boardSize; row++) {
         let horizontal = [];
         for (let col = 0; col < boardSize; col++) {
@@ -18,11 +18,11 @@ export function createWinLines(boardSize: number) {
     }
 
     for (let i = 0; i < boardSize; i++) {
-        diagonal1.push([i, i]);
-        diagonal2.push([i, boardSize - i - 1]);
+        diagonalOne.push([i, i]);
+        diagonalTwo.push([i, boardSize - i - 1]);
     }
-    winLines.push(diagonal1);
-    winLines.push(diagonal2);
+    winLines.push(diagonalOne);
+    winLines.push(diagonalTwo);
 
     return winLines
 }
