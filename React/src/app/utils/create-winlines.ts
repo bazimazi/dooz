@@ -19,7 +19,7 @@ export function createWinLines(boardSize: number) {
 
     for (let i = 0; i < boardSize; i++) {
         diagonal1.push([i, i]);
-        diagonal2.push([i, boardSize - i]);
+        diagonal2.push([i, boardSize - i - 1]);
     }
     winLines.push(diagonal1);
     winLines.push(diagonal2);
