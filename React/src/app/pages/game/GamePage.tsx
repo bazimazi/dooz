@@ -5,7 +5,7 @@ import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Modal } from "./components/Modal";
-import { gameMode } from "~/utils/game-mode";
+import { GameMode } from "~/utils/game-mode";
 import classes from "./GamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -52,7 +52,7 @@ export function GamePage() {
       <div className={classes.header}>
         <Header 
         currentPlayer={currentPlayer}
-        gameMode = {gameMode.playerVsPlayerLocal}
+        gameMode = {GameMode.playerVsPlayerLocal}
         />
       </div>
 
@@ -68,7 +68,7 @@ export function GamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameMode = {gameMode.playerVsPlayerLocal}
+        gameMode = {GameMode.playerVsPlayerLocal}
       />}
 
       <div className={classes.footer}>

@@ -5,7 +5,7 @@ import { Board } from "../components/Board";
 import { Footer } from "../components/Footer";
 import { Header } from "../components/Header";
 import { Modal } from "../components/Modal";
-import { gameMode } from "~/utils/game-mode";
+import { GameMode } from "~/utils/game-mode";
 import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -81,7 +81,7 @@ export function BotGamePage() {
       <div className={classes.header}>
         <Header
           currentPlayer={currentPlayer}
-          gameMode={gameMode.playerVsBot}
+          gameMode={GameMode.playerVsBot}
         />
       </div>
 
@@ -97,7 +97,7 @@ export function BotGamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameMode={gameMode.playerVsBot}
+        gameMode={GameMode.playerVsBot}
       />}
 
       <div className={classes.footer}>

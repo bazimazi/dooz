@@ -1,4 +1,4 @@
-export const enum gameMode {
+export const enum GameMode {
     playerVsPlayerLocal,
     playerVsBot
 };
