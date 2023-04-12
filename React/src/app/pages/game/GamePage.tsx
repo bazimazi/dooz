@@ -26,7 +26,7 @@ export function GamePage() {
     setBoardData([...boardData]);
 
     if (checkWinner()) return;
-    
+
     setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
   };
 
@@ -50,9 +50,9 @@ export function GamePage() {
   return (
     <div className={classes.page}>
       <div className={classes.header}>
-        <Header 
-        currentPlayer={currentPlayer}
-        gameMode = {GameMode.playerVsPlayerLocal}
+        <Header
+          currentPlayer={currentPlayer}
+          gameMode={GameMode.playerVsPlayerLocal}
         />
       </div>
 
@@ -68,7 +68,7 @@ export function GamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameMode = {GameMode.playerVsPlayerLocal}
+        gameMode={GameMode.playerVsPlayerLocal}
       />}
 
       <div className={classes.footer}>

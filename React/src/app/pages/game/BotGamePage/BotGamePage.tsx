@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "../components/Board";
@@ -20,6 +20,13 @@ export function BotGamePage() {
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
+
+  useEffect(() => {
+    if (isFirstMove.current && currentPlayer === P2) {
+      handleBot();
+    }
+    isFirstMove.current = false;
+  }, [isFirstMove.current])
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -55,15 +62,6 @@ export function BotGamePage() {
     }, 500);
     return true;
   };
-
-  if (isFirstMove.current) {
-    if (currentPlayer === P2) {
-      setTimeout(() => {
-        handleBot();
-      }, 0);
-    }
-    isFirstMove.current = false;
-  }
 
   const refreshBoard = () => {
     let newRandomTurnGenerator = generateRandomTurn();
