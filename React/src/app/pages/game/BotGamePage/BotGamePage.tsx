@@ -1,36 +1,59 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
-import { Board } from "./components/Board";
-import { Footer } from "./components/Footer";
-import { Header } from "./components/Header";
-import { Modal } from "./components/Modal";
+import { Board } from "../components/Board";
+import { Footer } from "../components/Footer";
+import { Header } from "../components/Header";
+import { Modal } from "../components/Modal";
 import { GameMode } from "~/utils/game-mode";
-import classes from "./GamePage.module.scss";
+import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
 
-export function GamePage() {
+export function BotGamePage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
     generateRandomTurn()
   );
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
+  const isFirstMove = useRef(true);
+
+  useEffect(() => {
+    if (isFirstMove.current && currentPlayer === P2) {
+      handleBot();
+    }
+    isFirstMove.current = false;
+  }, [isFirstMove.current])
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
-    boardData[i][j] = currentPlayer;
-    setBoardData([...boardData]);
-
-    if (checkWinner()) return;
-
-    setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
+    if (currentPlayer === P1) {
+      boardData[i][j] = currentPlayer;
+      setBoardData([...boardData]);
+      if (checkWinner(P1)) return;
+      setCurrentPlayer(P2);
+      handleBot();
+    }
   };
 
-  const checkWinner = () => {
+  const handleBot = () => {
+    let row = Math.floor(Math.random() * 3);
+    let col = Math.floor(Math.random() * 3);
+
+    if (boardData[row][col]) {
+      handleBot();
+    } else {
+      boardData[row][col] = P2;
+      setBoardData([...boardData]);
+      if (checkWinner(P2)) return;
+      setCurrentPlayer(P1);
+    }
+  };
+
+  const checkWinner = (currentPlayer: string) => {
     const winResult = checkBoard(boardData, currentPlayer);
     if (!winResult) return false;
     setResult(winResult);
@@ -41,8 +64,12 @@ export function GamePage() {
   };
 
   const refreshBoard = () => {
+    let newRandomTurnGenerator = generateRandomTurn();
     setBoardData(structuredClone(INITIAL_BOARD));
-    setCurrentPlayer(generateRandomTurn());
+    setCurrentPlayer(newRandomTurnGenerator);
+    if (newRandomTurnGenerator === P2) {
+      isFirstMove.current = true;
+    }
     setResult(undefined);
     setShowModal(false);
   }
@@ -52,7 +79,7 @@ export function GamePage() {
       <div className={classes.header}>
         <Header
           currentPlayer={currentPlayer}
-          gameMode={GameMode.playerVsPlayerLocal}
+          gameMode={GameMode.playerVsBot}
         />
       </div>
 
@@ -68,7 +95,7 @@ export function GamePage() {
       {showModal && <Modal
         winner={currentPlayer}
         onRefresh={refreshBoard}
-        gameMode={GameMode.playerVsPlayerLocal}
+        gameMode={GameMode.playerVsBot}
       />}
 
       <div className={classes.footer}>
