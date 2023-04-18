@@ -29,6 +29,8 @@ export function BotGamePage() {
   }, [isFirstMove.current])
 
   const handleClick = (i: number, j: number) => {
+
+
     if (boardData[i][j] || result) return;
     if (currentPlayer === P1) {
       boardData[i][j] = currentPlayer;
@@ -36,6 +38,7 @@ export function BotGamePage() {
       if (checkWinner(P1)) return;
       setCurrentPlayer(P2);
       handleBot();
+
     }
   };
 
@@ -63,15 +66,17 @@ export function BotGamePage() {
     setCurrentPlayer(P1);
   };
 
-function isAvailableCell(board:any){
-  
-}
-
+  function isAvailableCell(board: string[][]) {
+    return board.some(row => row.some(cell => cell == null));
+  }
+ 
   function minimax(board: any, depth: number, isMaximizing: boolean) {
     const winResult = checkBoard(boardData, currentPlayer);
     if (winResult) {
       if (currentPlayer == P1) return 1;
       if (currentPlayer == P2) return -1;
+    }else {
+      if(!isAvailableCell(boardData)) return 0
     }
     if (isMaximizing) {
       let bestScore = -Infinity;
