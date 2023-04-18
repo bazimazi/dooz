@@ -40,18 +40,69 @@ export function BotGamePage() {
   };
 
   const handleBot = () => {
-    let row = Math.floor(Math.random() * 3);
-    let col = Math.floor(Math.random() * 3);
 
-    if (boardData[row][col]) {
-      handleBot();
-    } else {
-      boardData[row][col] = P2;
-      setBoardData([...boardData]);
-      if (checkWinner(P2)) return;
-      setCurrentPlayer(P1);
+    let bestScore = -Infinity;
+    let move;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (boardData[i][j] == null) {
+          boardData[i][j] = P2;
+          let score = minimax(boardData, 0, false);
+          boardData[i][j] = null;
+          if (score > bestScore) {
+            bestScore = score;
+            move = { i, j };
+          }
+        }
+      }
     }
+    console.log(bestScore)
+    if (move) boardData[move.i][move.j] = P2;
+    setBoardData([...boardData]);
+    if (checkWinner(P2)) return;
+    setCurrentPlayer(P1);
   };
+
+function isAvailableCell(board:any){
+  
+}
+
+  function minimax(board: any, depth: number, isMaximizing: boolean) {
+    const winResult = checkBoard(boardData, currentPlayer);
+    if (winResult) {
+      if (currentPlayer == P1) return 1;
+      if (currentPlayer == P2) return -1;
+    }
+    if (isMaximizing) {
+      let bestScore = -Infinity;
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          // Is the spot available?
+          if (board[i][j] == null) {
+            board[i][j] = P2;
+            let score = minimax(board, depth + 1, false);
+            board[i][j] = null;
+            bestScore = Math.max(score, bestScore);
+          }
+        }
+      }
+      return bestScore;
+    } else {
+      let bestScore = Infinity;
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          if (board[i][j] == null) {
+            board[i][j] = P1;
+            let score = minimax(board, depth + 1, true);
+            board[i][j] = null;
+            bestScore = Math.min(score, bestScore);
+          }
+        }
+      }
+      return bestScore;
+    }
+  }
+
 
   const checkWinner = (currentPlayer: string) => {
     const winResult = checkBoard(boardData, currentPlayer);
