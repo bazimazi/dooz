@@ -59,7 +59,6 @@ export function BotGamePage() {
         }
       }
     }
-    console.log(bestScore)
     if (move) boardData[move.i][move.j] = P2;
     setBoardData([...boardData]);
     if (checkWinner(P2)) return;
@@ -69,25 +68,25 @@ export function BotGamePage() {
   function isAvailableCell(board: string[][]) {
     return board.some(row => row.some(cell => cell == null));
   }
- 
+
   function minimax(board: any, depth: number, isMaximizing: boolean) {
-    const winResult = checkBoard(boardData, currentPlayer);
+    let current = isMaximizing ? P2 : P1;
+    let winResult = checkBoard(boardData, current);
     if (winResult) {
-      if (currentPlayer == P1) return 1;
-      if (currentPlayer == P2) return -1;
-    }else {
-      if(!isAvailableCell(boardData)) return 0
+      if (isMaximizing) return 1;
+      if (!isMaximizing) return -1;
+    } else {
+      if (!isAvailableCell(board)) return 0
     }
     if (isMaximizing) {
       let bestScore = -Infinity;
       for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
-          // Is the spot available?
           if (board[i][j] == null) {
             board[i][j] = P2;
             let score = minimax(board, depth + 1, false);
             board[i][j] = null;
-            bestScore = Math.max(score, bestScore);
+            if (score > bestScore) bestScore = score;
           }
         }
       }
@@ -100,7 +99,7 @@ export function BotGamePage() {
             board[i][j] = P1;
             let score = minimax(board, depth + 1, true);
             board[i][j] = null;
-            bestScore = Math.min(score, bestScore);
+            if (score < bestScore) bestScore = score;
           }
         }
       }
