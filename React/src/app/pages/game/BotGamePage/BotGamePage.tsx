@@ -29,8 +29,6 @@ export function BotGamePage() {
   }, [isFirstMove.current])
 
   const handleClick = (i: number, j: number) => {
-
-
     if (boardData[i][j] || result) return;
     if (currentPlayer === P1) {
       boardData[i][j] = currentPlayer;
@@ -38,7 +36,6 @@ export function BotGamePage() {
       if (checkWinner(P1)) return;
       setCurrentPlayer(P2);
       handleBot();
-
     }
   };
 
