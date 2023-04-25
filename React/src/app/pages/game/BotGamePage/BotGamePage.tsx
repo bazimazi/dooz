@@ -6,6 +6,7 @@ import { Footer } from "../components/Footer";
 import { Header } from "../components/Header";
 import { Modal } from "../components/Modal";
 import { GameMode } from "~/utils/game-mode";
+import { minimax } from "~/utils/minimax";
 import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -62,47 +63,47 @@ export function BotGamePage() {
     setCurrentPlayer(P1);
   };
 
-  function isAvailableCell(board: string[][]) {
-    return board.some(row => row.some(cell => cell == null));
-  }
+  // function isAvailableCell(board: string[][]) {
+  //   return board.some(row => row.some(cell => cell == null));
+  // }
 
-  function minimax(board: any, depth: number, isMaximizing: boolean) {
-    let current = isMaximizing ? P2 : P1;
-    let winResult = checkBoard(boardData, current);
-    if (winResult) {
-      if (isMaximizing) return 1;
-      if (!isMaximizing) return -1;
-    } else {
-      if (!isAvailableCell(board)) return 0
-    }
-    if (isMaximizing) {
-      let bestScore = -Infinity;
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          if (board[i][j] == null) {
-            board[i][j] = P2;
-            let score = minimax(board, depth + 1, false);
-            board[i][j] = null;
-            if (score > bestScore) bestScore = score;
-          }
-        }
-      }
-      return bestScore;
-    } else {
-      let bestScore = Infinity;
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          if (board[i][j] == null) {
-            board[i][j] = P1;
-            let score = minimax(board, depth + 1, true);
-            board[i][j] = null;
-            if (score < bestScore) bestScore = score;
-          }
-        }
-      }
-      return bestScore;
-    }
-  }
+  // function minimax(board: any, depth: number, isMaximizing: boolean) {
+  //   let current = isMaximizing ? P2 : P1;
+  //   let winResult = checkBoard(board, current);
+  //   if (winResult) {
+  //     if (isMaximizing) return 1;
+  //     if (!isMaximizing) return -1;
+  //   } else {
+  //     if (!isAvailableCell(board)) return 0
+  //   }
+  //   if (isMaximizing) {
+  //     let bestScore = -Infinity;
+  //     for (let i = 0; i < 3; i++) {
+  //       for (let j = 0; j < 3; j++) {
+  //         if (board[i][j] == null) {
+  //           board[i][j] = P2;
+  //           let score = minimax(board, depth + 1, false);
+  //           board[i][j] = null;
+  //           if (score > bestScore) bestScore = score;
+  //         }
+  //       }
+  //     }
+  //     return bestScore;
+  //   } else {
+  //     let bestScore = Infinity;
+  //     for (let i = 0; i < 3; i++) {
+  //       for (let j = 0; j < 3; j++) {
+  //         if (board[i][j] == null) {
+  //           board[i][j] = P1;
+  //           let score = minimax(board, depth + 1, true);
+  //           board[i][j] = null;
+  //           if (score < bestScore) bestScore = score;
+  //         }
+  //       }
+  //     }
+  //     return bestScore;
+  //   }
+  // }
 
 
   const checkWinner = (currentPlayer: string) => {
