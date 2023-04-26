@@ -6,6 +6,7 @@ import { Footer } from "../components/Footer";
 import { Header } from "../components/Header";
 import { Modal } from "../components/Modal";
 import { GameMode } from "~/utils/game-mode";
+import { minimax } from "~/utils/minimax";
 import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -40,17 +41,28 @@ export function BotGamePage() {
   };
 
   const handleBot = () => {
-    let row = Math.floor(Math.random() * 3);
-    let col = Math.floor(Math.random() * 3);
 
-    if (boardData[row][col]) {
-      handleBot();
-    } else {
-      boardData[row][col] = P2;
-      setBoardData([...boardData]);
-      if (checkWinner(P2)) return;
-      setCurrentPlayer(P1);
+    let bestScore = -Infinity;
+    let move;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if (boardData[i][j] == null) {
+          boardData[i][j] = P2;
+          let score = minimax(boardData, 0, false);
+          boardData[i][j] = null;
+          if (score > bestScore) {
+            bestScore = score;
+            move = { i, j };
+          }
+        }
+      }
     }
+    if (move) {
+      boardData[move.i][move.j] = P2;
+    }
+    setBoardData([...boardData]);
+    if (checkWinner(P2)) return;
+    setCurrentPlayer(P1);
   };
 
   const checkWinner = (currentPlayer: string) => {
