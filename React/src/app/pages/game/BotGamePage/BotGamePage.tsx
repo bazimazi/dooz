@@ -57,7 +57,9 @@ export function BotGamePage() {
         }
       }
     }
-    if (move) boardData[move.i][move.j] = P2;
+    if (move) {
+      boardData[move.i][move.j] = P2;
+    }
     setBoardData([...boardData]);
     if (checkWinner(P2)) return;
     setCurrentPlayer(P1);
