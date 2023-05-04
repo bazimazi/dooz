@@ -6,7 +6,7 @@ import { Footer } from "../components/Footer";
 import { Header } from "../components/Header";
 import { Modal } from "../components/Modal";
 import { GameMode } from "~/utils/game-mode";
-import { minimax } from "~/utils/minimax";
+import { minimax, isAvailableCell } from "~/utils/minimax";
 import classes from "./BotGamePage.module.scss";
 
 const INITIAL_BOARD = Array(3)
@@ -20,6 +20,7 @@ export function BotGamePage() {
   );
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
+  const [isDraw, setIsDraw] = useState(false);
   const isFirstMove = useRef(true);
 
   useEffect(() => {
@@ -62,6 +63,10 @@ export function BotGamePage() {
     }
     setBoardData([...boardData]);
     if (checkWinner(P2)) return;
+    if (!isAvailableCell(boardData)) {
+      setIsDraw(true);
+      setShowModal(true);
+    }
     setCurrentPlayer(P1);
   };
 
@@ -105,6 +110,7 @@ export function BotGamePage() {
       </div>
 
       {showModal && <Modal
+        isDraw={isDraw}
         winner={currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsBot}

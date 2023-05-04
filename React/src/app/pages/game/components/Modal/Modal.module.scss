@@ -6,7 +6,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    animation: backDropOpen 1s forwards ease-in-out;
+    animation: backDropOpen .8s forwards ease-in-out;
 }
 
 .main {
@@ -16,7 +16,7 @@
     border: 1px solid #5570fd;
     border-radius: 56px;
     padding: 8px;
-    animation: scaleUp 1s 1s forwards ease-in-out;
+    animation: scaleUp .5s .8s forwards ease-in-out;
 }
 
 .container {
@@ -38,6 +38,12 @@
     margin-bottom: 31px;
     color: #E9E9E9;
     font-size: 24px;
+}
+
+.DrawText{
+    margin-bottom: 50px;
+    color: #E9E9E9;
+    font-size: 45px;
 }
 
 .footer {
