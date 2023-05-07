@@ -8,7 +8,7 @@ import {
 
 import { HomePage } from "./pages/home";
 import { PlayerVsPlayerPage } from "./pages/game/PlayerVsPlayerPage/PlayerVsPlayerPage";
-import {BotGamePage} from "./pages/game/PlayerVsBotPage/PlayerVsBotPage"
+import { PlayerVsBotPage } from "./pages/game/PlayerVsBotPage";
 
 const rootRoute = new RootRoute({
   component: () => <Outlet />,
@@ -29,7 +29,7 @@ const gameRoute = new Route({
 const botGameRoute = new Route({
   getParentRoute: () => rootRoute,
   path: "/playerVsBot",
-  component: BotGamePage,
+  component: PlayerVsBotPage,
 });
 
 const routeTree = rootRoute.addChildren([homeRoute, gameRoute, botGameRoute]);
