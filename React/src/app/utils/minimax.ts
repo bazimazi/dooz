@@ -1,16 +1,13 @@
 import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
-
-function isAvailableCell(board: string[][]) {
-    return board.some(row => row.some(cell => cell == null));
-}
+import { isBoardFull } from "./isboardfull";
 
 export function minimax(board: any[][], depth: number, isMaximizing: boolean) {
     let current = isMaximizing ? P2 : P1;
     let winResult = checkBoard(board, current);
 
     if (winResult) return isMaximizing ? 1 : -1;
-    if (!isAvailableCell(board)) return 0;
+    if (isBoardFull(board)) return 0;
 
     if (isMaximizing) return findMaxMove(board, depth);
     return findMinMove(board, depth)

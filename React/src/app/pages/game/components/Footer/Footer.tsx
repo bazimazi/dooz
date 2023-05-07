@@ -8,7 +8,7 @@ interface Props {
 export function Footer({ onRefresh }: Props) {
   return (
       <GamePageButtons
-        winner={undefined}
+        modal={false}
         onRefresh={onRefresh}
       />
   );

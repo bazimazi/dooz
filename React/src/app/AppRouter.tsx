@@ -5,9 +5,10 @@ import {
   Route,
   RootRoute,
 } from "@tanstack/react-router";
-import { GamePage } from "./pages/game";
+
 import { HomePage } from "./pages/home";
-import {BotGamePage} from "./pages/game/BotGamePage"
+import { PlayerVsPlayerPage } from "./pages/game/PlayerVsPlayerPage/PlayerVsPlayerPage";
+import {BotGamePage} from "./pages/game/PlayerVsBotPage/PlayerVsBotPage"
 
 const rootRoute = new RootRoute({
   component: () => <Outlet />,
@@ -21,13 +22,13 @@ const homeRoute = new Route({
 
 const gameRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/game",
-  component: GamePage,
+  path: "/playerVsplayer",
+  component: PlayerVsPlayerPage,
 });
 
 const botGameRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/botgame",
+  path: "/playerVsBot",
   component: BotGamePage,
 });
 

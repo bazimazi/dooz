@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
-import { Board } from "./components/Board";
-import { Footer } from "./components/Footer";
-import { Header } from "./components/Header";
-import { Modal } from "./components/Modal";
+import { Board } from "../components/Board";
+import { Footer } from "../components/Footer";
+import { Header } from "../components/Header";
+import { ResultModal } from "../components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
-import classes from "./GamePage.module.scss";
+import classes from "./PlayerVsPlayerPage.module.scss";
+import { isBoardFull } from "~/utils/isboardfull";
 
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
 
-export function GamePage() {
+export function PlayerVsPlayerPage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(
     generateRandomTurn()
@@ -26,6 +27,9 @@ export function GamePage() {
     setBoardData([...boardData]);
 
     if (checkWinner()) return;
+    if (isBoardFull(boardData)) {
+      setShowModal(true);
+    }
 
     setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
   };
@@ -65,8 +69,8 @@ export function GamePage() {
         />
       </div>
 
-      {showModal && <Modal
-        winner={currentPlayer}
+      {showModal && <ResultModal
+        winner={result ? currentPlayer : undefined}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsPlayerLocal}
       />}
