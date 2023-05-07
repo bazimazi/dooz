@@ -5,7 +5,6 @@ import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Modal } from "./components/Modal";
-import { isAvailableCell } from "~/utils/minimax";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./GamePage.module.scss";
 
@@ -20,7 +19,6 @@ export function GamePage() {
   );
   const [result, setResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
-  const [isDraw, setIsDraw] = useState(false);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || result) return;
@@ -28,10 +26,6 @@ export function GamePage() {
     setBoardData([...boardData]);
 
     if (checkWinner()) return;
-    if (!isAvailableCell(boardData)) {
-      setIsDraw(true);
-      setShowModal(true);
-    }
 
     setCurrentPlayer(currentPlayer === P1 ? P2 : P1);
   };
@@ -50,7 +44,6 @@ export function GamePage() {
     setBoardData(structuredClone(INITIAL_BOARD));
     setCurrentPlayer(generateRandomTurn());
     setResult(undefined);
-    setIsDraw(false);
     setShowModal(false);
   }
 
@@ -73,7 +66,6 @@ export function GamePage() {
       </div>
 
       {showModal && <Modal
-        isDraw={isDraw}
         winner={currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsPlayerLocal}

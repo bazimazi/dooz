@@ -1,7 +1,7 @@
 import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
 
-export function isAvailableCell(board: string[][]) {
+function isAvailableCell(board: string[][]) {
     return board.some(row => row.some(cell => cell == null));
 }
 
