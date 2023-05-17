@@ -11,11 +11,11 @@ interface Props {
 
 export function ResultModal({ winner, onRefresh, gameMode }: Props) {
 
-    let resultModalIcon = <></>;
-    let resultModalText = <div className={classes.drawText}>It's Draw</div>;
+    let resultModalIconSrc = "";
+    let resultModalText = "Draw";
     if (winner) {
-        resultModalIcon = <img src={gameMode === GameMode.playerVsBot ? `static/images/${winner === P1 ? 'smile' : 'sad'}.svg` : `static/images/${winner === P1 ? 'Xmodal' : 'Omodal'}.svg`} alt="x" />;
-        resultModalText = <div className={classes.winText}>{gameMode === GameMode.playerVsBot ? winner === P1 ? "you Won" : "you Lost" : `Player ${winner === P1 ? 1 : 2} Won!`}</div>;
+        resultModalIconSrc = gameMode === GameMode.playerVsBot ? `static/images/${winner === P1 ? 'smile' : 'sad'}.svg` : `static/images/${winner === P1 ? 'Xmodal' : 'Omodal'}.svg`;
+        resultModalText = gameMode === GameMode.playerVsBot ? winner === P1 ? "you Won" : "you Lost" : `Player ${winner === P1 ? 1 : 2} Won!`;
     }
 
     return (
@@ -23,11 +23,11 @@ export function ResultModal({ winner, onRefresh, gameMode }: Props) {
             <div className={classes.main} >
                 <div className={classes.container}>
                     <div className={classes.imageContainer}>
-                        {resultModalIcon}
+                        <img src={resultModalIconSrc} />
                     </div>
-                    {resultModalText}
+                    <div className={winner ? classes.winText : classes.drawText}>{resultModalText}</div>
                     <div className={classes.footer}>
-                        <GamePageButtons modal={true} onRefresh={onRefresh} />
+                        <GamePageButtons inResultModal onRefresh={onRefresh} />
                     </div>
                 </div>
             </div>

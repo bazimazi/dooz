@@ -2,7 +2,27 @@ import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
 import { isBoardFull } from "./isboardfull";
 
-export function minimax(board: any[][], depth: number, isMaximizing: boolean) {
+export function botMove(board: any[][]) {
+    let bestScore = -Infinity;
+    let move;
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            if (board[i][j] == null) {
+                board[i][j] = P2;
+                let score = minimax(board, 0, false);
+                board[i][j] = null;
+                if (score > bestScore) {
+                    bestScore = score;
+                    move = { i, j };
+                }
+            }
+        }
+    }
+    return move;
+}
+
+function minimax(board: any[][], depth: number, isMaximizing: boolean) {
+
     let current = isMaximizing ? P2 : P1;
     let winResult = checkBoard(board, current);
 

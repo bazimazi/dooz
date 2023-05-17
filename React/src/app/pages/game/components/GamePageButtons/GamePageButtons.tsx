@@ -2,17 +2,17 @@ import classes  from "./GamePageButtons.module.scss";
 
 interface Props {
     onRefresh: () => void;
-    modal: boolean;
+    inResultModal?: boolean;
 }
 
-export function GamePageButtons({ modal, onRefresh }: Props){
+export function GamePageButtons({ inResultModal, onRefresh }: Props){
     return (
         <>
-            <a className={`${classes.refresh} ${modal ? classes.modalColor : ""}`} onClick={() => onRefresh()}>
+            <a className={`${classes.refresh} ${inResultModal ? classes.modalColor : ""}`} onClick={() => onRefresh()}>
                 <img src="static/images/refresh.svg" alt="refresh" />
             </a>
 
-            <a className={`${classes.home} ${modal ? classes.modalColor : ""}`} href="/">
+            <a className={`${classes.home} ${inResultModal ? classes.modalColor : ""}`} href="/">
                 <img src="static/images/home.svg" alt="home" />
             </a>
         </>
