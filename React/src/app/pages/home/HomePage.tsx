@@ -5,7 +5,7 @@ import classes from "./HomePage.module.scss";
 const boardSizes = [3, 6, 9];
 export function HomePage() {
 
-const [selectedSize,setSelectedSize] = useState(6);
+const [selectedSize,setSelectedSize] = useState(boardSizes[1]);
 
   function clickLeftVector() {
     selectedSize != 3 && setSelectedSize(selectedSize - 3);
@@ -41,7 +41,7 @@ const [selectedSize,setSelectedSize] = useState(6);
       </div>
       <div className={classes.boardSizesContainer}>
         {boardSizes.map((board, i) => (
-          <img key={i} className={`${classes.boardSize}`} style={{ transform: `translate(${(6 - selectedSize) * 53}px)`,transition: ".3s" , scale:`${(i+1)*3 == selectedSize ? 1.3 : 1}`}} src={`static/images/board_size_${board}.svg`} />
+          <img key={i} className={`${classes.boardSize}`} style={{ transform: `translate(${(6 - selectedSize) * 55}px)`,transition: ".3s" , scale:`${(i+1)*3 == selectedSize ? 1.3 : 1}`}} src={`static/images/board_size_${board}.svg`} />
         ))}
       </div>
       <div className={classes.body}>
