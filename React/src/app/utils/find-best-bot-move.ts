@@ -1,10 +1,10 @@
 import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
-import { isBoardFull } from "./isboardfull";
+import { anyMovesLeft } from "./any-moves-left";
 
-export function botMove(board: any[][]) {
+export function findBestBotMove(board: any[][]) {
     let bestScore = -Infinity;
-    let move;
+    let movement;
     for (let i = 0; i < 3; i++) {
         for (let j = 0; j < 3; j++) {
             if (board[i][j] == null) {
@@ -13,12 +13,12 @@ export function botMove(board: any[][]) {
                 board[i][j] = null;
                 if (score > bestScore) {
                     bestScore = score;
-                    move = { i, j };
+                    movement = { i, j };
                 }
             }
         }
     }
-    return move;
+    return movement;
 }
 
 function minimax(board: any[][], depth: number, isMaximizing: boolean) {
@@ -27,7 +27,7 @@ function minimax(board: any[][], depth: number, isMaximizing: boolean) {
     let winResult = checkBoard(board, current);
 
     if (winResult) return isMaximizing ? 1 : -1;
-    if (isBoardFull(board)) return 0;
+    if (anyMovesLeft(board)) return 0;
 
     if (isMaximizing) return findMaxMove(board, depth);
     return findMinMove(board, depth)

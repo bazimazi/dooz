@@ -7,7 +7,7 @@ import { Header } from "./components/Header";
 import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
-import { isBoardFull } from "~/utils/isboardfull";
+import { anyMovesLeft } from "~/utils/any-moves-left";
 
 const INITIAL_BOARD = Array(3)
   .fill(null)
@@ -16,16 +16,16 @@ const INITIAL_BOARD = Array(3)
 export function PlayerVsPlayerPage() {
   const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
-  const [result, setResult] = useState<number[][]>();
+  const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
 
   const handleClick = (i: number, j: number) => {
-    if (boardData[i][j] || result) return;
+    if (boardData[i][j] || winResult) return;
     boardData[i][j] = currentPlayer;
     setBoardData([...boardData]);
 
     if (checkWinner()) return;
-    if (isBoardFull(boardData)) {
+    if (anyMovesLeft(boardData)) {
       setShowModal(true);
       return;
     }
@@ -34,19 +34,17 @@ export function PlayerVsPlayerPage() {
   };
 
   const checkWinner = () => {
-    const winResult = checkBoard(boardData, currentPlayer);
-    if (!winResult) return false;
-    setResult(winResult);
-    setTimeout(() => {
-      setShowModal(true);
-    }, 500);
+    const result = checkBoard(boardData, currentPlayer);
+    if (!result) return false;
+    setWinResult(winResult);
+    setShowModal(true);
     return true;
   };
 
   const refreshBoard = () => {
     setBoardData(structuredClone(INITIAL_BOARD));
     setCurrentPlayer(generateRandomTurn());
-    setResult(undefined);
+    setWinResult(undefined);
     setShowModal(false);
   }
 
@@ -64,12 +62,12 @@ export function PlayerVsPlayerPage() {
           boardData={boardData}
           onClick={handleClick}
           currentPlayer={currentPlayer}
-          result={result}
+          result={winResult}
         />
       </div>
 
       {showModal && <ResultModal
-        winner={result && currentPlayer}
+        winner={winResult && currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsPlayerLocal}
       />}
