@@ -1,1 +1,2 @@
-export * from "./GamePage";
+export * from "./PlayerVsPlayerPage";
+export * from "./PlayerVsBotPage";
