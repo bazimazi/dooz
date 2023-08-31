@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useContext } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Footer } from "./components/Footer";
@@ -9,6 +9,9 @@ import classes from "./PlayerVsBotPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
+import { globals } from "~/utils/globals";
+import { boardSizeContext } from "~/App";
+
 const INITIAL_BOARD = Array(3)
   .fill(null)
   .map(() => Array(3).fill(null));
@@ -19,7 +22,7 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
-
+  const {selectedSize} = useContext(boardSizeContext);
   useEffect(() => {
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();

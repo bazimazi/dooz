@@ -36,7 +36,7 @@ export function PlayerVsPlayerPage() {
   const checkWinner = () => {
     const result = checkBoard(boardData, currentPlayer);
     if (!result) return false;
-    setWinResult(winResult);
+    setWinResult(result);
     setShowModal(true);
     return true;
   };

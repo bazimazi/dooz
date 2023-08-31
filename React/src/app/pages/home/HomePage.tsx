@@ -1,20 +1,21 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useContext } from "react";
 import classes from "./HomePage.module.scss";
+import { globals } from "~/utils/globals";
+import { boardSizeContext } from "~/App";
 
-const boardSizes = [3, 6, 9];
 export function HomePage() {
 
-const [selectedSize,setSelectedSize] = useState(boardSizes[1]);
+  const { selectedSize, setSelectedSize } = useContext(boardSizeContext)
 
   function clickLeftVector() {
     selectedSize != 3 && setSelectedSize(selectedSize - 3);
-
   }
 
   function clickRightVector() {
     selectedSize != 9 && setSelectedSize(selectedSize + 3);
   }
+
 
   return (
     <>
@@ -40,15 +41,15 @@ const [selectedSize,setSelectedSize] = useState(boardSizes[1]);
         <img className={classes.rightVector} src="static/images/vector-right.png" alt="rightVector" onClick={clickRightVector} />
       </div>
       <div className={classes.boardSizesContainer}>
-        {boardSizes.map((board, i) => (
-          <img key={i} className={`${classes.boardSize}`} style={{ transform: `translate(${(6 - selectedSize) * 55}px)`,transition: ".3s" , scale:`${(i+1)*3 == selectedSize ? 1.3 : 1}`}} src={`static/images/board_size_${board}.svg`} />
+        {globals.boardSizes.map((board, i) => (
+          <img key={i} className={`${classes.boardSize}`} style={{ transform: `translate(${(6 - selectedSize) * 55}px)`, transition: ".3s", scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}` }} src={`static/images/board_size_${board}.svg`} />
         ))}
       </div>
       <div className={classes.body}>
         <Link className={classes.palyNowButton} to="player-vs-player">
           Play Now!
         </Link>
-        <Link className={classes.palyBotButton} to="player-vs-bot">
+        <Link className={classes.palyBotButton} to={"player-vs-bot"}>
           <img src="static/images/bot.svg" />
           Play with bot
         </Link>

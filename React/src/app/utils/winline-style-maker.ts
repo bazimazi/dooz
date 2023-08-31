@@ -1,11 +1,12 @@
 import React, { CSSProperties } from "react";
+import { globals } from "./globals";
 import { P1 } from "./players";
 
 
 const boardWidth = 312;
 const mainBorderSize = 1;
-const boardSize = 3;
-const winLineSize = 3;
+const boardSize = globals.selectedSize;
+const winLineSize = globals.selectedSize;
 const padding = 12;
 const cellWidth = (boardWidth - 2 * (padding + mainBorderSize)) / boardSize;
 
