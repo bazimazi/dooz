@@ -9,20 +9,16 @@ import classes from "./PlayerVsBotPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
-import { globals } from "~/utils/globals";
 import { boardSizeContext } from "~/App";
-
-const INITIAL_BOARD = Array(3)
-  .fill(null)
-  .map(() => Array(3).fill(null));
+import { resetBoard } from "~/utils/reset-board";
 
 export function PlayerVsBotPage() {
-  const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
+  const { selectedSize } = useContext(boardSizeContext);
+  const [boardData, setBoardData] = useState(structuredClone(resetBoard(selectedSize)));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
-  const {selectedSize} = useContext(boardSizeContext);
   useEffect(() => {
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
@@ -69,7 +65,7 @@ export function PlayerVsBotPage() {
 
   const refreshBoard = () => {
     let newRandomTurnGenerator = generateRandomTurn();
-    setBoardData(structuredClone(INITIAL_BOARD));
+    setBoardData(structuredClone(resetBoard(selectedSize)));
     setCurrentPlayer(newRandomTurnGenerator);
     if (newRandomTurnGenerator === P2) {
       isFirstMove.current = true;

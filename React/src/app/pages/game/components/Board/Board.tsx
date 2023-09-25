@@ -13,7 +13,7 @@ export function Board({ boardData, onClick, currentPlayer, result }: Props) {
   return (
     <div className={classes.main}>
       <div className={classes.container}>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
           {boardData.map((row, i) => (
             <div key={`row-${i}`} className={classes.row}>
               {row.map((col, j) => (

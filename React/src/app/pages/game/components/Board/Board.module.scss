@@ -21,13 +21,14 @@
 
 .row {
   display: flex;
+  height: 100%;
 }
 
 .cell {
   border: 1px dashed #d9d9d9;
-  height: 96px;
+  height: 100%;
   display: flex;
-  flex-basis: 96px;
+  flex-basis: 100%;
   justify-content: center;
   align-items: center;
   cursor: pointer;

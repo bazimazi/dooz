@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
@@ -8,13 +8,12 @@ import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
-
-const INITIAL_BOARD = Array(3)
-  .fill(null)
-  .map(() => Array(3).fill(null));
+import { boardSizeContext } from "~/App";
+import { resetBoard } from "~/utils/reset-board";
 
 export function PlayerVsPlayerPage() {
-  const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
+  const { selectedSize } = useContext(boardSizeContext);
+  const [boardData, setBoardData] = useState(structuredClone(resetBoard(selectedSize)));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
@@ -42,7 +41,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const refreshBoard = () => {
-    setBoardData(structuredClone(INITIAL_BOARD));
+    setBoardData(structuredClone(resetBoard(selectedSize)));
     setCurrentPlayer(generateRandomTurn());
     setWinResult(undefined);
     setShowModal(false);
