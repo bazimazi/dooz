@@ -1,5 +1,8 @@
 import { winLineStyleMaker } from "~/utils/winline-style-maker";
 import classes from "./Board.module.scss";
+import { boardSizeContext } from "~/App";
+import { useContext, useEffect, useState } from "react";
+import { modifyBoardStyle } from "~/utils/modifyBoardStyle";
 
 interface Props {
   boardData: string[][];
@@ -10,10 +13,12 @@ interface Props {
 
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
   const winLineStyle = winLineStyleMaker(currentPlayer, result);
+  const { selectedSize } = useContext(boardSizeContext);
+  const [boardStyle] = useState(modifyBoardStyle(selectedSize));
   return (
-    <div className={classes.main}>
-      <div className={classes.container}>
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div className={classes.main} style={{ borderRadius: boardStyle.mainRadius }}>
+      <div className={classes.template} style={{ borderRadius: boardStyle.templateRadius }}>
+        <div className={classes.container}>
           {boardData.map((row, i) => (
             <div key={`row-${i}`} className={classes.row}>
               {row.map((col, j) => (
