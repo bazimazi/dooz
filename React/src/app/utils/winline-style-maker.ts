@@ -3,17 +3,14 @@ import { globals } from "./globals";
 import { P1 } from "./players";
 
 
-const boardWidth = 312;
-const mainBorderSize = 1;
-const boardSize = globals.selectedSize;
-const winLineSize = globals.selectedSize;
-const padding = 12;
-const cellWidth = (boardWidth - 2 * (padding + mainBorderSize)) / boardSize;
 
-export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
+export function winLineStyleMaker(currentPlayer: string, selectedSize: number, result?: number[][]) {
 
     if (!result) return;
 
+    const winLineSize = selectedSize;
+    const cellWidth = (globals.boardWidth - 2 * (globals.padding + globals.boardBorderWidth)) / selectedSize;
+    console.log(cellWidth);
     const winLineStyle = {
         visibility: "visible",
         top: "",
@@ -37,7 +34,8 @@ export function winLineStyleMaker(currentPlayer: string, result?: number[][]) {
         winLineStyle.top = `${cellWidth * (lineStartY + 0.5)}px`;
         winLineStyle.transform = "rotate(-90deg)";
     } else if (lineStartX == lineEndX) {
-        winLineStyle.left = `${cellWidth * (lineStartX + 0.5)}px`;
+        winLineStyle.left = `${cellWidth * (lineStartX + 0.5) - 2}px`; //minus 2 is half of windLine width
+        console.log(winLineStyle.left);
         winLineStyle.top = `0px`;
         winLineStyle.transform = "rotate(0deg)";
     }

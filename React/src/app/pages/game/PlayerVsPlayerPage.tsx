@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
@@ -10,6 +10,7 @@ import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { boardSizeContext } from "~/App";
 import { resetBoard } from "~/utils/reset-board";
+import { createWinLines } from "~/utils/create-winlines";
 
 export function PlayerVsPlayerPage() {
   const { selectedSize } = useContext(boardSizeContext);
@@ -17,6 +18,11 @@ export function PlayerVsPlayerPage() {
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
+  const [winLines, setWinlines] = useState<number[][][]>()
+
+  useEffect(() => {
+    setWinlines(createWinLines(selectedSize));
+  }, [])
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -33,7 +39,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const checkWinner = () => {
-    const result = checkBoard(boardData, currentPlayer);
+    const result = checkBoard(boardData, currentPlayer,winLines!);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);

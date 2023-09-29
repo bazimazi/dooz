@@ -11,6 +11,7 @@ import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
 import { boardSizeContext } from "~/App";
 import { resetBoard } from "~/utils/reset-board";
+import { createWinLines } from "~/utils/create-winlines";
 
 export function PlayerVsBotPage() {
   const { selectedSize } = useContext(boardSizeContext);
@@ -19,6 +20,12 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
+  const [winLines, setWinlines] = useState<number[][][]>()
+
+  useEffect(() => {
+    setWinlines(createWinLines(selectedSize));
+  }, [])
+
   useEffect(() => {
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
@@ -56,7 +63,7 @@ export function PlayerVsBotPage() {
   };
 
   const checkWinner = (currentPlayer: string) => {
-    const result = checkBoard(boardData, currentPlayer);
+    const result = checkBoard(boardData, currentPlayer, winLines!);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
