@@ -40,11 +40,13 @@ export function HomePage() {
         <img className={classes.leftVector} src="static/images/vector-left.png" alt="leftVector" onClick={clickLeftVector} />
         <img className={classes.rightVector} src="static/images/vector-right.png" alt="rightVector" onClick={clickRightVector} />
       </div>
-      <div className={classes.boardSizesContainer}>
-        {globals.boardSizes.map((board, i) => (
-          <img key={i} className={`${classes.boardSize}`} style={{ transform: `translate(${(6 - selectedSize) * 70}px)`, transition: ".3s" }} src={`static/images/board_size_${board}.svg`} />
-      //  , scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}`
-       ))}
+      <div className={classes.boardSizesContainerBackDrop}>
+        <div className={classes.boardSizesContainer} style={{ transform: `translateX(${(6 - selectedSize) * 70}px)`, transition: ".3s" }}>
+          {globals.boardSizes.map((board, i) => (
+            <img key={i} className={`${classes.boardSize}`} style={{ scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}`, transition: "0.3s" }} src={`static/images/board_size_${board}.svg`} />
+            //  , scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}`
+          ))}
+        </div>
       </div>
       <div className={classes.body}>
         <Link className={classes.palyNowButton} to="player-vs-player">

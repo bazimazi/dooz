@@ -10,7 +10,6 @@ export function winLineStyleMaker(currentPlayer: string, selectedSize: number, r
 
     const winLineSize = selectedSize;
     const cellWidth = (globals.boardWidth - 2 * (globals.padding + globals.boardBorderWidth)) / selectedSize;
-    console.log(cellWidth);
     const winLineStyle = {
         visibility: "visible",
         top: "",
@@ -34,8 +33,7 @@ export function winLineStyleMaker(currentPlayer: string, selectedSize: number, r
         winLineStyle.top = `${cellWidth * (lineStartY + 0.5)}px`;
         winLineStyle.transform = "rotate(-90deg)";
     } else if (lineStartX == lineEndX) {
-        winLineStyle.left = `${cellWidth * (lineStartX + 0.5) - 2}px`; //minus 2 is half of windLine width
-        console.log(winLineStyle.left);
+        winLineStyle.left = `${cellWidth * (lineStartX + 0.5) - 2}px`; //minus 2 is half of winLine width
         winLineStyle.top = `0px`;
         winLineStyle.transform = "rotate(0deg)";
     }

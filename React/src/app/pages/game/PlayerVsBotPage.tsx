@@ -24,9 +24,6 @@ export function PlayerVsBotPage() {
 
   useEffect(() => {
     setWinlines(createWinLines(selectedSize));
-  }, [])
-
-  useEffect(() => {
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
     }
@@ -49,11 +46,11 @@ export function PlayerVsBotPage() {
   };
 
   const handleBot = () => {
-
-    let movement = findBestBotMove(boardData)
+    let movement = findBestBotMove(boardData, winLines!)
     if (movement) {
       boardData[movement.i][movement.j] = P2;
     }
+
     setBoardData([...boardData]);
     if (checkWinner(P2)) return;
     if (anyMovesLeft(boardData)) {

@@ -35,7 +35,7 @@
   background-image: url("static/images/bg.png");
   background-repeat: no-repeat;
   background-size: cover;
-  
+
 }
 
 .palyNowButton,
@@ -77,15 +77,22 @@
     linear-gradient(to right, rgba(255, 255, 255, 0.5), #5570fd) border-box;
 }
 
-.boardSizesContainer {
+.boardSizesContainerBackDrop {
   position: absolute;
   top: 50%;
-  transform: translate3d(0%, -65%, 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  overflow: hidden;
+  transform: translateY(-65%);
+  height: 200px;
+}
+
+.boardSizesContainer {
   gap: 85px;
   height: 200px;
   display: flex;
-  overflow: hidden;
   align-items: center;
   justify-content: center;
 }
