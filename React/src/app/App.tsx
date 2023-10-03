@@ -9,7 +9,6 @@ interface IContextValue {
 
 export const boardSizeContext = createContext<IContextValue>({ selectedSize: 3, setSelectedSize: () => { } });
 
-
 function App() {
   const [selectedSize, setSelectedSize] = useState(3);
   const contextValue = {

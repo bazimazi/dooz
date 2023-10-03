@@ -20,7 +20,7 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
-  const [winLines, setWinlines] = useState<number[][][]>()
+  const [winLines, setWinlines] = useState<number[][][]>();
 
   useEffect(() => {
     setWinlines(createWinLines(selectedSize));
@@ -28,7 +28,7 @@ export function PlayerVsBotPage() {
       handleBot();
     }
     isFirstMove.current = false;
-  }, [isFirstMove.current])
+  }, [isFirstMove.current]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;

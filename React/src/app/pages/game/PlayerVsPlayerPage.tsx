@@ -18,11 +18,11 @@ export function PlayerVsPlayerPage() {
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
-  const [winLines, setWinlines] = useState<number[][][]>()
+  const [winLines, setWinlines] = useState<number[][][]>();
 
   useEffect(() => {
     setWinlines(createWinLines(selectedSize));
-  }, [])
+  }, []);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;

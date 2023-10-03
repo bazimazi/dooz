@@ -16,7 +16,6 @@ export function HomePage() {
     selectedSize != 9 && setSelectedSize(selectedSize + 3);
   }
 
-
   return (
     <>
       <div className={classes.title}>
@@ -44,7 +43,6 @@ export function HomePage() {
         <div className={classes.boardSizesContainer} style={{ transform: `translateX(${(6 - selectedSize) * 70}px)`, transition: ".3s" }}>
           {globals.boardSizes.map((board, i) => (
             <img key={i} className={`${classes.boardSize}`} style={{ scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}`, transition: "0.3s" }} src={`static/images/board_size_${board}.svg`} />
-            //  , scale: `${(i + 1) * 3 == selectedSize ? 1.3 : 1}`
           ))}
         </div>
       </div>
