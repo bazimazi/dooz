@@ -1,16 +1,33 @@
 import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
+import { anyMovesLeft } from "./any-moves-left";
 
-function isAvailableCell(board: string[][]) {
-    return board.some(row => row.some(cell => cell == null));
+export function findBestBotMove(board: any[][]) {
+    let bestScore = -Infinity;
+    let movement;
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            if (board[i][j] == null) {
+                board[i][j] = P2;
+                let score = minimax(board, 0, false);
+                board[i][j] = null;
+                if (score > bestScore) {
+                    bestScore = score;
+                    movement = { i, j };
+                }
+            }
+        }
+    }
+    return movement;
 }
 
-export function minimax(board: any[][], depth: number, isMaximizing: boolean) {
+function minimax(board: any[][], depth: number, isMaximizing: boolean) {
+
     let current = isMaximizing ? P2 : P1;
     let winResult = checkBoard(board, current);
 
     if (winResult) return isMaximizing ? 1 : -1;
-    if (!isAvailableCell(board)) return 0;
+    if (anyMovesLeft(board)) return 0;
 
     if (isMaximizing) return findMaxMove(board, depth);
     return findMinMove(board, depth)
