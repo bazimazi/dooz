@@ -10,4 +10,7 @@ export default defineConfig({
       '#': resolve(__dirname, './src/components'),
     },
   },
+  server: {
+    port: 3000,
+  },
 })
