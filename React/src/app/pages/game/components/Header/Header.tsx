@@ -1,16 +1,28 @@
 import { P1, P2 } from "~/utils/players";
 import classes from "./Header.module.scss";
 import { GameMode } from "~/utils/game-mode";
+import { boardSizeContext } from "~/App";
+import { useContext, useState } from "react";
 
 interface Props {
   currentPlayer: string;
   gameMode: GameMode;
+  refreshBoard: () => void;
 }
 
-export function Header({ currentPlayer, gameMode }: Props) {
+export function Header({ currentPlayer, gameMode, refreshBoard }: Props) {
+  const { selectedSize, setSelectedSize } = useContext(boardSizeContext);
+  const [showSelectBox, setShowSelectBox] = useState(false);
+
+  function changeBoardSize(size: number) {
+    if (selectedSize === size) return;
+    setSelectedSize(size);
+    setShowSelectBox(false);
+    refreshBoard();
+   }
 
   return (
-    <>
+    <div className={classes.main}>
       <div className={`${classes.player1} ${currentPlayer === P1 ? classes.current : ''}`}>
         <img src="static/images/current_1.svg" alt="Player 1 Turn" className={classes.currentImg} />
         <div className={classes.playerContainer}>
@@ -19,9 +31,17 @@ export function Header({ currentPlayer, gameMode }: Props) {
           <img src="static/images/player1.svg" alt="X" />
         </div>
       </div>
-
-      <div className={classes.vs}>VS</div>
-
+      <div className={classes.modeContainer}>
+        <div className={`${classes.selectBox} ${showSelectBox && classes.selectBoxShowed}`}>
+          <div className={classes.selectedSize} onClick={() => setShowSelectBox(!showSelectBox)}>
+            {selectedSize} x {selectedSize}
+            <img src={`${showSelectBox ? "static/images/arrow-up.png" : "static/images/arrow-down.png"}`} alt="arrow-down" />
+          </div>
+          <div onClick={() => changeBoardSize(3)}>3 x 3</div>
+          <div onClick={() => changeBoardSize(6)}>6 x 6</div>
+          <div onClick={() => changeBoardSize(9)}>9 x 9</div>
+        </div>
+      </div>
       <div className={`${classes.player2} ${currentPlayer === P2 ? classes.current : ''}`}>
         <img src="static/images/current_2.svg" alt="Player 2 Turn" className={classes.currentImg} />
         <div className={classes.playerContainer}>
@@ -30,6 +50,6 @@ export function Header({ currentPlayer, gameMode }: Props) {
           <img src="static/images/player2.svg" alt="O" />
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -22,7 +22,8 @@ export function PlayerVsPlayerPage() {
 
   useEffect(() => {
     setWinlines(createWinLines(selectedSize));
-  }, []);
+    setBoardData(structuredClone(resetBoard(selectedSize)));
+  }, [selectedSize]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -39,7 +40,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const checkWinner = () => {
-    const result = checkBoard(boardData, currentPlayer,winLines!);
+    const result = checkBoard(boardData, currentPlayer, winLines!);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
@@ -55,13 +56,11 @@ export function PlayerVsPlayerPage() {
 
   return (
     <div className={classes.page}>
-      <div className={classes.header}>
-        <Header
-          currentPlayer={currentPlayer}
-          gameMode={GameMode.playerVsPlayerLocal}
-        />
-      </div>
-
+      <Header
+        currentPlayer={currentPlayer}
+        gameMode={GameMode.playerVsPlayerLocal}
+        refreshBoard={refreshBoard}
+      />
       <div className={classes.body}>
         <Board
           boardData={boardData}
@@ -70,13 +69,11 @@ export function PlayerVsPlayerPage() {
           result={winResult}
         />
       </div>
-
       {showModal && <ResultModal
         winner={winResult && currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsPlayerLocal}
       />}
-
       <div className={classes.footer}>
         <Footer onRefresh={refreshBoard} />
       </div>

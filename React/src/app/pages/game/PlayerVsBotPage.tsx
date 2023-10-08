@@ -24,11 +24,12 @@ export function PlayerVsBotPage() {
 
   useEffect(() => {
     setWinlines(createWinLines(selectedSize));
+    setBoardData(structuredClone(resetBoard(selectedSize)));
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
     }
     isFirstMove.current = false;
-  }, [isFirstMove.current]);
+  }, [isFirstMove.current, selectedSize]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -80,13 +81,11 @@ export function PlayerVsBotPage() {
 
   return (
     <div className={classes.page}>
-      <div className={classes.header}>
-        <Header
-          currentPlayer={currentPlayer}
-          gameMode={GameMode.playerVsBot}
-        />
-      </div>
-
+      <Header
+        currentPlayer={currentPlayer}
+        gameMode={GameMode.playerVsBot}
+        refreshBoard={refreshBoard}
+      />
       <div className={classes.body}>
         <Board
           boardData={boardData}
@@ -95,13 +94,11 @@ export function PlayerVsBotPage() {
           result={winResult}
         />
       </div>
-
       {showModal && <ResultModal
         winner={winResult && currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsBot}
       />}
-
       <div className={classes.footer}>
         <Footer onRefresh={refreshBoard} />
       </div>
