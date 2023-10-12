@@ -12,14 +12,14 @@ interface Props {
 
 export function Header({ currentPlayer, gameMode, refreshBoard }: Props) {
   const { selectedSize, setSelectedSize } = useContext(boardSizeContext);
-  const [showSelectBox, setShowSelectBox] = useState(false);
+  const [isSelectBoxOpen, setIsSelectBoxOpen] = useState(false);
 
   function changeBoardSize(size: number) {
     if (selectedSize === size) return;
     setSelectedSize(size);
-    setShowSelectBox(false);
+    setIsSelectBoxOpen(false);
     refreshBoard();
-   }
+  }
 
   return (
     <div className={classes.main}>
@@ -32,10 +32,10 @@ export function Header({ currentPlayer, gameMode, refreshBoard }: Props) {
         </div>
       </div>
       <div className={classes.modeContainer}>
-        <div className={`${classes.selectBox} ${showSelectBox && classes.selectBoxShowed}`}>
-          <div className={classes.selectedSize} onClick={() => setShowSelectBox(!showSelectBox)}>
+        <div className={`${classes.selectBox} ${isSelectBoxOpen && classes.selectBoxShowed}`}>
+          <div className={classes.selectedSize} onClick={() => setIsSelectBoxOpen(!isSelectBoxOpen)}>
             {selectedSize} x {selectedSize}
-            <img src={`${showSelectBox ? "static/images/arrow-up.png" : "static/images/arrow-down.png"}`} alt="arrow-down" />
+            <img src={`${isSelectBoxOpen ? "static/images/arrow-up.png" : "static/images/arrow-down.png"}`} alt="arrow-down" />
           </div>
           <div onClick={() => changeBoardSize(3)}>3 x 3</div>
           <div onClick={() => changeBoardSize(6)}>6 x 6</div>
