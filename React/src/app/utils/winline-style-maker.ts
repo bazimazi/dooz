@@ -23,22 +23,21 @@ export function winLineStyleMaker(currentPlayer: string, selectedSize: number, r
     let lineStartY = result[0][0];
     let lineEndX = result[result.length - 1][1];
     let lineEndY = result[result.length - 1][0];
-
     let angelIndicater = (lineEndY - lineStartY) / (lineEndX - lineStartX);
-    let lineLength = winLineSize * cellWidth;
+    let lineLength = result.length * cellWidth;
     winLineStyle.height = `${lineLength}px`;
 
     if (lineStartY == lineEndY) {
-        winLineStyle.left = `0px`;
+        winLineStyle.left = `${cellWidth * (lineStartX) - 2}px`; //minus 2 is half of winLine width
         winLineStyle.top = `${cellWidth * (lineStartY + 0.5)}px`;
         winLineStyle.transform = "rotate(-90deg)";
     } else if (lineStartX == lineEndX) {
         winLineStyle.left = `${cellWidth * (lineStartX + 0.5) - 2}px`; //minus 2 is half of winLine width
-        winLineStyle.top = `0px`;
+        winLineStyle.top = `${cellWidth * (lineStartY)}px`;
         winLineStyle.transform = "rotate(0deg)";
     }
     else {
-        lineLength = Math.sqrt(2) * cellWidth * winLineSize;
+        lineLength = Math.sqrt(2) * cellWidth * result.length;
         winLineStyle.height = `${lineLength}px`
         winLineStyle.transform = `rotate(${angelIndicater > 0 ? -45 : 45}deg)`;
         winLineStyle.left = `${(lineStartX + (angelIndicater > 0 ? 0 : 1)) * cellWidth}px`;
