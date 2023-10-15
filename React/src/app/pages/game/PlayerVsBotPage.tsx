@@ -19,6 +19,7 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
+  const strickModeInitialRenderCounter = useRef(0);
 
 
 
@@ -29,11 +30,14 @@ export function PlayerVsBotPage() {
       handleBot();
     }
     isFirstMove.current = false;
-  }, [isFirstMove.current,selectedSize]);
+  }, [isFirstMove.current]);
 
-  // useEffect(() => {
-  //   refreshBoard();
-  // }, [selectedSize]);
+  useEffect(() => {
+    strickModeInitialRenderCounter.current <= 2 ? strickModeInitialRenderCounter.current++ : strickModeInitialRenderCounter.current = 3;
+    if (strickModeInitialRenderCounter.current == 3) {
+      refreshBoard();
+    }
+  }, [selectedSize])
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
