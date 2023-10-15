@@ -1,15 +1,22 @@
-import React, { CSSProperties } from "react";
+import React from "react";
 import { globals } from "./globals";
 import { P1 } from "./players";
 
+const allSizeCellWidth: { [key: number]: number } = {
+    3: 0,
+    6: 0,
+    9: 0
+}
 
+globals.boardSizes.map(size => {
+    allSizeCellWidth[size] = (globals.boardWidth - 2 * (globals.padding + globals.boardBorderWidth)) / size;
+})
 
 export function winLineStyleMaker(currentPlayer: string, selectedSize: number, result?: number[][]) {
 
     if (!result) return;
 
-    const winLineSize = selectedSize;
-    const cellWidth = (globals.boardWidth - 2 * (globals.padding + globals.boardBorderWidth)) / selectedSize;
+    const cellWidth = allSizeCellWidth[selectedSize];
     const winLineStyle = {
         visibility: "visible",
         top: "",
