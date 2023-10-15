@@ -7,10 +7,9 @@ import { useContext, useState } from "react";
 interface Props {
   currentPlayer: string;
   gameMode: GameMode;
-  refreshBoard: () => void;
 }
 
-export function GamePageHeader({ currentPlayer, gameMode, refreshBoard }: Props) {
+export function GamePageHeader({ currentPlayer, gameMode }: Props) {
   const { selectedSize, setSelectedSize } = useContext(boardSizeContext);
   const [isSelectBoxOpen, setIsSelectBoxOpen] = useState(false);
 
@@ -18,7 +17,6 @@ export function GamePageHeader({ currentPlayer, gameMode, refreshBoard }: Props)
     if (selectedSize === size) return;
     setSelectedSize(size);
     setIsSelectBoxOpen(false);
-    refreshBoard();
   }
 
   return (

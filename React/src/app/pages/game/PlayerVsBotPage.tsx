@@ -11,8 +11,6 @@ import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
 import { boardSizeContext } from "~/App";
 import { createBoard } from "~/utils/create-board";
-import { createWinLines } from "~/utils/create-winlines";
-import { winLines } from "~/utils/create-winlines";
 
 export function PlayerVsBotPage() {
   const { selectedSize } = useContext(boardSizeContext);
@@ -23,14 +21,19 @@ export function PlayerVsBotPage() {
   const isFirstMove = useRef(true);
 
 
+
+
+
   useEffect(() => {
-    createWinLines(selectedSize);
-    setBoardData(createBoard(selectedSize));
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
     }
     isFirstMove.current = false;
-  }, [isFirstMove.current, selectedSize]);
+  }, [isFirstMove.current,selectedSize]);
+
+  // useEffect(() => {
+  //   refreshBoard();
+  // }, [selectedSize]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -48,11 +51,10 @@ export function PlayerVsBotPage() {
   };
 
   const handleBot = () => {
-    let movement = findBestBotMove(boardData, winLines[selectedSize])
-    if (movement) {
-      boardData[movement.i][movement.j] = P2;
+    let bestBotMove = findBestBotMove(boardData);
+    if (bestBotMove) {
+      boardData[bestBotMove.i][bestBotMove.j] = P2;
     }
-
     setBoardData([...boardData]);
     if (checkWinner(P2)) return;
     if (anyMovesLeft(boardData)) {
@@ -62,7 +64,7 @@ export function PlayerVsBotPage() {
   };
 
   const checkWinner = (currentPlayer: string) => {
-    const result = checkBoard(boardData, currentPlayer, winLines[selectedSize]);
+    const result = checkBoard(boardData, currentPlayer);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
@@ -70,8 +72,8 @@ export function PlayerVsBotPage() {
   };
 
   const refreshBoard = () => {
-    let newRandomTurnGenerator = generateRandomTurn();
     setBoardData(createBoard(selectedSize));
+    let newRandomTurnGenerator = generateRandomTurn();
     setCurrentPlayer(newRandomTurnGenerator);
     if (newRandomTurnGenerator === P2) {
       isFirstMove.current = true;
@@ -85,7 +87,6 @@ export function PlayerVsBotPage() {
       <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsBot}
-        refreshBoard={refreshBoard}
       />
       <div className={classes.body}>
         <Board

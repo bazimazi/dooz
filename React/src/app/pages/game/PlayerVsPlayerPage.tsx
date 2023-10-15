@@ -10,8 +10,6 @@ import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { boardSizeContext } from "~/App";
 import { createBoard } from "~/utils/create-board";
-import { createWinLines } from "~/utils/create-winlines";
-import { winLines } from "~/utils/create-winlines";
 
 export function PlayerVsPlayerPage() {
   const { selectedSize } = useContext(boardSizeContext);
@@ -21,8 +19,7 @@ export function PlayerVsPlayerPage() {
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    createWinLines(selectedSize);
-    setBoardData(createBoard(selectedSize));
+    refreshBoard();
   }, [selectedSize]);
 
   const handleClick = (i: number, j: number) => {
@@ -40,7 +37,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const checkWinner = () => {
-    const result = checkBoard(boardData, currentPlayer, winLines[selectedSize]);
+    const result = checkBoard(boardData, currentPlayer);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
@@ -59,7 +56,6 @@ export function PlayerVsPlayerPage() {
       <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsPlayerLocal}
-        refreshBoard={refreshBoard}
       />
       <div className={classes.body}>
         <Board

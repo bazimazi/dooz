@@ -1,7 +1,6 @@
 import { winLineStyleMaker } from "~/utils/winline-style-maker";
 import classes from "./Board.module.scss";
-import { boardSizeContext } from "~/App";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getBoardRadius } from "~/utils/getBoardRadius";
 
 interface Props {
@@ -12,17 +11,17 @@ interface Props {
 }
 
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
-  const { selectedSize } = useContext(boardSizeContext);
-  const winLineStyle = winLineStyleMaker(currentPlayer, selectedSize, result);
-  const [boardStyle, setBoardStyle] = useState(getBoardRadius(selectedSize));
+
+  const winLineStyle = winLineStyleMaker(currentPlayer, boardData.length, result);
+  const [boardRadius, setBoardRadius] = useState(getBoardRadius(boardData.length));
 
   useEffect(() => {
-    setBoardStyle(getBoardRadius(selectedSize));
-  }, [selectedSize]);
+    setBoardRadius(getBoardRadius(boardData.length));
+  }, [boardData.length]);
 
   return (
-    <div className={classes.main} style={{ borderRadius: boardStyle.mainRadius }}>
-      <div className={classes.template} style={{ borderRadius: boardStyle.templateRadius }}>
+    <div className={classes.main} style={{ borderRadius: boardRadius.mainRadius }}>
+      <div className={classes.template} style={{ borderRadius: boardRadius.templateRadius }}>
         <div className={classes.container}>
           {boardData.map((row, i) => (
             <div key={`row-${i}`} className={classes.row}>

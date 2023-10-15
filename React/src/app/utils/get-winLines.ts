@@ -1,10 +1,10 @@
-export const winLines: { [key: number]: number[][][] } = {
+const winLines: { [key: number]: number[][][] } = {
     3: [],
     6: [],
     9: []
 }
 
-export function createWinLines(boardSize: number) {
+export function getWinLines(boardSize: number) {
 
     const winLineSize: { [key: number]: number } = {
         3: 3,
@@ -13,7 +13,7 @@ export function createWinLines(boardSize: number) {
     }
 
 
-    if (winLines[boardSize].length != 0) return;
+    if (winLines[boardSize].length != 0) return winLines[boardSize];
 
     for (let i = 0; i < boardSize; i++) {
         for (let j = 0; j <= boardSize - winLineSize[boardSize]; j++) {
@@ -48,5 +48,6 @@ export function createWinLines(boardSize: number) {
 
         }
     }
+    return winLines[boardSize];
 }
 

@@ -1,13 +1,14 @@
 import { P1, P2 } from "./players";
 import { checkBoard } from "./check-board";
 import { anyMovesLeft } from "./any-moves-left";
+import { getWinLines } from "./get-winLines";
 
 let winLinesArray: number[][][];
 
-export function findBestBotMove(board: any[][], winLines: number[][][]) {
-    winLinesArray = winLines;
+export function findBestBotMove(board: any[][]) {
+    winLinesArray = getWinLines(board.length);
     let bestScore = -Infinity;
-    let movement;
+    let bestBotMove;
     for (let i = 0; i < board.length; i++) {
         for (let j = 0; j < board.length; j++) {
             if (board[i][j] == null) {
@@ -16,18 +17,18 @@ export function findBestBotMove(board: any[][], winLines: number[][][]) {
                 board[i][j] = null;
                 if (score > bestScore) {
                     bestScore = score;
-                    movement = { i, j };
+                    bestBotMove = { i, j };
                 }
             }
         }
     }
-    return movement;
+    return bestBotMove;
 }
 
 function minimax(board: any[][], depth: number, isMaximizing: boolean) {
 
     let current = isMaximizing ? P2 : P1;
-    let winResult = winLinesArray && checkBoard(board, current, winLinesArray);
+    let winResult = winLinesArray && checkBoard(board, current);
 
     if (winResult) return isMaximizing ? 1 : -1;
     if (anyMovesLeft(board)) return 0;
