@@ -38,9 +38,9 @@
 
 }
 
-.palyNowButton,
-.palyBotButton,
-.palyFriendsButton {
+.playNowButton,
+.playBotButton,
+.playFriendsButton {
   width: 265px;
   height: 56px;
   border-radius: 24px;
@@ -54,7 +54,7 @@
   user-select: none;
 }
 
-.palyNowButton {
+.playNowButton {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -65,8 +65,8 @@
     linear-gradient(to right, rgba(255, 255, 255, 0.33), #191685) border-box;
 }
 
-.palyBotButton,
-.palyFriendsButton {
+.playBotButton,
+.playFriendsButton {
   display: flex;
   align-items: center;
   justify-content: center;

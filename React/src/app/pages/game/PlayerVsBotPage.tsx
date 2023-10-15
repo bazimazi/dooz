@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useContext } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Footer } from "./components/Footer";
-import { Header } from "./components/Header";
+import { GamePageHeader } from "./components/Header";
 import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsBotPage.module.scss";
@@ -10,21 +10,22 @@ import { anyMovesLeft } from "~/utils/any-moves-left";
 import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
 import { boardSizeContext } from "~/App";
-import { resetBoard } from "~/utils/reset-board";
+import { createBoard } from "~/utils/create-board";
 import { createWinLines } from "~/utils/create-winlines";
+import { winLines } from "~/utils/create-winlines";
 
 export function PlayerVsBotPage() {
   const { selectedSize } = useContext(boardSizeContext);
-  const [boardData, setBoardData] = useState(structuredClone(resetBoard(selectedSize)));
+  const [boardData, setBoardData] = useState(createBoard(selectedSize));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
-  const [winLines, setWinlines] = useState<number[][][]>();
+
 
   useEffect(() => {
-    setWinlines(createWinLines(selectedSize));
-    setBoardData(structuredClone(resetBoard(selectedSize)));
+    createWinLines(selectedSize);
+    setBoardData(createBoard(selectedSize));
     if (isFirstMove.current && currentPlayer === P2) {
       handleBot();
     }
@@ -47,7 +48,7 @@ export function PlayerVsBotPage() {
   };
 
   const handleBot = () => {
-    let movement = findBestBotMove(boardData, winLines!)
+    let movement = findBestBotMove(boardData, winLines[selectedSize])
     if (movement) {
       boardData[movement.i][movement.j] = P2;
     }
@@ -61,7 +62,7 @@ export function PlayerVsBotPage() {
   };
 
   const checkWinner = (currentPlayer: string) => {
-    const result = checkBoard(boardData, currentPlayer, winLines!);
+    const result = checkBoard(boardData, currentPlayer, winLines[selectedSize]);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
@@ -70,7 +71,7 @@ export function PlayerVsBotPage() {
 
   const refreshBoard = () => {
     let newRandomTurnGenerator = generateRandomTurn();
-    setBoardData(structuredClone(resetBoard(selectedSize)));
+    setBoardData(createBoard(selectedSize));
     setCurrentPlayer(newRandomTurnGenerator);
     if (newRandomTurnGenerator === P2) {
       isFirstMove.current = true;
@@ -81,7 +82,7 @@ export function PlayerVsBotPage() {
 
   return (
     <div className={classes.page}>
-      <Header
+      <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsBot}
         refreshBoard={refreshBoard}

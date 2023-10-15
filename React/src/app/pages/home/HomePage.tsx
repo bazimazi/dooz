@@ -47,14 +47,14 @@ export function HomePage() {
         </div>
       </div>
       <div className={classes.body}>
-        <Link className={classes.palyNowButton} to="player-vs-player">
+        <Link className={classes.playNowButton} to="player-vs-player">
           Play Now!
         </Link>
-        <Link className={classes.palyBotButton} to={"player-vs-bot"}>
+        <Link className={classes.playBotButton} to={"player-vs-bot"}>
           <img src="static/images/bot.svg" />
           Play with bot
         </Link>
-        <button className={classes.palyFriendsButton}>
+        <button className={classes.playFriendsButton}>
           <img src="static/images/friends.svg" />
           Play with friends
         </button>

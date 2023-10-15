@@ -1,11 +1,5 @@
 
-interface GlobalTypes {
-    boardSizes: number[];
-    padding: number;
-    boardWidth: number;
-    boardBorderWidth: number;
-}
-export const globals: GlobalTypes = {
+export const globals = {
     boardSizes: [3, 6, 9],
     padding: 12,
     boardWidth: 312,

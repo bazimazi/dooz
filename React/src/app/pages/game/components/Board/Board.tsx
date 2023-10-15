@@ -1,8 +1,8 @@
 import { winLineStyleMaker } from "~/utils/winline-style-maker";
 import classes from "./Board.module.scss";
 import { boardSizeContext } from "~/App";
-import { useContext, useState } from "react";
-import { modifyBoardStyle } from "~/utils/modifyBoardStyle";
+import { useContext, useEffect, useState } from "react";
+import { getBoardRadius } from "~/utils/getBoardRadius";
 
 interface Props {
   boardData: string[][];
@@ -14,7 +14,12 @@ interface Props {
 export function Board({ boardData, onClick, currentPlayer, result }: Props) {
   const { selectedSize } = useContext(boardSizeContext);
   const winLineStyle = winLineStyleMaker(currentPlayer, selectedSize, result);
-  const [boardStyle] = useState(modifyBoardStyle(selectedSize));
+  const [boardStyle, setBoardStyle] = useState(getBoardRadius(selectedSize));
+
+  useEffect(() => {
+    setBoardStyle(getBoardRadius(selectedSize));
+  }, [selectedSize]);
+
   return (
     <div className={classes.main} style={{ borderRadius: boardStyle.mainRadius }}>
       <div className={classes.template} style={{ borderRadius: boardStyle.templateRadius }}>

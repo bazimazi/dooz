@@ -3,26 +3,26 @@ import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
-import { Header } from "./components/Header";
+import { GamePageHeader } from "./components/Header";
 import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { boardSizeContext } from "~/App";
-import { resetBoard } from "~/utils/reset-board";
+import { createBoard } from "~/utils/create-board";
 import { createWinLines } from "~/utils/create-winlines";
+import { winLines } from "~/utils/create-winlines";
 
 export function PlayerVsPlayerPage() {
   const { selectedSize } = useContext(boardSizeContext);
-  const [boardData, setBoardData] = useState(structuredClone(resetBoard(selectedSize)));
+  const [boardData, setBoardData] = useState(createBoard(selectedSize));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
-  const [winLines, setWinlines] = useState<number[][][]>();
 
   useEffect(() => {
-    setWinlines(createWinLines(selectedSize));
-    setBoardData(structuredClone(resetBoard(selectedSize)));
+    createWinLines(selectedSize);
+    setBoardData(createBoard(selectedSize));
   }, [selectedSize]);
 
   const handleClick = (i: number, j: number) => {
@@ -40,7 +40,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const checkWinner = () => {
-    const result = checkBoard(boardData, currentPlayer, winLines!);
+    const result = checkBoard(boardData, currentPlayer, winLines[selectedSize]);
     if (!result) return false;
     setWinResult(result);
     setShowModal(true);
@@ -48,7 +48,7 @@ export function PlayerVsPlayerPage() {
   };
 
   const refreshBoard = () => {
-    setBoardData(structuredClone(resetBoard(selectedSize)));
+    setBoardData(createBoard(selectedSize));
     setCurrentPlayer(generateRandomTurn());
     setWinResult(undefined);
     setShowModal(false);
@@ -56,7 +56,7 @@ export function PlayerVsPlayerPage() {
 
   return (
     <div className={classes.page}>
-      <Header
+      <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsPlayerLocal}
         refreshBoard={refreshBoard}

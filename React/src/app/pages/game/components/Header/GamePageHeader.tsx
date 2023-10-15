@@ -1,5 +1,5 @@
 import { P1, P2 } from "~/utils/players";
-import classes from "./Header.module.scss";
+import classes from "./GamePageHeader.module.scss";
 import { GameMode } from "~/utils/game-mode";
 import { boardSizeContext } from "~/App";
 import { useContext, useState } from "react";
@@ -10,7 +10,7 @@ interface Props {
   refreshBoard: () => void;
 }
 
-export function Header({ currentPlayer, gameMode, refreshBoard }: Props) {
+export function GamePageHeader({ currentPlayer, gameMode, refreshBoard }: Props) {
   const { selectedSize, setSelectedSize } = useContext(boardSizeContext);
   const [isSelectBoxOpen, setIsSelectBoxOpen] = useState(false);
 
