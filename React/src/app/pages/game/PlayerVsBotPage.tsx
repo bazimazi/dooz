@@ -19,25 +19,21 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
-  const strickModeInitialRenderCounter = useRef(0);
-
-
-
-
 
   useEffect(() => {
-    if (isFirstMove.current && currentPlayer === P2) {
-      handleBot();
-    }
-    isFirstMove.current = false;
-  }, [isFirstMove.current]);
-
-  useEffect(() => {
-    strickModeInitialRenderCounter.current <= 2 ? strickModeInitialRenderCounter.current++ : strickModeInitialRenderCounter.current = 3;
-    if (strickModeInitialRenderCounter.current == 3) {
+    if (!isFirstMove.current) {
       refreshBoard();
     }
   }, [selectedSize])
+
+  useEffect(() => {
+    if (currentPlayer === P2 && !winResult) {
+      handleBot();
+    }
+    isFirstMove.current = false;
+  }, [currentPlayer]);
+
+
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -50,21 +46,22 @@ export function PlayerVsBotPage() {
         return;
       }
       setCurrentPlayer(P2);
-      handleBot();
     }
   };
 
-  const handleBot = () => {
-    let bestBotMove = findBestBotMove(boardData);
-    if (bestBotMove) {
-      boardData[bestBotMove.i][bestBotMove.j] = P2;
-    }
-    setBoardData([...boardData]);
-    if (checkWinner(P2)) return;
-    if (anyMovesLeft(boardData)) {
-      setShowModal(true);
-    }
-    setCurrentPlayer(P1);
+  const handleBot = async () => {
+    setTimeout(() => {
+      let bestBotMove = findBestBotMove(boardData);
+      if (bestBotMove) {
+        boardData[bestBotMove.i][bestBotMove.j] = P2;
+      }
+      setBoardData([...boardData]);
+      if (checkWinner(P2)) return;
+      if (anyMovesLeft(boardData)) {
+        setShowModal(true);
+      }
+      setCurrentPlayer(P1);
+    }, 500);
   };
 
   const checkWinner = (currentPlayer: string) => {
@@ -77,11 +74,9 @@ export function PlayerVsBotPage() {
 
   const refreshBoard = () => {
     setBoardData(createBoard(selectedSize));
-    let newRandomTurnGenerator = generateRandomTurn();
-    setCurrentPlayer(newRandomTurnGenerator);
-    if (newRandomTurnGenerator === P2) {
-      isFirstMove.current = true;
-    }
+    let cp = generateRandomTurn();
+    setCurrentPlayer(cp);
+    isFirstMove.current = true;
     setWinResult(undefined);
     setShowModal(false);
   }
