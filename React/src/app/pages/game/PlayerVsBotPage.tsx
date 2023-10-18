@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useContext } from "react";
+import { useState, useRef, useEffect } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Footer } from "./components/Footer";
@@ -9,12 +9,12 @@ import classes from "./PlayerVsBotPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
-import { boardSizeContext } from "~/App";
 import { createBoard } from "~/utils/create-board";
+import { useSearch } from "@tanstack/react-router";
 
 export function PlayerVsBotPage() {
-  const { selectedSize } = useContext(boardSizeContext);
-  const [boardData, setBoardData] = useState(createBoard(selectedSize));
+  const { boardSize } = useSearch({ from: "" });
+  const [boardData, setBoardData] = useState(createBoard(boardSize));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
@@ -24,7 +24,7 @@ export function PlayerVsBotPage() {
     if (!isFirstMove.current) {
       refreshBoard();
     }
-  }, [selectedSize])
+  }, [boardSize])
 
   useEffect(() => {
     if (currentPlayer === P2 && !winResult) {
@@ -73,7 +73,7 @@ export function PlayerVsBotPage() {
   };
 
   const refreshBoard = () => {
-    setBoardData(createBoard(selectedSize));
+    setBoardData(createBoard(boardSize));
     let cp = generateRandomTurn();
     setCurrentPlayer(cp);
     isFirstMove.current = true;
