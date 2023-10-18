@@ -1,9 +1,7 @@
-import { createWinLines } from "./create-winlines";
-const boardSize = 3;
-const winLines = createWinLines(boardSize);
+import { getWinLines } from "./get-winLines"
 
 export function checkBoard(board: string[][], currentPlayer: string): number[][] | void {
-
-    return winLines.find(line => line.every(cell => board[cell[0]][cell[1]] == currentPlayer))
+    const winLines = getWinLines(board.length);
+    if (winLines) return winLines.find(line => line.every(cell => board[cell[0]][cell[1]] == currentPlayer))
 
 }

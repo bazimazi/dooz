@@ -10,7 +10,6 @@ interface Props {
 }
 
 export function ResultModal({ winner, onRefresh, gameMode }: Props) {
-
     let resultModalIconSrc = "";
     let resultModalText = "Draw";
     if (winner) {

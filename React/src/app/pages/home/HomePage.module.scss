@@ -8,12 +8,12 @@
 }
 
 .title {
-  justify-content: center;
   position: relative;
 }
 
 .titleImg {
-  width: 170px;
+  width: 130px;
+  margin-top: 30px;
 }
 
 .titleBg1 {
@@ -30,14 +30,17 @@
 
 .body {
   gap: 16px;
+  justify-content: flex-end;
+  padding-bottom: 30px;
   background-image: url("static/images/bg.png");
   background-repeat: no-repeat;
   background-size: cover;
+
 }
 
-.palyNowButton,
-.palyBotButton,
-.palyFriendsButton {
+.playNowButton,
+.playBotButton,
+.playFriendsButton {
   width: 265px;
   height: 56px;
   border-radius: 24px;
@@ -51,7 +54,7 @@
   user-select: none;
 }
 
-.palyNowButton {
+.playNowButton {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -62,8 +65,8 @@
     linear-gradient(to right, rgba(255, 255, 255, 0.33), #191685) border-box;
 }
 
-.palyBotButton,
-.palyFriendsButton {
+.playBotButton,
+.playFriendsButton {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,4 +75,61 @@
   font-family: Arial, Helvetica, sans-serif;
   background: linear-gradient(#4b61e9, #4b61e9) padding-box,
     linear-gradient(to right, rgba(255, 255, 255, 0.5), #5570fd) border-box;
+}
+
+.boardSizesContainerBackDrop {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  overflow: hidden;
+  transform: translateY(-65%);
+  height: 200px;
+}
+
+.boardSizesContainer {
+  gap: 85px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boardSize {
+  width: 126px;
+  height: auto;
+}
+
+.vectorContainer {
+  position: absolute;
+  width: 215px;
+  top: 46.5%;
+  left: 50%;
+  transform: translate(-50.5%, 0%);
+  z-index: 2;
+}
+
+.vectorContainer img {
+  position: absolute;
+  width: 17px;
+  height: 32px;
+  top: 50%;
+  z-index: 1;
+  transform: translate3d(0, -20%, 0);
+  transition: .3s;
+  cursor: pointer;
+}
+
+.vectorContainer img:hover {
+  scale: 1.1;
+}
+
+.leftVector {
+  left: 0;
+}
+
+.rightVector {
+  right: 0;
 }

@@ -1,23 +1,26 @@
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
 import { Footer } from "./components/Footer";
-import { Header } from "./components/Header";
+import { GamePageHeader } from "./components/Header";
 import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
-
-const INITIAL_BOARD = Array(3)
-  .fill(null)
-  .map(() => Array(3).fill(null));
+import { boardSizeContext } from "~/App";
+import { createBoard } from "~/utils/create-board";
 
 export function PlayerVsPlayerPage() {
-  const [boardData, setBoardData] = useState(structuredClone(INITIAL_BOARD));
+  const { selectedSize } = useContext(boardSizeContext);
+  const [boardData, setBoardData] = useState(createBoard(selectedSize));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    refreshBoard();
+  }, [selectedSize]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -36,13 +39,13 @@ export function PlayerVsPlayerPage() {
   const checkWinner = () => {
     const result = checkBoard(boardData, currentPlayer);
     if (!result) return false;
-    setWinResult(winResult);
+    setWinResult(result);
     setShowModal(true);
     return true;
   };
 
   const refreshBoard = () => {
-    setBoardData(structuredClone(INITIAL_BOARD));
+    setBoardData(createBoard(selectedSize));
     setCurrentPlayer(generateRandomTurn());
     setWinResult(undefined);
     setShowModal(false);
@@ -50,13 +53,10 @@ export function PlayerVsPlayerPage() {
 
   return (
     <div className={classes.page}>
-      <div className={classes.header}>
-        <Header
-          currentPlayer={currentPlayer}
-          gameMode={GameMode.playerVsPlayerLocal}
-        />
-      </div>
-
+      <GamePageHeader
+        currentPlayer={currentPlayer}
+        gameMode={GameMode.playerVsPlayerLocal}
+      />
       <div className={classes.body}>
         <Board
           boardData={boardData}
@@ -65,13 +65,11 @@ export function PlayerVsPlayerPage() {
           result={winResult}
         />
       </div>
-
       {showModal && <ResultModal
         winner={winResult && currentPlayer}
         onRefresh={refreshBoard}
         gameMode={GameMode.playerVsPlayerLocal}
       />}
-
       <div className={classes.footer}>
         <Footer onRefresh={refreshBoard} />
       </div>
