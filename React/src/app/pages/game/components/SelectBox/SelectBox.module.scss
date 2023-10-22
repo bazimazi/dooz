@@ -1,0 +1,52 @@
+
+.modeContainer {
+    height: 80px;
+    transform: translateY(20px);
+    width: 70px;
+  }
+  
+  .selectBox {
+    font-weight: 400;
+    font-size: 16px;
+    border-radius: 16px;
+    background-color: rgba(85, 112, 253, 0.2);
+    height: 40px;
+    overflow: hidden;
+    border: 1px solid #5570fd;
+    transition: 0.5s;
+    cursor: pointer;
+  }
+  
+  .selectBoxShowed {
+    height: 162px !important;
+  }
+  
+  
+  
+  .selectBox div {
+    padding: 0 6px;
+    height: 40px;
+    border-top: 1px solid #5570fd;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  
+  a {
+    text-decoration: none;
+    color: white;
+  }
+  
+  .selectBox div:hover {
+    background-color: rgba(85, 112, 253, 0.2);
+  
+  }
+  
+  .selectBox .selectedSize {
+    width: 70px;
+    height: 38px;
+    gap: 4px;
+    display: flex;
+    align-items: center;
+    border-top: none;
+  }
