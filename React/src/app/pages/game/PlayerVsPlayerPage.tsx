@@ -9,7 +9,7 @@ import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { createBoard } from "~/utils/create-board";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 export function PlayerVsPlayerPage() {
   const { boardSize } = useSearch({ from: "" });
@@ -17,7 +17,7 @@ export function PlayerVsPlayerPage() {
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
-
+  const navigate = useNavigate({ from: "" });
 
   useEffect(() => {
     refreshBoard();
@@ -52,11 +52,17 @@ export function PlayerVsPlayerPage() {
     setShowModal(false);
   }
 
+  function onSizeChange(size: number) {
+    navigate({ to: "/player-vs-player", search: { boardSize: size } });
+  }
+
   return (
     <div className={classes.page}>
       <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsPlayerLocal}
+        onSizeChange={onSizeChange}
+        boardSize={boardSize}
       />
       <div className={classes.body}>
         <Board

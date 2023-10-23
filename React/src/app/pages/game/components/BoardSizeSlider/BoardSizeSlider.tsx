@@ -2,12 +2,21 @@ import classes from "./BoardSizeSlider.module.scss";
 import { globals } from "~/utils/globals";
 
 interface Props {
-    clickLeftVector: () => void;
-    clickRightVector: () => void;
+    setBoardSize: React.Dispatch<React.SetStateAction<number>>;
     boardSize: number
 }
 
-export function BoardSizeSlider({ clickLeftVector, clickRightVector, boardSize }: Props) {
+
+export function BoardSizeSlider({ boardSize, setBoardSize }: Props) {
+
+    function clickLeftVector() {
+        boardSize != 3 && setBoardSize(boardSize - 3);
+    }
+
+    function clickRightVector() {
+        boardSize != 9 && setBoardSize(boardSize + 3);
+    }
+
     return (
         <>
             <div className={classes.vectorContainer}>

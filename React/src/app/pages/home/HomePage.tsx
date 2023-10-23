@@ -7,13 +7,6 @@ export function HomePage() {
 
   const [boardSize, setBoardSize] = useState(3);
 
-  function clickLeftVector() {
-    boardSize != 3 && setBoardSize(boardSize - 3);
-  }
-
-  function clickRightVector() {
-    boardSize != 9 && setBoardSize(boardSize + 3);
-  }
 
   return (
     <>
@@ -34,7 +27,7 @@ export function HomePage() {
           className={classes.titleBg2}
         />
       </div>
-      <BoardSizeSlider clickLeftVector={clickLeftVector} clickRightVector={clickRightVector} boardSize={boardSize} />
+      <BoardSizeSlider setBoardSize={setBoardSize} boardSize={boardSize} />
       <div className={classes.body}>
         <Link className={classes.playNowButton} to="player-vs-player" search={{ boardSize: boardSize }} >
           Play Now!

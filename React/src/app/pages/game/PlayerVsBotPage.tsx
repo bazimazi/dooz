@@ -10,7 +10,7 @@ import { anyMovesLeft } from "~/utils/any-moves-left";
 import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
 import { createBoard } from "~/utils/create-board";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 export function PlayerVsBotPage() {
   const { boardSize } = useSearch({ from: "" });
@@ -19,6 +19,7 @@ export function PlayerVsBotPage() {
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
   const isFirstMove = useRef(true);
+  const navigate = useNavigate({ from: "" });
 
   useEffect(() => {
     if (!isFirstMove.current) {
@@ -81,11 +82,17 @@ export function PlayerVsBotPage() {
     setShowModal(false);
   }
 
+  function onSizeChange(size: number) {
+    navigate({ to: "/player-vs-bot", search: { boardSize: size } });
+  }
+
   return (
     <div className={classes.page}>
       <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsBot}
+        onSizeChange={onSizeChange}
+        boardSize={boardSize}
       />
       <div className={classes.body}>
         <Board
