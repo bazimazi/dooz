@@ -11,6 +11,7 @@ import { findBestBotMove } from "~/utils/find-best-bot-move";
 import { Board } from "./components/Board";
 import { createBoard } from "~/utils/create-board";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { globals } from "~/utils/globals";
 
 export function PlayerVsBotPage() {
   const { boardSize } = useSearch({ from: "" });
@@ -83,7 +84,7 @@ export function PlayerVsBotPage() {
   }
 
   function onSizeChange(size: number) {
-    navigate({ to: "/player-vs-bot", search: { boardSize: size } });
+    navigate({ to: globals.playerVsBot, search: { boardSize: size as never }, params: {} });
   }
 
   return (

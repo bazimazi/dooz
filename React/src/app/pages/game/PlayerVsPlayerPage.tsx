@@ -10,6 +10,7 @@ import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
 import { createBoard } from "~/utils/create-board";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { globals } from "~/utils/globals";
 
 export function PlayerVsPlayerPage() {
   const { boardSize } = useSearch({ from: "" });
@@ -53,7 +54,7 @@ export function PlayerVsPlayerPage() {
   }
 
   function onSizeChange(size: number) {
-    navigate({ to: "/player-vs-player", search: { boardSize: size } });
+    navigate({ to: globals.playerVsPlayer, search: { boardSize: size as never }, params: {} });
   }
 
   return (

@@ -9,6 +9,7 @@ import {
 import { HomePage } from "./pages/home";
 import { PlayerVsPlayerPage } from "./pages/game/PlayerVsPlayerPage";
 import { PlayerVsBotPage } from "./pages/game/PlayerVsBotPage";
+import { globals } from "./utils/globals";
 
 const rootRoute = new RootRoute({
   component: () => <Outlet />,
@@ -22,13 +23,13 @@ const homeRoute = new Route({
 
 const gameRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/player-vs-player",
+  path: globals.playerVsPlayer,
   component: PlayerVsPlayerPage,
 });
 
 const botGameRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: "/player-vs-bot",
+  path: globals.playerVsBot,
   component: PlayerVsBotPage,
 });
 
