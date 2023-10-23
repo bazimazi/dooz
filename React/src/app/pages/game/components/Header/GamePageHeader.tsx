@@ -18,7 +18,9 @@ export function GamePageHeader({ currentPlayer, gameMode, boardSize, onSizeChang
 
   function changeSize(size: number) {
     setIsOpen(false);
-    onSizeChange(size);
+    if (boardSize !== size) {
+      onSizeChange(size);
+    }
   }
 
   return (

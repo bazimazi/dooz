@@ -54,7 +54,7 @@ export function PlayerVsPlayerPage() {
   }
 
   function onSizeChange(size: number) {
-    navigate({ to: globals.playerVsPlayer, search: { boardSize: size as never }, params: {} });
+    navigate({ to: globals.playerVsPlayer, search: { boardSize: size } });
   }
 
   return (
