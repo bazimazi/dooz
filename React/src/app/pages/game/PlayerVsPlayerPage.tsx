@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { checkBoard } from "~/utils/check-board";
 import { P1, P2, generateRandomTurn } from "~/utils/players";
 import { Board } from "./components/Board";
@@ -8,19 +8,21 @@ import { ResultModal } from "./components/Modal/ResultModal";
 import { GameMode } from "~/utils/game-mode";
 import classes from "./PlayerVsPlayerPage.module.scss";
 import { anyMovesLeft } from "~/utils/any-moves-left";
-import { boardSizeContext } from "~/App";
 import { createBoard } from "~/utils/create-board";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { globals } from "~/utils/globals";
 
 export function PlayerVsPlayerPage() {
-  const { selectedSize } = useContext(boardSizeContext);
-  const [boardData, setBoardData] = useState(createBoard(selectedSize));
+  const { boardSize } = useSearch({ from: "" });
+  const [boardData, setBoardData] = useState(createBoard(boardSize));
   const [currentPlayer, setCurrentPlayer] = useState(generateRandomTurn());
   const [winResult, setWinResult] = useState<number[][]>();
   const [showModal, setShowModal] = useState(false);
+  const navigate = useNavigate({ from: "" });
 
   useEffect(() => {
     refreshBoard();
-  }, [selectedSize]);
+  }, [boardSize]);
 
   const handleClick = (i: number, j: number) => {
     if (boardData[i][j] || winResult) return;
@@ -45,10 +47,14 @@ export function PlayerVsPlayerPage() {
   };
 
   const refreshBoard = () => {
-    setBoardData(createBoard(selectedSize));
+    setBoardData(createBoard(boardSize));
     setCurrentPlayer(generateRandomTurn());
     setWinResult(undefined);
     setShowModal(false);
+  }
+
+  function onSizeChange(size: number) {
+    navigate({ to: globals.playerVsPlayer, search: { boardSize: size } });
   }
 
   return (
@@ -56,6 +62,8 @@ export function PlayerVsPlayerPage() {
       <GamePageHeader
         currentPlayer={currentPlayer}
         gameMode={GameMode.playerVsPlayerLocal}
+        onSizeChange={onSizeChange}
+        boardSize={boardSize}
       />
       <div className={classes.body}>
         <Board

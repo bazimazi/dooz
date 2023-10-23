@@ -12,11 +12,11 @@ globals.boardSizes.map(size => {
     allSizeCellWidth[size] = (globals.boardWidth - 2 * (globals.padding + globals.boardBorderWidth)) / size;
 })
 
-export function winLineStyleMaker(currentPlayer: string, selectedSize: number, result?: number[][]) {
+export function winLineStyleMaker(currentPlayer: string, boardSize: number, result?: number[][]) {
 
     if (!result) return;
 
-    const cellWidth = allSizeCellWidth[selectedSize];
+    const cellWidth = allSizeCellWidth[boardSize];
     const winLineStyle = {
         visibility: "visible",
         top: "",

@@ -1,6 +1,6 @@
-export function createBoard(selectedSize: number) {
-    return (Array(selectedSize)
+export function createBoard(boardSize: number) {
+    return (Array(boardSize)
         .fill(null)
-        .map(() => Array(selectedSize).fill(null))
+        .map(() => Array(boardSize).fill(null))
     )
 }
