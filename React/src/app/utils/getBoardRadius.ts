@@ -3,9 +3,9 @@ interface BoardStyles {
     templateRadius: string;
 }
 
-export function getBoardRadius(selectedSize: number) {
+export function getBoardRadius(boardSize: number) {
     const boardStyles: BoardStyles = { mainRadius: "64px", templateRadius: "56px" };
-    switch (selectedSize) {
+    switch (boardSize) {
         case 6:
             boardStyles.mainRadius = "42px";
             boardStyles.templateRadius = "30px";

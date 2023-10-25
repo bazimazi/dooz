@@ -1,22 +1,26 @@
 import { P1, P2 } from "~/utils/players";
 import classes from "./GamePageHeader.module.scss";
 import { GameMode } from "~/utils/game-mode";
-import { boardSizeContext } from "~/App";
-import { useContext, useState } from "react";
+import { useState } from "react";
+import { globals } from "~/utils/globals";
+
 
 interface Props {
   currentPlayer: string;
   gameMode: GameMode;
+  boardSize: number;
+  onSizeChange: (size: number) => void;
 }
 
-export function GamePageHeader({ currentPlayer, gameMode }: Props) {
-  const { selectedSize, setSelectedSize } = useContext(boardSizeContext);
-  const [isSelectBoxOpen, setIsSelectBoxOpen] = useState(false);
+export function GamePageHeader({ currentPlayer, gameMode, boardSize, onSizeChange }: Props) {
 
-  function changeBoardSize(size: number) {
-    if (selectedSize === size) return;
-    setSelectedSize(size);
-    setIsSelectBoxOpen(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  function changeSize(size: number) {
+    setIsOpen(false);
+    if (boardSize !== size) {
+      onSizeChange(size);
+    }
   }
 
   return (
@@ -30,14 +34,16 @@ export function GamePageHeader({ currentPlayer, gameMode }: Props) {
         </div>
       </div>
       <div className={classes.modeContainer}>
-        <div className={`${classes.selectBox} ${isSelectBoxOpen && classes.selectBoxShowed}`}>
-          <div className={classes.selectedSize} onClick={() => setIsSelectBoxOpen(!isSelectBoxOpen)}>
-            {selectedSize} x {selectedSize}
-            <img src={`${isSelectBoxOpen ? "static/images/arrow-up.png" : "static/images/arrow-down.png"}`} alt="arrow-down" />
+        <div className={`${classes.selectBox} ${isOpen && classes.selectBoxShowed}`}>
+          <div className={classes.selectedSize} onClick={() => setIsOpen(!isOpen)}>
+            {boardSize} x {boardSize}
+            <img src={`${isOpen ? "static/images/arrow-up.png" : "static/images/arrow-down.png"}`} alt="arrow" />
           </div>
-          <div onClick={() => changeBoardSize(3)}>3 x 3</div>
-          <div onClick={() => changeBoardSize(6)}>6 x 6</div>
-          <div onClick={() => changeBoardSize(9)}>9 x 9</div>
+          {
+            globals.boardSizes.map((size, i) =>
+              <div key={i} onClick={() => changeSize(size)}>{size} x {size}</div>
+            )
+          }
         </div>
       </div>
       <div className={`${classes.player2} ${currentPlayer === P2 ? classes.current : ''}`}>
