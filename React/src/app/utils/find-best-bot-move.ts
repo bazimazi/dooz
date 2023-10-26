@@ -4,7 +4,7 @@ import { getWinLines } from "./get-winLines";
 import { anyMovesLeft } from "./any-moves-left";
 
 let winLinesArray: number[][][];
-
+let test = 0;
 export function findBestBotMove(board: any[][]) {
     winLinesArray = getWinLines(board.length);
     const memo = new Map();
@@ -14,9 +14,9 @@ export function findBestBotMove(board: any[][]) {
         for (let j = 0; j < board.length; j++) {
             if (board[i][j] == null) {
                 board[i][j] = P2;
-                let score = minimax(board, board.length - 1, false, -Infinity, Infinity, memo);
+                let score = minimax(board, 0, false, -Infinity, Infinity, memo);
                 board[i][j] = null;
-                // console.log("score", score, "bestscore", bestScore);
+                console.log("score", score, "bestscore", bestScore);
                 if (score > bestScore) {
                     bestScore = score;
                     bestBotMove = { i, j };
@@ -24,22 +24,15 @@ export function findBestBotMove(board: any[][]) {
             }
         }
     }
-
     return bestBotMove;
-}
-
-function evaluateBoard(winResult: number[][] | void, isMaximizing: boolean) {
-    if (winResult) return isMaximizing ? 1 : -1;
-    return 0;
 }
 
 function minimax(board: any[][], depth: number, isMaximizing: boolean, alpha: number, beta: number, memo: Map<any, any>) {
     let currentPlayer = isMaximizing ? P2 : P1;
     const key = board.toString();
     let winResult = checkBoard(board, currentPlayer);
-    if (winResult || depth === 0 || anyMovesLeft(board)) {
-        return evaluateBoard(winResult, isMaximizing);
-    }
+    if (winResult) return isMaximizing ? 100 - depth : -100 + depth;
+    if (anyMovesLeft(board)) return 0;
     if (memo.has(key)) return memo.get(key);
     if (isMaximizing) return findMaxMove(board, depth, alpha, beta, memo, key);
     return findMinMove(board, depth, alpha, beta, memo, key);
@@ -51,12 +44,12 @@ function findMaxMove(board: any[][], depth: number, alpha: number, beta: number,
         for (let j = 0; j < board.length; j++) {
             if (board[i][j] === null) {
                 board[i][j] = P2;
-                let score = minimax(board, depth - 1, false, alpha, beta, memo);
+                let score = minimax(board, depth + 1, false, alpha, beta, memo);
                 board[i][j] = null;
                 bestScore = Math.max(bestScore, score);
                 alpha = Math.max(alpha, score);
                 if (beta <= alpha) {
-                    // break;
+                    break;
                 }
             }
         }
@@ -71,12 +64,12 @@ function findMinMove(board: any[][], depth: number, alpha: number, beta: number,
         for (let j = 0; j < board.length; j++) {
             if (board[i][j] === null) {
                 board[i][j] = P1;
-                let score = minimax(board, depth - 1, true, alpha, beta, memo);
+                let score = minimax(board, depth + 1, true, alpha, beta, memo);
                 board[i][j] = null;
                 bestScore = Math.min(bestScore, score);
                 beta = Math.min(beta, score);
                 if (beta <= alpha) {
-                    // break;
+                    break;
                 }
             }
         }
