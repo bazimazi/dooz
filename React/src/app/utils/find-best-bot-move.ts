@@ -4,7 +4,6 @@ import { getWinLines } from "./get-winLines";
 import { anyMovesLeft } from "./any-moves-left";
 
 let winLinesArray: number[][][];
-let test = 0;
 export function findBestBotMove(board: any[][]) {
     winLinesArray = getWinLines(board.length);
     const memo = new Map();
@@ -16,7 +15,6 @@ export function findBestBotMove(board: any[][]) {
                 board[i][j] = P2;
                 let score = minimax(board, 0, false, -Infinity, Infinity, memo);
                 board[i][j] = null;
-                console.log("score", score, "bestscore", bestScore);
                 if (score > bestScore) {
                     bestScore = score;
                     bestBotMove = { i, j };
@@ -28,10 +26,10 @@ export function findBestBotMove(board: any[][]) {
 }
 
 function minimax(board: any[][], depth: number, isMaximizing: boolean, alpha: number, beta: number, memo: Map<any, any>) {
-    let currentPlayer = isMaximizing ? P2 : P1;
+    let currentPlayer = isMaximizing ? P1 : P2;
     const key = board.toString();
     let winResult = checkBoard(board, currentPlayer);
-    if (winResult) return isMaximizing ? 100 - depth : -100 + depth;
+    if (winResult) return isMaximizing ? -100 + depth : 100 - depth;
     if (anyMovesLeft(board)) return 0;
     if (memo.has(key)) return memo.get(key);
     if (isMaximizing) return findMaxMove(board, depth, alpha, beta, memo, key);
