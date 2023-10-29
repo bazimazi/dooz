@@ -26,8 +26,7 @@ function minimax(board: any[][], depth: number, isMaximizing: boolean, alpha: nu
     let currentPlayer = isMaximizing ? P1 : P2;
     const key = board.toString();
     if (memo.has(key)) return memo.get(key);
-    let winResult = checkBoard(board, currentPlayer);
-    if (winResult) return isMaximizing ? -100 + depth : 100 - depth;
+    if (checkBoard(board, currentPlayer)) return isMaximizing ? -100 + depth : 100 - depth;
     if (anyMovesLeft(board) || depth >= board.length) return 0;
     let bestScore = isMaximizing ? -Infinity : Infinity;
     outerLoop:
