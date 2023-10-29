@@ -28,45 +28,26 @@ function minimax(board: any[][], depth: number, isMaximizing: boolean, alpha: nu
     if (memo.has(key)) return memo.get(key);
     let winResult = checkBoard(board, currentPlayer);
     if (winResult) return isMaximizing ? -100 + depth : 100 - depth;
-    if (anyMovesLeft(board)) return 0;
-    if (isMaximizing) return findMaxMove(board, depth, alpha, beta, memo, key);
-    return findMinMove(board, depth, alpha, beta, memo, key);
-}
-
-function findMaxMove(board: any[][], depth: number, alpha: number, beta: number, memo: Map<any, any>, key: string) {
-    let bestScore = -Infinity;
+    if (anyMovesLeft(board) || depth >= board.length) return 0;
+    let bestScore = isMaximizing ? -Infinity : Infinity;
     outerLoop:
     for (let i = 0; i < board.length; i++) {
         for (let j = 0; j < board.length; j++) {
             if (board[i][j] === null) {
-                board[i][j] = P2;
-                let score = minimax(board, depth + 1, false, alpha, beta, memo);
+                board[i][j] = isMaximizing ? P2 : P1;
+                let score = minimax(board, depth + 1, !isMaximizing, alpha, beta, memo);
                 board[i][j] = null;
-                bestScore = Math.max(bestScore, score);
-                alpha = Math.max(alpha, score);
-                if (beta <= alpha) {
-                    break outerLoop;
-                }
-            }
-        }
-    }
-    memo.set(key, bestScore);
-    return bestScore;
-}
-
-function findMinMove(board: any[][], depth: number, alpha: number, beta: number, memo: Map<any, any>, key: string) {
-    let bestScore = Infinity;
-    outerLoop:
-    for (let i = 0; i < board.length; i++) {
-        for (let j = 0; j < board.length; j++) {
-            if (board[i][j] === null) {
-                board[i][j] = P1;
-                let score = minimax(board, depth + 1, true, alpha, beta, memo);
-                board[i][j] = null;
-                bestScore = Math.min(bestScore, score);
-                beta = Math.min(beta, score);
-                if (beta <= alpha) {
-                    break outerLoop;
+                bestScore = isMaximizing ? Math.max(bestScore, score) : Math.min(bestScore, score);
+                if (isMaximizing) {
+                    alpha = Math.max(alpha, score);
+                    if (beta <= alpha) {
+                        break outerLoop;
+                    }
+                } else {
+                    beta = Math.min(beta, score);
+                    if (beta <= alpha) {
+                        break outerLoop;
+                    }
                 }
             }
         }
