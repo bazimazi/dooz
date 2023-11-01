@@ -33,7 +33,7 @@ export function PlayerVsBotPage() {
       handleBot();
     }
     isFirstMove.current = false;
-  }, [currentPlayer]);
+  }, [currentPlayer, isFirstMove.current]);
 
 
 
