@@ -1,5 +1,6 @@
 import { type GameState, type Player, X } from '@dooz/engine';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { Confetti } from '@/components/art/Confetti';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
@@ -13,6 +14,8 @@ interface ResultModalProps {
   restartDisabled?: boolean;
   /** Extra line under the title — a rematch prompt, say. */
   note?: ReactNode;
+  /** Fires the confetti. Set only when the person at this device won. */
+  celebrate?: boolean;
 }
 
 /**
@@ -20,6 +23,10 @@ interface ResultModalProps {
  *
  * There is deliberately no dismiss affordance: the two ways out of a finished
  * game are to play again or to go home, and both are in the panel.
+ *
+ * It arrives in pieces — dim, then panel, then the face, the verdict and the
+ * buttons — because the result is the one moment in the game worth pausing on.
+ * The whole sequence is under half a second, so it never delays a rematch.
  */
 export function ResultModal({
   title,
@@ -28,6 +35,7 @@ export function ResultModal({
   restartLabel,
   restartDisabled,
   note,
+  celebrate = false,
 }: ResultModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -38,10 +46,9 @@ export function ResultModal({
   }, []);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5"
-      style={{ animation: 'dooz-fade 0.25s ease-out both' }}
-    >
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]">
+      {celebrate ? <Confetti /> : null}
+
       <div
         ref={panelRef}
         role="dialog"
@@ -49,17 +56,35 @@ export function ResultModal({
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          'w-full max-w-78 rounded-[3.5rem] border border-b8 p-2 outline-none',
-          'animate-pop',
+          'relative w-full max-w-78 animate-panel-in rounded-[3.5rem] border border-b8 p-2 outline-none',
+          'shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)]',
         )}
+        style={{ animationDelay: '0.06s' }}
       >
         <div className="flex flex-col items-center gap-4 rounded-[3.125rem] bg-raised px-6 py-10">
-          <div className="text-[5rem] leading-none">{art}</div>
+          <div className="animate-pop text-[5rem] leading-none" style={{ animationDelay: '0.22s' }}>
+            {/* A slow bob under the one-shot entrance, so the face stays alive
+                while the panel waits for a decision. */}
+            <span className="block animate-bob">{art}</span>
+          </div>
 
-          <h2 className="text-center font-display text-2xl text-g8">{title}</h2>
-          {note ? <p className="-mt-2 text-center text-sm text-g8/80">{note}</p> : null}
+          <h2
+            className="animate-rise text-center font-display text-2xl text-g8"
+            style={{ animationDelay: '0.34s' }}
+          >
+            {title}
+          </h2>
 
-          <div className="pt-2">
+          {note ? (
+            <p
+              className="-mt-2 animate-rise text-center text-sm text-g8/80"
+              style={{ animationDelay: '0.4s' }}
+            >
+              {note}
+            </p>
+          ) : null}
+
+          <div className="animate-rise pt-2" style={{ animationDelay: '0.46s' }}>
             <GameControls
               onRestart={onRestart}
               tone="solid"
@@ -69,8 +94,6 @@ export function ResultModal({
           </div>
         </div>
       </div>
-
-      <style>{`@keyframes dooz-fade { from { opacity: 0 } to { opacity: 1 } }`}</style>
     </div>
   );
 }

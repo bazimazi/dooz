@@ -87,7 +87,7 @@ const onlineRoute = createRoute({
 function NotFound() {
   return (
     <Screen>
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
+      <div className="stagger flex flex-1 flex-col items-center justify-center gap-6 text-center">
         <p className="font-display text-3xl">nothing here</p>
         <Button as={Link} to="/" variant="primary">
           Back to home
@@ -103,6 +103,10 @@ export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   scrollRestoration: false,
+  // Every navigation goes through the View Transitions API where the browser
+  // has it, so a screen change is one continuous move. Browsers without it
+  // simply swap as before — the styling for it lives in `theme.css`.
+  defaultViewTransition: true,
 });
 
 declare module '@tanstack/react-router' {

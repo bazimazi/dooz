@@ -30,7 +30,7 @@ export function BoardSizeCarousel({ value, onChange }: BoardSizeCarouselProps) {
     <div className="relative w-full">
       <div className="overflow-hidden">
         <div
-          className="flex items-center transition-transform duration-300 ease-out"
+          className="flex items-center transition-transform duration-500 ease-spring"
           style={{
             // Centring slot `index` means shifting the track left by that many
             // slots, then right by half the space a slot leaves over.
@@ -46,23 +46,26 @@ export function BoardSizeCarousel({ value, onChange }: BoardSizeCarouselProps) {
                 onClick={() => onChange(size)}
                 aria-label={`${size} by ${size} board`}
                 aria-current={current}
-                className="flex shrink-0 flex-col items-center gap-2 px-3 py-4"
+                className="group flex shrink-0 flex-col items-center gap-2 px-3 py-4"
                 style={{ width: `${SLOT_WIDTH}%` }}
                 tabIndex={current ? 0 : -1}
               >
                 <span
                   className={cx(
-                    'text-sm transition-opacity duration-300',
-                    current ? 'opacity-100' : 'opacity-0',
+                    'text-sm transition-[opacity,transform] duration-300 ease-spring',
+                    current ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0',
                   )}
                 >
                   {size} × {size}
                 </span>
                 <MiniBoard
                   size={size}
+                  active={current}
                   className={cx(
-                    'w-full transition-all duration-300',
-                    current ? 'scale-100 opacity-100' : 'scale-[0.82] opacity-40 blur-[2px]',
+                    'w-full transition-all duration-500 ease-spring',
+                    current
+                      ? 'scale-100 opacity-100 blur-0'
+                      : 'scale-[0.82] opacity-40 blur-[2px] group-hover:scale-[0.88] group-hover:opacity-60 group-hover:blur-[1px]',
                   )}
                 />
               </button>
@@ -107,13 +110,21 @@ function CarouselArrow({
       disabled={disabled}
       aria-label={label}
       className={cx(
-        'absolute top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center',
-        'text-2xl text-g8 transition-all duration-200',
-        'hover:scale-110 disabled:pointer-events-none disabled:opacity-25',
+        'group absolute top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center',
+        'rounded-full text-2xl text-g8',
+        'transition-[transform,opacity,background-color] duration-200 ease-spring',
+        'hover:scale-115 hover:bg-b8/20 active:scale-90 active:duration-75',
+        'disabled:pointer-events-none disabled:opacity-25',
         side === 'left' ? 'left-0' : 'right-0',
       )}
     >
-      <Chevron />
+      {/* The chevron leans the way it will take you as the pointer arrives. */}
+      <Chevron
+        className={cx(
+          'transition-transform duration-200 ease-spring',
+          side === 'left' ? 'group-hover:-translate-x-0.5' : 'group-hover:translate-x-0.5',
+        )}
+      />
     </button>
   );
 }

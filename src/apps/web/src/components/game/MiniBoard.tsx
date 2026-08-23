@@ -34,22 +34,39 @@ function samplePosition(size: BoardSize): { cells: number[]; winLine: number[] }
 
 interface MiniBoardProps {
   size: BoardSize;
+  /**
+   * True for the preview currently centred in the carousel. The sample position
+   * replays itself when a preview takes the centre, which is what makes the
+   * carousel feel like it is showing you a board rather than a thumbnail.
+   */
+  active?: boolean;
   className?: string;
 }
 
-export function MiniBoard({ size, className }: MiniBoardProps) {
+export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
   const { cells, winLine } = samplePosition(size);
   const first = winLine[0]!;
   const last = winLine[winLine.length - 1]!;
+
+  const from = { x: (first % size) + 0.5, y: Math.floor(first / size) + 0.5 };
+  const to = { x: (last % size) + 0.5, y: Math.floor(last / size) + 0.5 };
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+
+  // Keying on `active` remounts the contents as a preview takes or gives up the
+  // centre, which is the only way to replay a one-shot CSS animation.
+  const replayKey = active ? 'active' : 'idle';
 
   return (
     <div
       className={cx(
         'relative aspect-square overflow-hidden rounded-2xl border border-b8/70 bg-surface/70',
+        'transition-shadow duration-300 ease-soft',
+        active && 'shadow-[0_10px_30px_-14px_rgb(0_0_0/0.8)]',
         className,
       )}
     >
       <div
+        key={replayKey}
         className="grid h-full w-full"
         style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
       >
@@ -63,25 +80,43 @@ export function MiniBoard({ size, className }: MiniBoardProps) {
             )}
           >
             {cell !== Empty ? (
-              <Mark player={cell as 1 | 2} hole="var(--color-surface)" className="w-[70%]" />
+              <Mark
+                player={cell as 1 | 2}
+                hole="var(--color-surface)"
+                className={cx(
+                  'w-[70%]',
+                  active && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                )}
+                // The marks land in reading order rather than all together, so
+                // the eye is led along the run the preview is demonstrating.
+                style={active ? { animationDelay: `${0.06 + index * 0.012}s` } : undefined}
+              />
             ) : null}
           </div>
         ))}
       </div>
 
       <svg
+        key={`line-${replayKey}`}
         viewBox={`0 0 ${size} ${size}`}
         className="pointer-events-none absolute inset-0 h-full w-full"
         aria-hidden="true"
       >
         <line
-          x1={(first % size) + 0.5}
-          y1={Math.floor(first / size) + 0.5}
-          x2={(last % size) + 0.5}
-          y2={Math.floor(last / size) + 0.5}
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
           stroke="var(--color-p3)"
           strokeWidth={0.08}
           strokeLinecap="round"
+          strokeDasharray={length}
+          strokeDashoffset={active ? length : 0}
+          style={
+            active
+              ? { animation: 'draw-line 0.5s 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards' }
+              : undefined
+          }
         />
       </svg>
     </div>

@@ -1,9 +1,12 @@
 import type { Player } from '@dooz/engine';
 import { X } from '@dooz/engine';
+import type { CSSProperties } from 'react';
 
 interface MarkProps {
   /** Extra classes, normally sizing. The marks fill their box. */
   className?: string;
+  /** Used to stagger an entrance animation set by the caller's class. */
+  style?: CSSProperties;
   title?: string;
 }
 
@@ -14,9 +17,16 @@ interface MarkProps {
  * on the cell that holds them, stay sharp on any display, and need no network
  * request when the app is running offline in a Tauri window.
  */
-export function MarkX({ className, title }: MarkProps) {
+export function MarkX({ className, style, title }: MarkProps) {
   return (
-    <svg viewBox="0 0 64 65" fill="none" className={className} role="img" aria-label={title}>
+    <svg
+      viewBox="0 0 64 65"
+      fill="none"
+      className={className}
+      style={style}
+      role="img"
+      aria-label={title}
+    >
       {title ? <title>{title}</title> : null}
       <rect
         x="1.41421"
@@ -69,9 +79,16 @@ interface MarkOProps extends MarkProps {
   hole?: string;
 }
 
-export function MarkO({ className, title, hole = 'var(--color-surface)' }: MarkOProps) {
+export function MarkO({ className, style, title, hole = 'var(--color-surface)' }: MarkOProps) {
   return (
-    <svg viewBox="0 0 64 64" fill="none" className={className} role="img" aria-label={title}>
+    <svg
+      viewBox="0 0 64 64"
+      fill="none"
+      className={className}
+      style={style}
+      role="img"
+      aria-label={title}
+    >
       {title ? <title>{title}</title> : null}
       <circle
         cx="32"

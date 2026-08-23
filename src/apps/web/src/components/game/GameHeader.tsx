@@ -7,6 +7,8 @@ export interface SeatInfo {
   kind?: 'human' | 'bot';
   connected?: boolean;
   isYou?: boolean;
+  /** Seat is working on something — the bot searching for its move. */
+  busy?: boolean;
 }
 
 interface GameHeaderProps {
@@ -29,7 +31,7 @@ export function GameHeader({ game, left, right, onBoardSizeChange }: GameHeaderP
       {onBoardSizeChange ? (
         <BoardSizeSelect value={game.size} onChange={onBoardSizeChange} />
       ) : (
-        <div className="self-start pt-5 text-base whitespace-nowrap opacity-70">
+        <div className="animate-fade-in self-start pt-5 text-base whitespace-nowrap opacity-70">
           {game.size} x {game.size}
         </div>
       )}

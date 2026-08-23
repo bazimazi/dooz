@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, CSSProperties, ElementType, ReactNode } from 'react';
 import { cx } from '@/lib/cx';
 
 type Variant = 'primary' | 'secondary';
@@ -14,6 +14,8 @@ interface ButtonOwnProps {
   icon?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** Merged with the variant fill rather than replacing it. */
+  style?: CSSProperties;
 }
 
 type ButtonProps<T extends ElementType> = ButtonOwnProps &
@@ -27,6 +29,11 @@ type ButtonProps<T extends ElementType> = ButtonOwnProps &
  *
  * Polymorphic because half of these navigate (and must be real links, for
  * middle-click and for screen readers) while the rest run a callback.
+ *
+ * Pointer feedback runs in three stages so the button feels like an object:
+ * it lifts and catches a highlight on hover, and presses in — down, not just
+ * smaller — on click, with a shorter curve going down than coming back up.
+ * The label sits above the `sheen` highlight rather than under it.
  */
 export function Button<T extends ElementType = 'button'>({
   as,
@@ -34,6 +41,7 @@ export function Button<T extends ElementType = 'button'>({
   icon,
   children,
   className,
+  style,
   ...rest
 }: ButtonProps<T>) {
   const Component: ElementType = as ?? 'button';
@@ -41,17 +49,26 @@ export function Button<T extends ElementType = 'button'>({
   return (
     <Component
       className={cx(
-        'tile-edge flex h-14 w-full max-w-68 items-center justify-center gap-2.5 rounded-3xl',
+        'sheen group tile-edge flex h-14 w-full max-w-68 items-center justify-center rounded-3xl',
         'text-2xl font-semibold text-g10 no-underline',
-        'transition-transform duration-150 active:scale-[0.97]',
+        'shadow-[0_4px_14px_-8px_rgb(0_0_0/0.6)]',
+        'transition-[transform,box-shadow,filter] duration-200 ease-soft',
+        'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_rgb(0_0_0/0.65)]',
+        'active:translate-y-0 active:scale-[0.965] active:duration-75',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
-      style={{ '--tile-fill': VARIANT_FILL[variant] } as React.CSSProperties}
+      style={{ '--tile-fill': VARIANT_FILL[variant], ...style } as CSSProperties}
       {...rest}
     >
-      {icon ? <span className="text-[1.4rem] leading-none">{icon}</span> : null}
-      {children}
+      <span className="relative z-2 flex items-center gap-2.5">
+        {icon ? (
+          <span className="text-[1.4rem] leading-none transition-transform duration-200 ease-spring group-hover:scale-115">
+            {icon}
+          </span>
+        ) : null}
+        {children}
+      </span>
     </Component>
   );
 }

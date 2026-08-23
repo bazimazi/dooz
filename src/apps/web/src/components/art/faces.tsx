@@ -40,6 +40,7 @@ export function HappyFace(props: FaceProps) {
         fill={EYE}
       />
       <path
+        className="origin-center animate-wiggle transform-fill"
         d="M33.9 51.2a10 10 0 0 0 15.6 0c-2.2-2-5-3-7.8-3s-5.6 1-7.8 3Z"
         fill="var(--color-p3)"
       />
@@ -66,8 +67,12 @@ export function SadFace(props: FaceProps) {
         strokeLinecap="round"
         fill="none"
       />
-      {/* A single tear. */}
-      <path d="M27.5 36c1.9 2.9 2.9 4.8 2.9 6a2.9 2.9 0 1 1-5.8 0c0-1.2 1-3.1 2.9-6Z" fill={EYE} />
+      {/* A single tear, which runs down the cheek and starts again. */}
+      <path
+        className="animate-tear"
+        d="M27.5 36c1.9 2.9 2.9 4.8 2.9 6a2.9 2.9 0 1 1-5.8 0c0-1.2 1-3.1 2.9-6Z"
+        fill={EYE}
+      />
     </FaceBubble>
   );
 }

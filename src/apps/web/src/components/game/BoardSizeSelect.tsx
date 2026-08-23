@@ -57,6 +57,8 @@ export function BoardSizeSelect({ value, onChange, disabled = false }: BoardSize
         className={cx(
           'flex h-10 w-full items-center justify-between gap-1 rounded-tile border border-b8 px-1.5',
           'bg-b8/20 text-base whitespace-nowrap',
+          'transition-[background-color,transform] duration-200 ease-spring',
+          'hover:bg-b8/35 active:scale-95 active:duration-75',
           'disabled:cursor-not-allowed disabled:opacity-50',
         )}
       >
@@ -71,25 +73,32 @@ export function BoardSizeSelect({ value, onChange, disabled = false }: BoardSize
         role="listbox"
         aria-label="Board size"
         className={cx(
-          'absolute inset-x-0 top-[3.25rem] overflow-hidden rounded-tile border border-b8',
-          'bg-b3/95 backdrop-blur-sm transition-all duration-300',
+          'absolute inset-x-0 top-13 origin-top overflow-hidden rounded-tile border border-b8',
+          'bg-b3/95 shadow-[0_18px_34px_-18px_rgb(0_0_0/0.9)] backdrop-blur-sm',
+          'transition-all duration-300 ease-spring',
           open
-            ? 'max-h-40 opacity-100'
-            : 'pointer-events-none max-h-0 border-transparent opacity-0',
+            ? 'max-h-40 scale-y-100 opacity-100'
+            : 'pointer-events-none max-h-0 scale-y-90 border-transparent opacity-0',
         )}
       >
-        {BOARD_SIZES.map((size) => (
+        {BOARD_SIZES.map((size, position) => (
           <li key={size}>
             <button
+              // Keyed on `open` so the stagger replays every time it is opened.
+              key={`${size}-${open}`}
               type="button"
               role="option"
               aria-selected={size === value}
               onClick={() => pick(size)}
               className={cx(
                 'flex h-10 w-full items-center border-t border-b8 px-1.5 text-base first:border-t-0',
-                'hover:bg-b8/25',
+                'transition-colors duration-150 hover:bg-b8/35',
                 size === value && 'bg-b8/20',
+                // The options unroll one after another rather than arriving as
+                // a block, which reads as the panel opening.
+                open && 'animate-option-in',
               )}
+              style={open ? { animationDelay: `${0.05 + position * 0.05}s` } : undefined}
             >
               {size} x {size}
             </button>

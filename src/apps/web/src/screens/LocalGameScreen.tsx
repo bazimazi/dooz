@@ -24,26 +24,38 @@ export function LocalGameScreen({ size }: LocalGameScreenProps) {
 
   const finished = game.status !== 'playing';
   const title = game.status === 'draw' ? 'Draw' : `Player ${game.winner === X ? 1 : 2} Won!`;
+  // Somebody at this device won either way, so a win is always worth marking.
+  const finishTone = finished ? (game.winner ? 'win' : 'draw') : null;
 
   return (
     <Screen>
-      <GameHeader
-        game={game}
-        left={{ name: 'Player 1' }}
-        right={{ name: 'Player 2' }}
-        onBoardSizeChange={changeSize}
-      />
+      <div className="w-full animate-rise" style={{ animationDelay: '0.04s' }}>
+        <GameHeader
+          game={game}
+          left={{ name: 'Player 1' }}
+          right={{ name: 'Player 2' }}
+          onBoardSizeChange={changeSize}
+        />
+      </div>
 
-      <main className="flex w-full flex-1 items-center justify-center py-6">
-        <Board game={game} onPlay={play} />
+      <main
+        className="flex w-full flex-1 animate-board-in items-center justify-center py-6"
+        style={{ animationDelay: '0.12s' }}
+      >
+        <Board game={game} onPlay={play} finishTone={finishTone} />
       </main>
 
-      <footer className="pb-4">
+      <footer className="animate-rise pb-4" style={{ animationDelay: '0.22s' }}>
         <GameControls onRestart={restart} restartLabel="New game" />
       </footer>
 
       {finished ? (
-        <ResultModal title={title} art={outcomeMark(game.winner)} onRestart={restart} />
+        <ResultModal
+          title={title}
+          art={outcomeMark(game.winner)}
+          onRestart={restart}
+          celebrate={game.winner !== null}
+        />
       ) : null}
     </Screen>
   );

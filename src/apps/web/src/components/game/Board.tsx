@@ -4,11 +4,19 @@ import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 import { WinLine } from './WinLine';
 
+/** How the game ended, from the point of view of the person at this device. */
+export type FinishTone = 'win' | 'loss' | 'draw';
+
 interface BoardProps {
   game: GameState;
   onPlay: (index: number) => void;
   /** Blocks input while it is the bot's or the opponent's turn. */
   disabled?: boolean;
+  /**
+   * Set once the game is over, to pick the board's reaction: a settle for a
+   * win, a shake for a loss. Omitted while the game is still running.
+   */
+  finishTone?: FinishTone | null;
 }
 
 /**
@@ -23,7 +31,7 @@ const RADII: Record<BoardSize, { frame: string; inner: string }> = {
   9: { frame: '1.25rem', inner: '0.75rem' },
 };
 
-export function Board({ game, onPlay, disabled = false }: BoardProps) {
+export function Board({ game, onPlay, disabled = false, finishTone = null }: BoardProps) {
   const { size, board, winLine, status } = game;
   const radii = RADII[size];
   const gridRef = useRef<HTMLDivElement>(null);
@@ -31,7 +39,9 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
   // it, so a 9x9 board does not put 81 stops in the page's tab order.
   const [focusIndex, setFocusIndex] = useState(0);
 
-  const winning = new Set(winLine ?? []);
+  // Position in the winning run, so the run can light up cell by cell along
+  // its own direction rather than all at once.
+  const winOrder = new Map((winLine ?? []).map((cell, order) => [cell, order]));
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const deltas: Record<string, number> = {
@@ -56,7 +66,17 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
 
   return (
     <div
-      className="glass-edge relative w-full max-w-78 p-3 backdrop-blur-[3px]"
+      className={cx(
+        'glass-edge relative w-full max-w-78 p-3 backdrop-blur-[3px]',
+        'transition-[box-shadow,opacity] duration-500 ease-soft',
+        // Waiting on the bot or the opponent: the board steps back rather than
+        // going grey, so it is clear input is not wanted without the position
+        // becoming harder to read.
+        disabled && status === 'playing' && 'opacity-90',
+        finishTone === 'win' && 'animate-board-settle shadow-[0_0_36px_-6px_rgb(255_255_255/0.35)]',
+        finishTone === 'draw' && 'animate-board-settle',
+        finishTone === 'loss' && 'animate-shake',
+      )}
       style={{ borderRadius: radii.frame }}
     >
       <div
@@ -67,6 +87,7 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
           ref={gridRef}
           role="grid"
           aria-label={`${size} by ${size} board`}
+          aria-busy={disabled && status === 'playing'}
           onKeyDown={handleKeyDown}
           className="grid h-full w-full"
           style={{
@@ -80,6 +101,7 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
             const row = Math.floor(index / size);
             const col = index % size;
             const isPlayable = cell === Empty && status === 'playing' && !disabled;
+            const order = winOrder.get(index);
 
             return (
               <button
@@ -93,7 +115,7 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
                 onClick={() => onPlay(index)}
                 aria-label={describeCell(row, col, cell)}
                 className={cx(
-                  'relative flex items-center justify-center',
+                  'group relative flex items-center justify-center',
                   // Dashed rules between cells only — the outer edge is the
                   // frame, so the first row and last column stay clean.
                   'border-t border-r border-dashed border-grid/85',
@@ -102,18 +124,42 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
                   // A disabled button still needs to look inert rather than
                   // dimmed: the marks on it are the point of the screen.
                   'disabled:opacity-100',
-                  isPlayable && 'cursor-pointer',
+                  // An empty cell warms under the pointer and presses in when
+                  // tapped, so a miss still reads as a registered touch.
+                  isPlayable &&
+                    'cursor-pointer transition-colors duration-150 hover:bg-b8/12 active:bg-b8/25',
                 )}
               >
                 {cell !== Empty ? (
-                  <Mark
-                    player={cell}
-                    hole="var(--color-surface)"
-                    className={cx(
-                      'w-[68%] animate-pop',
-                      winning.has(index) && 'drop-shadow-[0_0_10px_rgba(255,255,255,0.45)]',
-                    )}
-                  />
+                  <>
+                    {/* The ring that expands out from under a piece as it
+                        lands. It only ever plays once, on mount. */}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
+                      style={{
+                        boxShadow: `0 0 0 2px ${cell === X ? 'var(--color-p3)' : 'var(--color-y3)'}`,
+                      }}
+                    />
+                    <span
+                      className={cx(
+                        'relative flex w-[68%] items-center justify-center',
+                        // The throb lives on the wrapper, the entrance on the
+                        // mark itself: two animations, two `transform`s, no
+                        // fight over which one owns the element.
+                        order !== undefined && 'animate-win-throb',
+                      )}
+                      style={
+                        order !== undefined ? { animationDelay: `${order * 0.11}s` } : undefined
+                      }
+                    >
+                      <Mark
+                        player={cell}
+                        hole="var(--color-surface)"
+                        className={cx('w-full', cell === X ? 'animate-mark-x' : 'animate-mark-o')}
+                      />
+                    </span>
+                  </>
                 ) : null}
 
                 {/* Faint hint of the mark that would land here. */}
@@ -121,7 +167,12 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
                   <Mark
                     player={game.currentPlayer}
                     hole="var(--color-surface)"
-                    className="pointer-events-none absolute w-[68%] opacity-0 transition-opacity duration-150 group-hover:opacity-20 hover:opacity-20"
+                    className={cx(
+                      'pointer-events-none absolute w-[68%] scale-75 opacity-0',
+                      'transition-[opacity,transform] duration-200 ease-spring',
+                      'group-hover:scale-100 group-hover:opacity-25',
+                      'group-focus-visible:scale-100 group-focus-visible:opacity-25',
+                    )}
                   />
                 ) : null}
               </button>
