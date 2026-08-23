@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/engine" },
+    { "path": "./packages/protocol" },
+    { "path": "./apps/server" },
+    { "path": "./apps/web" }
+  ]
+}

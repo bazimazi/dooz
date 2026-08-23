@@ -1,0 +1,173 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens, lifted straight from the Figma palette so a colour in a mockup
+ * can be found here by name. The `b/g/p/y` scales are the raw palette; the
+ * semantic tokens below them are what components should normally reach for, so
+ * a palette change lands in one place.
+ */
+@theme {
+  /* Blue */
+  --color-b1: #0f0771;
+  --color-b2: #191685;
+  --color-b3: #232599;
+  --color-b4: #2d34ad;
+  --color-b5: #3743c1;
+  --color-b6: #4152d5;
+  --color-b7: #4b61e9;
+  --color-b8: #5570fd;
+
+  /* Gray */
+  --color-g1: #262626;
+  --color-g2: #434343;
+  --color-g3: #555555;
+  --color-g4: #7b7b7b;
+  --color-g5: #9d9d9d;
+  --color-g6: #c4c4c4;
+  --color-g7: #d9d9d9;
+  --color-g8: #e9e9e9;
+  --color-g9: #faf9f8;
+  --color-g10: #ffffff;
+
+  /* Pink — player one */
+  --color-p1: #c20074;
+  --color-p2: #f3339e;
+  --color-p3: #ff99f6;
+
+  /* Yellow — player two */
+  --color-y1: #af7e00;
+  --color-y2: #f9bd13;
+  --color-y3: #ffd334;
+
+  /* Semantic aliases */
+  --color-canvas: var(--color-b3);
+  --color-surface: var(--color-b2);
+  --color-raised: var(--color-b8);
+  --color-stroke: var(--color-b8);
+  --color-grid: var(--color-g7);
+  --color-mark-x: var(--color-p2);
+  --color-mark-x-edge: var(--color-p1);
+  --color-mark-o: var(--color-y2);
+  --color-mark-o-edge: var(--color-y1);
+
+  --font-display: 'Joti One', 'Comic Sans MS', cursive;
+  --font-sans: 'Open Sans Variable', 'Open Sans', system-ui, -apple-system, sans-serif;
+
+  --radius-panel: 24px;
+  --radius-tile: 16px;
+
+  --animate-pop: pop 0.45s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/**
+ * Utilities for the two gradient-bordered surfaces that recur all over the
+ * design: the pill buttons on the home screen and the rounded tiles used for
+ * player cards, the board frame and the icon buttons.
+ *
+ * Both use the `padding-box` / `border-box` two-gradient trick, which is the
+ * only way to get a gradient border with a rounded corner and a solid fill.
+ */
+@utility tile-edge {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tile-fill, var(--color-b7)), var(--tile-fill, var(--color-b7)))
+      padding-box,
+    linear-gradient(to right, rgb(255 255 255 / 0.5), var(--color-b8)) border-box;
+}
+
+@utility glass-edge {
+  border: 1px solid var(--color-b8);
+  background: linear-gradient(
+    173deg,
+    rgb(73 93 228 / 0.32) -6%,
+    rgb(73 93 228 / 0.76) 13%,
+    rgb(73 93 228 / 0.46) 113%
+  );
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-g10);
+    font-family: var(--font-sans);
+    /* The board is a tap target grid; stop iOS turning drags into text
+       selections and double-taps into zooms. */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-g10);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* Respect a system-level request for less movement: keep state changes
+     instant rather than animated. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
