@@ -69,7 +69,12 @@ export function Board({ game, onPlay, disabled = false }: BoardProps) {
           aria-label={`${size} by ${size} board`}
           onKeyDown={handleKeyDown}
           className="grid h-full w-full"
-          style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+          style={{
+            // Both axes need explicit 1fr tracks. With auto rows, the row that
+            // holds a mark sizes to the mark and steals height from the others.
+            gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
+          }}
         >
           {board.map((cell, index) => {
             const row = Math.floor(index / size);

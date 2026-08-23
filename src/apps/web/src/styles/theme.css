@@ -161,7 +161,7 @@
 
   /* Respect a system-level request for less movement: keep state changes
      instant rather than animated. */
-  @media (prefers-reduced-motion: reduce) {
+  /* @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
@@ -169,5 +169,5 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
-  }
+  } */
 }
