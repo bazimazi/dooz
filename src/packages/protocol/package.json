@@ -1,0 +1,17 @@
+{
+  "name": "@dooz/protocol",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Wire format shared by the dooz multiplayer server and its clients",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@dooz/engine": "*",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}

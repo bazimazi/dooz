@@ -1,0 +1,28 @@
+[package]
+name = "dooz"
+version = "1.0.0"
+description = "dooz (Tic Tac Toe) desktop and mobile shell"
+authors = ["msynk"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.82"
+
+# The mobile targets build the app as a library that the platform harness calls
+# into; `main.rs` is only used by the desktop binary.
+[lib]
+name = "dooz_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

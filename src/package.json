@@ -1,0 +1,44 @@
+{
+  "name": "dooz",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "dooz (Tic Tac Toe) - cross-platform: web, desktop and mobile",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @dooz/web",
+    "dev:server": "npm run dev --workspace @dooz/server",
+    "dev:all": "npm run dev:server & npm run dev",
+    "dev:desktop": "npm run tauri --workspace @dooz/native -- dev",
+    "dev:android": "npm run tauri --workspace @dooz/native -- android dev",
+    "dev:ios": "npm run tauri --workspace @dooz/native -- ios dev",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build --workspace @dooz/web",
+    "build:desktop": "npm run tauri --workspace @dooz/native -- build",
+    "preview": "npm run preview --workspace @dooz/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --build --verbose",
+    "lint": "oxlint --type-aware",
+    "format": "prettier --write .",
+    "lint:fix": "oxlint --type-aware --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "prettier": "^3.6.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "oxlint": "^1.79.0",
+    "oxlint-tsgolint": "^7.0.2001"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

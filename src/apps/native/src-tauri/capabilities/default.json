@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The minimum the game needs: its own window, and the ability to hand a link to the system browser.",
+  "windows": ["main"],
+  "permissions": ["core:default", "opener:allow-open-url"]
+}

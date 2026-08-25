@@ -1,0 +1,709 @@
+@import 'tailwindcss';
+
+/**
+ * Design tokens, lifted straight from the Figma palette so a colour in a mockup
+ * can be found here by name. The `b/g/p/y` scales are the raw palette; the
+ * semantic tokens below them are what components should normally reach for, so
+ * a palette change lands in one place.
+ */
+@theme {
+  /* Blue */
+  --color-b1: #0f0771;
+  --color-b2: #191685;
+  --color-b3: #232599;
+  --color-b4: #2d34ad;
+  --color-b5: #3743c1;
+  --color-b6: #4152d5;
+  --color-b7: #4b61e9;
+  --color-b8: #5570fd;
+
+  /* Gray */
+  --color-g1: #262626;
+  --color-g2: #434343;
+  --color-g3: #555555;
+  --color-g4: #7b7b7b;
+  --color-g5: #9d9d9d;
+  --color-g6: #c4c4c4;
+  --color-g7: #d9d9d9;
+  --color-g8: #e9e9e9;
+  --color-g9: #faf9f8;
+  --color-g10: #ffffff;
+
+  /* Pink - player one */
+  --color-p1: #c20074;
+  --color-p2: #f3339e;
+  --color-p3: #ff99f6;
+
+  /* Yellow - player two */
+  --color-y1: #af7e00;
+  --color-y2: #f9bd13;
+  --color-y3: #ffd334;
+
+  /* Semantic aliases */
+  --color-canvas: var(--color-b3);
+  --color-surface: var(--color-b2);
+  --color-raised: var(--color-b8);
+  --color-stroke: var(--color-b8);
+  --color-grid: var(--color-g7);
+  --color-mark-x: var(--color-p2);
+  --color-mark-x-edge: var(--color-p1);
+  --color-mark-o: var(--color-y2);
+  --color-mark-o-edge: var(--color-y1);
+
+  --font-display: 'Joti One', 'Comic Sans MS', cursive;
+  --font-sans: 'Open Sans Variable', 'Open Sans', system-ui, -apple-system, sans-serif;
+
+  --radius-panel: 24px;
+  --radius-tile: 16px;
+
+  /**
+   * Easing.
+   *
+   * `spring` overshoots and settles - it is what makes a piece land rather than
+   * appear. `soft` decelerates without overshoot, for anything that slides.
+   * `snap` is the quick in-curve used when something leaves.
+   */
+  --ease-spring: cubic-bezier(0.22, 1.4, 0.36, 1);
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Entrances */
+  --animate-pop: pop 0.45s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-fade-out: fade-out 0.18s ease-in both;
+  --animate-panel-in: panel-in 0.42s cubic-bezier(0.18, 1.35, 0.35, 1) both;
+  --animate-panel-out: panel-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-badge-in: badge-in 0.35s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-caret-in: caret-in 0.3s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-option-in: option-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-toast-in: toast-in 0.3s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-board-in: board-in 0.5s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+
+  /* The pieces landing on the board */
+  --animate-mark-x: mark-x 0.4s cubic-bezier(0.22, 1.5, 0.36, 1) both;
+  --animate-mark-o: mark-o 0.4s cubic-bezier(0.22, 1.5, 0.36, 1) both;
+  --animate-stamp: stamp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  /* End of game */
+  --animate-draw-line: draw-line 0.45s 0.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  --animate-win-throb: win-throb 1.2s ease-in-out infinite;
+  --animate-board-settle: board-settle 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-shake: shake 0.5s ease-in-out both;
+  /* One piece of confetti is three nested spans, because a burst is three
+     transforms - a throw, a drift and a tumble - and one element can only
+     usefully animate `transform` once. */
+  --animate-confetti-y: confetti-y 1.7s cubic-bezier(0.3, 0, 0.6, 1) forwards;
+  --animate-confetti-x: confetti-x 1.7s linear forwards;
+  --animate-confetti-spin: confetti-spin 1.7s linear forwards;
+
+  /* Ambient - decorative loops, all suppressed under reduced motion */
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  --animate-float-a: float-a 14s ease-in-out infinite;
+  --animate-float-b: float-b 18s ease-in-out infinite;
+  --animate-float-c: float-c 22s ease-in-out infinite;
+  --animate-glow-ring: glow-ring 2.4s ease-in-out infinite;
+  --animate-bob: bob 2.2s ease-in-out infinite;
+  --animate-dot: dot 1.1s ease-in-out infinite;
+  --animate-tear: tear 3s 0.8s ease-in infinite;
+  --animate-wiggle: wiggle 2.6s ease-in-out infinite;
+  --animate-slide-track: slide-track 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  --animate-sweep: sweep 2.4s ease-in-out infinite;
+
+  /* One-shot feedback */
+  --animate-spin-once: spin-once 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Keyframes
+   -------------------------------------------------------------------------- */
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes caret-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes option-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The board is the biggest thing on a game screen, so it comes in closer to
+   its final size than a small element would - a full `pop` at that scale reads
+   as the whole page lurching. */
+@keyframes board-in {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* X is dropped in with a twist; O is pressed down flat. Two different gestures
+   so the two players' moves do not read as the same event. */
+@keyframes mark-x {
+  from {
+    opacity: 0;
+    transform: scale(0.3) rotate(-70deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes mark-o {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* The ring that expands out from under a piece as it lands. */
+@keyframes stamp {
+  from {
+    opacity: 0.55;
+    transform: scale(0.35);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+/* The winning stroke sweeps on from one end of the run to the other, then its
+   blurred copy breathes underneath it. */
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes line-glow {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes win-throb {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.35));
+  }
+  50% {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 16px rgb(255 255 255 / 0.75));
+  }
+}
+
+@keyframes board-settle {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.035);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-9px);
+  }
+  30% {
+    transform: translateX(8px);
+  }
+  45% {
+    transform: translateX(-6px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
+}
+
+@keyframes confetti-y {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  8% {
+    opacity: 1;
+  }
+  32% {
+    transform: translateY(var(--lift, -90px));
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(var(--drop, 240px));
+  }
+}
+
+@keyframes confetti-x {
+  to {
+    transform: translateX(var(--dx, 0px));
+  }
+}
+
+@keyframes confetti-spin {
+  to {
+    transform: rotate(var(--rot, 540deg));
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes float-a {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(10px, -16px) rotate(6deg);
+  }
+}
+
+@keyframes float-b {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(-14px, 12px) rotate(-8deg);
+  }
+}
+
+@keyframes float-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8px, 14px) scale(1.06);
+  }
+}
+
+@keyframes glow-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--glow, rgb(255 255 255 / 0.35));
+  }
+  50% {
+    box-shadow: 0 0 18px 2px var(--glow, rgb(255 255 255 / 0.35));
+  }
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0) scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1);
+  }
+}
+
+/* Face detail: the loser's tear runs and the winner's tongue lolls. Units are
+   the face SVG's own, so both scale with whatever size it is drawn at. */
+@keyframes tear {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  12% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(11px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  50% {
+    transform: translateY(1px) scaleY(1.14);
+  }
+}
+
+@keyframes slide-track {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(330%);
+  }
+}
+
+@keyframes sweep {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(14deg);
+  }
+}
+
+@keyframes spin-once {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes sheen {
+  from {
+    transform: translateX(-130%);
+  }
+  to {
+    transform: translateX(130%);
+  }
+}
+
+/**
+ * Utilities for the two gradient-bordered surfaces that recur all over the
+ * design: the pill buttons on the home screen and the rounded tiles used for
+ * player cards, the board frame and the icon buttons.
+ *
+ * Both use the `padding-box` / `border-box` two-gradient trick, which is the
+ * only way to get a gradient border with a rounded corner and a solid fill.
+ */
+@utility tile-edge {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--tile-fill, var(--color-b7)), var(--tile-fill, var(--color-b7)))
+      padding-box,
+    linear-gradient(to right, rgb(255 255 255 / 0.5), var(--color-b8)) border-box;
+}
+
+@utility glass-edge {
+  border: 1px solid var(--color-b8);
+  background: linear-gradient(
+    173deg,
+    rgb(73 93 228 / 0.32) -6%,
+    rgb(73 93 228 / 0.76) 13%,
+    rgb(73 93 228 / 0.46) 113%
+  );
+}
+
+@layer components {
+  /**
+   * A light sweeping across a raised surface on hover, which is what stops the
+   * pill buttons reading as flat rectangles. The gradient sits in an `::after`
+   * so it never disturbs the button's own two-gradient background.
+   */
+  .sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .sheen::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: 1;
+    pointer-events: none;
+    transform: translateX(-130%);
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgb(255 255 255 / 0.3) 50%,
+      transparent 62%
+    );
+  }
+
+  .sheen:hover::after,
+  .sheen:focus-visible::after {
+    animation: sheen 0.85s ease-out;
+  }
+
+  /**
+   * Staggered entrance. A parent marked `stagger` walks its children in one
+   * after another, so a screen assembles itself instead of appearing whole.
+   * Depth is capped at eight; beyond that the wait is longer than the payoff.
+   */
+  .stagger > * {
+    animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .stagger > *:nth-child(1) {
+    animation-delay: 0.04s;
+  }
+  .stagger > *:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+  .stagger > *:nth-child(3) {
+    animation-delay: 0.16s;
+  }
+  .stagger > *:nth-child(4) {
+    animation-delay: 0.22s;
+  }
+  .stagger > *:nth-child(5) {
+    animation-delay: 0.28s;
+  }
+  .stagger > *:nth-child(6) {
+    animation-delay: 0.34s;
+  }
+  .stagger > *:nth-child(7) {
+    animation-delay: 0.4s;
+  }
+  .stagger > *:nth-child(n + 8) {
+    animation-delay: 0.46s;
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-g10);
+    font-family: var(--font-sans);
+    /* The board is a tap target grid; stop iOS turning drags into text
+       selections and double-taps into zooms. */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-g10);
+    outline-offset: 3px;
+    border-radius: 4px;
+    transition: outline-offset 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /**
+   * Cross-screen navigation.
+   *
+   * The router drives the View Transitions API where the browser has it, so
+   * going home from a game is one continuous move rather than a cut. The
+   * backdrop is given its own transition name and held still, so only the
+   * content on top of it changes - the rings and crosses never flicker.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    ::view-transition-old(root) {
+      animation: vt-exit 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+    }
+
+    ::view-transition-new(root) {
+      animation: vt-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+
+  ::view-transition-old(dooz-backdrop),
+  ::view-transition-new(dooz-backdrop) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  @keyframes vt-exit {
+    to {
+      opacity: 0;
+      transform: scale(0.97) translateY(-6px);
+    }
+  }
+
+  @keyframes vt-enter {
+    from {
+      opacity: 0;
+      transform: scale(1.03) translateY(10px);
+    }
+  }
+
+  /**
+   * Respect a system-level request for less movement.
+   *
+   * Everything collapses to its end state, so the interface still lands where
+   * it should - just instantly, with the decorative loops stopped after one
+   * pass rather than running forever.
+   */
+  /* @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation: none !important;
+    }
+  } */
+}

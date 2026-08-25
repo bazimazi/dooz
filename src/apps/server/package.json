@@ -1,0 +1,25 @@
+{
+  "name": "@dooz/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authoritative multiplayer server for dooz",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@dooz/engine": "*",
+    "@dooz/protocol": "*",
+    "@hono/node-server": "^2.1.1",
+    "hono": "^4.13.3",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.23.12"
+  }
+}
