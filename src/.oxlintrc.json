@@ -1,0 +1,73 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc", "promise", "import"],
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "eqeqeq": ["error", "always"],
+    "no-console": ["warn", { "allow": ["warn", "error", "info"] }],
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
+    "unicorn/prefer-node-protocol": "error",
+
+    // The automatic JSX runtime is in use, so `React` is never referenced.
+    "react/react-in-jsx-scope": "off",
+    // Assertions here sit at validated boundaries — parsed JSON, a search param
+    // already checked against a literal union — where the narrowing is the point.
+    "typescript/no-unsafe-type-assertion": "off",
+    // An effect that cleans up on some paths and not others is idiomatic React,
+    // not an inconsistency worth flagging.
+    "typescript/consistent-return": "off",
+    // The boards are fixed-size grids: a cell's index *is* its identity, and no
+    // cell is ever inserted, removed or reordered.
+    "react/no-array-index-key": "off",
+    // Written for `Worker.postMessage`, which takes no target origin. The rule
+    // is aimed at `window.postMessage`.
+    "unicorn/require-post-message-target-origin": "off"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/dist-types/**",
+    "**/node_modules/**",
+    "**/src-tauri/gen/**",
+    "**/src-tauri/target/**"
+  ],
+  "overrides": [
+    {
+      "files": ["apps/server/**"],
+      "env": { "browser": false, "node": true },
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/scripts/**"],
+      "rules": {
+        "no-console": "off",
+        "typescript/no-non-null-assertion": "off",
+        // Build scripts read better as a sequence, and rasterising four icons
+        // in parallel would save nothing worth the indirection.
+        "no-await-in-loop": "off",
+        // Test helpers are deliberately defined next to the cases that use them.
+        "unicorn/consistent-function-scoping": "off"
+      }
+    },
+    {
+      // The entry point pulls in global stylesheets, which have no export.
+      "files": ["apps/web/src/main.tsx"],
+      "rules": {
+        "import/no-unassigned-import": "off"
+      }
+    }
+  ]
+}

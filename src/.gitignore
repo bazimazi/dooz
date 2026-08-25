@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+dist-types
+build
+*.local
+*.tsbuildinfo
+coverage
+
+# Tauri
+apps/native/src-tauri/target
+apps/native/src-tauri/gen
+
+# Env
+.env
+.env.*
+!.env.example
