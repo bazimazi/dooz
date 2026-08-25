@@ -8,8 +8,8 @@ import type { CSSProperties } from 'react';
  * the router, and stops dead on its own when the last piece fades.
  *
  * Every piece is three nested spans. `transform` can only be animated once per
- * element, and a convincing throw needs three at once — an arc up and down, a
- * sideways drift, and a tumble — so each gets its own layer.
+ * element, and a convincing throw needs three at once - an arc up and down, a
+ * sideways drift, and a tumble - so each gets its own layer.
  */
 
 const COLOURS = [

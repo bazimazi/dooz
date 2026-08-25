@@ -23,7 +23,7 @@ export interface UseGame {
  * share one source of truth for the rules.
  *
  * `size` is read once. Changing the board size is a change of game, not of
- * game state, and the routes handle it by remounting the screen — there is no
+ * game state, and the routes handle it by remounting the screen - there is no
  * sensible way to carry a 3x3 position onto a 9x9 board.
  */
 export function useGame(size: BoardSize): UseGame {

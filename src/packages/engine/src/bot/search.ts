@@ -42,7 +42,7 @@ interface Entry {
  * Depth is increased one ply at a time and the run stops when the deadline
  * passes. Searching shallow first sounds wasteful but is not: each pass fills
  * the transposition table and gives the next pass a good move to try first, and
- * — the point of the whole exercise — there is always a complete, usable answer
+ * - the point of the whole exercise - there is always a complete, usable answer
  * in hand whenever time runs out.
  */
 export function search(
@@ -187,7 +187,7 @@ export function search(
       completedDepth = depth;
     }
 
-    // A forced win or loss is proven — searching deeper cannot change it.
+    // A forced win or loss is proven - searching deeper cannot change it.
     if (Math.abs(bestScore) >= WIN_SCORE - 100) break;
   }
 

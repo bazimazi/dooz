@@ -5,12 +5,12 @@
  * skips a third-party round trip on first paint.
  *
  * Only the latin subsets are declared. Fontsource's own stylesheets pull in
- * every script it publishes — Cyrillic, Greek, Hebrew, Vietnamese, maths — which
+ * every script it publishes - Cyrillic, Greek, Hebrew, Vietnamese, maths - which
  * added roughly 250KB to the offline bundle for glyphs the interface never
  * shows. Point the two faces at their latin files directly instead.
  */
 
-/* Joti One — the display face used for the wordmark and result headings. */
+/* Joti One - the display face used for the wordmark and result headings. */
 @font-face {
   font-family: 'Joti One';
   font-style: normal;
@@ -22,7 +22,7 @@
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Open Sans — the interface face. One variable file covers every weight used. */
+/* Open Sans - the interface face. One variable file covers every weight used. */
 @font-face {
   font-family: 'Open Sans Variable';
   font-style: normal;

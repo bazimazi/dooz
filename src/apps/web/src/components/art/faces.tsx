@@ -51,7 +51,7 @@ export function HappyFace(props: FaceProps) {
 export function SadFace(props: FaceProps) {
   return (
     <FaceBubble {...props}>
-      {/* Eyes closed downward — the mirror of the happy arcs. */}
+      {/* Eyes closed downward - the mirror of the happy arcs. */}
       <path
         d="M25.5 29.5c1.9 3.4 6.2 3.4 8.1 0M49.8 29.5c1.9 3.4 6.2 3.4 8.1 0"
         stroke={EYE}

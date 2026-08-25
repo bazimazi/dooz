@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * plays its exit, and the real `onClose` fires when the animation is over.
  *
  * `duration` must match the exit animation in the stylesheet. A user who has
- * asked for reduced motion gets no wait at all — their exit animation is
+ * asked for reduced motion gets no wait at all - their exit animation is
  * collapsed to nothing, so a delay would just be an unexplained pause.
  */
 export function useClosing(onClose: () => void, duration = 180) {

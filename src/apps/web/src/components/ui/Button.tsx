@@ -20,7 +20,7 @@ interface ButtonOwnProps {
 
 type ButtonProps<T extends ElementType> = ButtonOwnProps &
   Omit<ComponentPropsWithoutRef<T>, keyof ButtonOwnProps | 'as'> & {
-    /** Render as something else — a router `Link`, usually. */
+    /** Render as something else - a router `Link`, usually. */
     as?: T;
   };
 
@@ -31,8 +31,8 @@ type ButtonProps<T extends ElementType> = ButtonOwnProps &
  * middle-click and for screen readers) while the rest run a callback.
  *
  * Pointer feedback runs in three stages so the button feels like an object:
- * it lifts and catches a highlight on hover, and presses in — down, not just
- * smaller — on click, with a shorter curve going down than coming back up.
+ * it lifts and catches a highlight on hover, and presses in - down, not just
+ * smaller - on click, with a shorter curve going down than coming back up.
  * The label sits above the `sheen` highlight rather than under it.
  */
 export function Button<T extends ElementType = 'button'>({

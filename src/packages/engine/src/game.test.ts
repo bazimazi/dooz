@@ -47,7 +47,7 @@ describe('applyMove', () => {
   });
 
   it('detects a win and freezes the game', () => {
-    // X: 0,1,2 — O: 3,4
+    // X: 0,1,2 - O: 3,4
     const won = replay(3, X, [0, 3, 1, 4, 2])!;
     expect(won.status).toBe('won');
     expect(won.winner).toBe(X);

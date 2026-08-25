@@ -34,7 +34,7 @@ screen and would still need a wrapper for desktop.
 ```
 src/
 ├── packages/
-│   ├── engine/      rules, win detection, and the AI — pure TypeScript, no framework
+│   ├── engine/      rules, win detection, and the AI - pure TypeScript, no framework
 │   └── protocol/    the wire format, shared by client and server
 └── apps/
     ├── web/         the client: React + Vite + Tailwind, and the PWA
@@ -121,12 +121,12 @@ The server holds the game. A client can only ever send a cell index; the server
 validates the turn and the move, applies it with the same engine the client
 renders with, and broadcasts the result.
 
-- **Quick match** — a queue per board size.
-- **Private rooms** — a six-character code, drawn from an alphabet with no `0`/`O`
+- **Quick match** - a queue per board size.
+- **Private rooms** - a six-character code, drawn from an alphabet with no `0`/`O`
   or `1`/`I` confusion, shareable as a link.
-- **Reconnection** — a client id in `localStorage` reclaims a seat for 45
+- **Reconnection** - a client id in `localStorage` reclaims a seat for 45
   seconds, so a locked phone or a switched network does not end the game.
-- **Rematch** — takes both players; either can offer.
+- **Rematch** - takes both players; either can offer.
 - Inbound messages are rate-limited per connection, frames are size-capped, and
   dead sockets are dropped by heartbeat.
 
@@ -144,7 +144,7 @@ original build shipped is now a few hundred bytes of vector.
 ## Accessibility
 
 The board is a `role="grid"` with a roving tabindex, so it is a single tab stop
-and the arrow keys move within it — a 9×9 board would otherwise put 81 stops in
+and the arrow keys move within it - a 9×9 board would otherwise put 81 stops in
 the page's tab order. Every cell is labelled by position and contents, turn and
 status changes are announced through a live region, and the reduced-motion
 preference is honoured.

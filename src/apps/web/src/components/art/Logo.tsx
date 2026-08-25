@@ -5,7 +5,7 @@
  * the mark is a drawing rather than styled text.
  *
  * It assembles on load: the type drops in line by line, then the two pieces
- * land on the end of it — the X with a twist and the O with a bounce, matching
+ * land on the end of it - the X with a twist and the O with a bounce, matching
  * how the same two marks land on the board. Each piece is nested one group
  * deep, so the one-shot entrance and the slow idle drift can run at once
  * without fighting over the same `transform`.
@@ -17,9 +17,9 @@ export function Logo({ className }: { className?: string }) {
       fill="none"
       className={className}
       role="img"
-      aria-label="dooz — tic tac toe"
+      aria-label="dooz - tic tac toe"
     >
-      <title>dooz — tic tac toe</title>
+      <title>dooz - tic tac toe</title>
 
       {/* "TIC" */}
       <g
@@ -40,7 +40,7 @@ export function Logo({ className }: { className?: string }) {
         fill="var(--color-g8)"
       />
 
-      {/* The X piece — outer group drifts, inner group makes the entrance. */}
+      {/* The X piece - outer group drifts, inner group makes the entrance. */}
       <g className="origin-center animate-float-a transform-fill">
         <g
           className="origin-center animate-mark-x transform-fill"

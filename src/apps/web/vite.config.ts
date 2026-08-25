@@ -25,7 +25,7 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
             manifest: {
-              name: 'dooz — Tic Tac Toe',
+              name: 'dooz - Tic Tac Toe',
               short_name: 'dooz',
               description: 'Tic Tac Toe on 3x3, 6x6 and 9x9 boards. Play a friend, or the bot.',
               theme_color: '#232599',

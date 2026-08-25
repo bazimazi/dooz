@@ -29,12 +29,12 @@
   --color-g9: #faf9f8;
   --color-g10: #ffffff;
 
-  /* Pink — player one */
+  /* Pink - player one */
   --color-p1: #c20074;
   --color-p2: #f3339e;
   --color-p3: #ff99f6;
 
-  /* Yellow — player two */
+  /* Yellow - player two */
   --color-y1: #af7e00;
   --color-y2: #f9bd13;
   --color-y3: #ffd334;
@@ -59,7 +59,7 @@
   /**
    * Easing.
    *
-   * `spring` overshoots and settles — it is what makes a piece land rather than
+   * `spring` overshoots and settles - it is what makes a piece land rather than
    * appear. `soft` decelerates without overshoot, for anything that slides.
    * `snap` is the quick in-curve used when something leaves.
    */
@@ -91,13 +91,13 @@
   --animate-board-settle: board-settle 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
   --animate-shake: shake 0.5s ease-in-out both;
   /* One piece of confetti is three nested spans, because a burst is three
-     transforms — a throw, a drift and a tumble — and one element can only
+     transforms - a throw, a drift and a tumble - and one element can only
      usefully animate `transform` once. */
   --animate-confetti-y: confetti-y 1.7s cubic-bezier(0.3, 0, 0.6, 1) forwards;
   --animate-confetti-x: confetti-x 1.7s linear forwards;
   --animate-confetti-spin: confetti-spin 1.7s linear forwards;
 
-  /* Ambient — decorative loops, all suppressed under reduced motion */
+  /* Ambient - decorative loops, all suppressed under reduced motion */
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
   --animate-float-a: float-a 14s ease-in-out infinite;
   --animate-float-b: float-b 18s ease-in-out infinite;
@@ -214,7 +214,7 @@
 }
 
 /* The board is the biggest thing on a game screen, so it comes in closer to
-   its final size than a small element would — a full `pop` at that scale reads
+   its final size than a small element would - a full `pop` at that scale reads
    as the whole page lurching. */
 @keyframes board-in {
   from {
@@ -651,7 +651,7 @@
    * The router drives the View Transitions API where the browser has it, so
    * going home from a game is one continuous move rather than a cut. The
    * backdrop is given its own transition name and held still, so only the
-   * content on top of it changes — the rings and crosses never flicker.
+   * content on top of it changes - the rings and crosses never flicker.
    */
   @media (prefers-reduced-motion: no-preference) {
     ::view-transition-old(root) {
@@ -687,7 +687,7 @@
    * Respect a system-level request for less movement.
    *
    * Everything collapses to its end state, so the interface still lands where
-   * it should — just instantly, with the decorative loops stopped after one
+   * it should - just instantly, with the decorative loops stopped after one
    * pass rather than running forever.
    */
   /* @media (prefers-reduced-motion: reduce) {

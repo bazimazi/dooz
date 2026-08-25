@@ -11,7 +11,7 @@ export interface Identity {
  * The id is what lets the server hand a returning player their seat back after
  * a reload or a dropped connection, so it has to outlive the page.
  * Storage can be unavailable (private windows, a webview with site data off),
- * in which case online play still works — reconnection just starts fresh.
+ * in which case online play still works - reconnection just starts fresh.
  */
 export function loadIdentity(): Identity | null {
   try {

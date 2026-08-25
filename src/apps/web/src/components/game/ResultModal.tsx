@@ -12,7 +12,7 @@ interface ResultModalProps {
   onRestart: () => void;
   restartLabel?: string;
   restartDisabled?: boolean;
-  /** Extra line under the title — a rematch prompt, say. */
+  /** Extra line under the title - a rematch prompt, say. */
   note?: ReactNode;
   /** Fires the confetti. Set only when the person at this device won. */
   celebrate?: boolean;
@@ -24,8 +24,8 @@ interface ResultModalProps {
  * There is deliberately no dismiss affordance: the two ways out of a finished
  * game are to play again or to go home, and both are in the panel.
  *
- * It arrives in pieces — dim, then panel, then the face, the verdict and the
- * buttons — because the result is the one moment in the game worth pausing on.
+ * It arrives in pieces - dim, then panel, then the face, the verdict and the
+ * buttons - because the result is the one moment in the game worth pausing on.
  * The whole sequence is under half a second, so it never delays a rematch.
  */
 export function ResultModal({

@@ -116,7 +116,7 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
                 aria-label={describeCell(row, col, cell)}
                 className={cx(
                   'group relative flex items-center justify-center',
-                  // Dashed rules between cells only — the outer edge is the
+                  // Dashed rules between cells only - the outer edge is the
                   // frame, so the first row and last column stay clean.
                   'border-t border-r border-dashed border-grid/85',
                   row === 0 && 'border-t-0',

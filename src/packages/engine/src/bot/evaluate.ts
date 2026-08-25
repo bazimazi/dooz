@@ -47,7 +47,7 @@ export function evaluate(board: Board, size: BoardSize, player: Player): number 
  * Alpha-beta prunes far more when strong moves are tried first, but running the
  * full evaluation on every candidate would cost more than it saves. This looks
  * only at the windows the cell belongs to, and adds the value of the threat it
- * creates to the value of the opposing threat it denies — so attacking and
+ * creates to the value of the opposing threat it denies - so attacking and
  * blocking moves both float to the front.
  */
 export function moveHeuristic(

@@ -5,8 +5,8 @@ import { type Board, type BoardSize, Empty } from '../types.js';
  * board.
  *
  * On a 9x9 board a naive search would branch 81 ways at the root and stay wide
- * for the whole tree. Play is inherently local — a mark far from every other
- * mark cannot join or block a line — so restricting to the neighbourhood keeps
+ * for the whole tree. Play is inherently local - a mark far from every other
+ * mark cannot join or block a line - so restricting to the neighbourhood keeps
  * the branching factor small enough to search several plies deep.
  *
  * On an empty board the only sensible move is the centre, so that is returned

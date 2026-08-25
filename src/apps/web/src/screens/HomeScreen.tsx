@@ -98,7 +98,7 @@ interface FriendsSheetProps {
  * or open a private room and send the link.
  *
  * It animates out as well as in. `useClosing` holds the unmount back for the
- * length of the exit, so dismissing it is a movement rather than a cut — which
+ * length of the exit, so dismissing it is a movement rather than a cut - which
  * matters more here than on the result panel, since this is the one overlay a
  * player can back out of.
  */

@@ -7,7 +7,7 @@ export interface SeatInfo {
   kind?: 'human' | 'bot';
   connected?: boolean;
   isYou?: boolean;
-  /** Seat is working on something — the bot searching for its move. */
+  /** Seat is working on something - the bot searching for its move. */
   busy?: boolean;
 }
 
@@ -17,7 +17,7 @@ interface GameHeaderProps {
   left: SeatInfo;
   /** The O seat, always drawn on the right. */
   right: SeatInfo;
-  /** Omit to hide the size picker — online games are fixed to one board. */
+  /** Omit to hide the size picker - online games are fixed to one board. */
   onBoardSizeChange?: (size: BoardSize) => void;
 }
 

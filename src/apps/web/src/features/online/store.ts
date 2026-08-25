@@ -62,7 +62,7 @@ let intentionallyClosed = false;
  * The client half of online play.
  *
  * A single module-level socket backs the store, which means the connection
- * survives navigation between the lobby and the game screen — the room would
+ * survives navigation between the lobby and the game screen - the room would
  * otherwise be abandoned every time the route changed.
  */
 export const useOnlineStore = create<OnlineState>((set, get) => {
@@ -266,8 +266,8 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 /**
  * Widen a wire snapshot into the shape the board components expect.
  *
- * The move list is not sent — the client has no use for it and it would double
- * the size of every state frame — so it comes back empty.
+ * The move list is not sent - the client has no use for it and it would double
+ * the size of every state frame - so it comes back empty.
  */
 function toGame(snapshot: Snapshot): GameState {
   return {

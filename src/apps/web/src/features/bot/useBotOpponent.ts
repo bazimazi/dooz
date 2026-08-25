@@ -2,7 +2,7 @@ import { type BotDifficulty, findBestMove, type GameState, type Player } from '@
 import { useEffect, useRef } from 'react';
 import type { BotRequest, BotResponse } from './bot.worker';
 
-/** Never answer faster than this — an instant reply reads as a glitch. */
+/** Never answer faster than this - an instant reply reads as a glitch. */
 const MINIMUM_THINK_MS = 450;
 
 interface UseBotOpponentOptions {
@@ -19,8 +19,8 @@ interface UseBotOpponentOptions {
 /**
  * Plays `botPlayer`'s turns.
  *
- * The search runs in a worker; if the worker cannot start — an old browser, or
- * a restrictive content policy — it falls back to searching inline, which is
+ * The search runs in a worker; if the worker cannot start - an old browser, or
+ * a restrictive content policy - it falls back to searching inline, which is
  * slower to the eye on 9x9 but never leaves the game stuck waiting.
  */
 export function useBotOpponent({

@@ -11,7 +11,7 @@ import { OnlineScreen } from '@/screens/OnlineScreen';
  * Routes are declared in code rather than generated from the file system.
  *
  * The app has four screens and no data loading, so the generated route tree
- * would be one more build step and one more committed artefact for no benefit —
+ * would be one more build step and one more committed artefact for no benefit -
  * and this file stays just as type-safe.
  */
 const rootRoute = createRootRoute({
@@ -105,7 +105,7 @@ export const router = createRouter({
   scrollRestoration: false,
   // Every navigation goes through the View Transitions API where the browser
   // has it, so a screen change is one continuous move. Browsers without it
-  // simply swap as before — the styling for it lives in `theme.css`.
+  // simply swap as before - the styling for it lives in `theme.css`.
   defaultViewTransition: true,
 });
 

@@ -10,7 +10,7 @@ interface WinLineProps {
  * The stroke drawn through a winning run.
  *
  * Laid out in an SVG whose user units are board cells, so the endpoints are
- * just cell centres and the whole thing scales with the board — no arithmetic
+ * just cell centres and the whole thing scales with the board - no arithmetic
  * against a hard-coded pixel width, which is what made the original version
  * break on the 6x6 and 9x9 boards.
  *

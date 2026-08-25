@@ -4,8 +4,8 @@ import { z } from 'zod';
  * Wire protocol for online play.
  *
  * Everything here is validated on arrival at both ends. The server treats
- * clients as hostile — it keeps the authoritative game state and only ever
- * accepts a move index, never a board — and the client validates too so that a
+ * clients as hostile - it keeps the authoritative game state and only ever
+ * accepts a move index, never a board - and the client validates too so that a
  * server-side change cannot crash the UI with an unexpected shape.
  */
 
