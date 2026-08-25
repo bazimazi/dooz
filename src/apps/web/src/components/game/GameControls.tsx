@@ -19,7 +19,7 @@ export function GameControls({
   restartDisabled = false,
 }: GameControlsProps) {
   // Bumped on every restart. Using it as the icon's key remounts the element,
-  // which is what lets the same one-shot spin replay on a second press —
+  // which is what lets the same one-shot spin replay on a second press -
   // re-applying a class alone would not restart the animation.
   const [spins, setSpins] = useState(0);
 

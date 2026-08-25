@@ -123,7 +123,7 @@ function ThinkingIndicator({ thinking }: { thinking: boolean }) {
  *
  * The selected state is one pill that slides between the options rather than a
  * background that blinks from one to the next, so it is obvious which way the
- * setting moved — and the labels sit in equal grid columns so the pill's third
+ * setting moved - and the labels sit in equal grid columns so the pill's third
  * always lines up with them.
  */
 function DifficultyPicker({

@@ -5,7 +5,7 @@ import type { Board, BoardSize, Player } from '../types.js';
  * position's hash is the XOR of the values for every mark on it.
  *
  * XOR is its own inverse, so making and unmaking a move during search is a
- * single XOR rather than a rescan of the board — which is what makes the
+ * single XOR rather than a rescan of the board - which is what makes the
  * transposition table cheap enough to be worth having.
  *
  * Two independent 32-bit hashes are kept. The first indexes the table, the

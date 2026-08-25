@@ -1,6 +1,6 @@
 # dooz
 
-dooz (Tic Tac Toe) — on 3×3, 6×6 and 9×9 boards.
+dooz (Tic Tac Toe) - on 3×3, 6×6 and 9×9 boards.
 
 ## Where the game is
 
@@ -32,4 +32,4 @@ https://www.figma.com/file/qrujFLqQzWtczHCh8G0FQF
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

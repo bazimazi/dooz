@@ -14,7 +14,7 @@ interface BoardSizeSelectProps {
  * The `3 x 3` / `6 x 6` / `9 x 9` dropdown between the two player cards.
  *
  * Built by hand rather than from a native `<select>` because the design puts
- * the options in a panel that unrolls under the trigger — but it keeps the
+ * the options in a panel that unrolls under the trigger - but it keeps the
  * keyboard and dismissal behaviour a native select has.
  */
 export function BoardSizeSelect({ value, onChange, disabled = false }: BoardSizeSelectProps) {

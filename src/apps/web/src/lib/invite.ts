@@ -23,7 +23,7 @@ export function inviteUrl(code: string): string {
 /**
  * Put `text` on the clipboard, falling back to the platform share sheet.
  *
- * Returns what actually happened so the caller can show the right feedback —
+ * Returns what actually happened so the caller can show the right feedback -
  * "copied" is wrong if the share sheet opened instead.
  */
 export async function shareOrCopy(
@@ -35,7 +35,7 @@ export async function shareOrCopy(
       await navigator.share({ title, text });
       return 'shared';
     } catch {
-      // Dismissed, or unsupported for this payload — fall through to copying.
+      // Dismissed, or unsupported for this payload - fall through to copying.
     }
   }
 

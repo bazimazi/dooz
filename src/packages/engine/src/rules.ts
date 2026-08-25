@@ -60,7 +60,7 @@ export function findWinLineFrom(board: Board, size: BoardSize, index: number): W
 
 /**
  * Scan the whole board for a winning run. Slower than {@link findWinLineFrom};
- * use it when there is no trusted "last move" — validating a board received
+ * use it when there is no trusted "last move" - validating a board received
  * over the network, or checking a hand-built position in a test.
  */
 export function findAnyWinLine(

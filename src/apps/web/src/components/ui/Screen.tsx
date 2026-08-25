@@ -11,7 +11,7 @@ interface ScreenProps {
  * The frame every screen sits in.
  *
  * The design is drawn at phone width, so the content column is capped and
- * centred rather than stretched — on a desktop or tablet window the backdrop
+ * centred rather than stretched - on a desktop or tablet window the backdrop
  * fills the space and the game stays at a comfortable size. Safe-area insets
  * keep it clear of a notch or a home indicator on mobile.
  */

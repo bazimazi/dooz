@@ -71,7 +71,7 @@ export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
         style={{
           // Both axes need explicit 1fr tracks. Left on `auto`, a row holding a
           // mark sizes to that mark and takes height from the empty ones, so
-          // the cells stop being square — and the win line, which is drawn in
+          // the cells stop being square - and the win line, which is drawn in
           // an overlay whose units are cells, no longer lands on them. It only
           // showed on 6x6 and 9x9: on 3x3 every row has a mark, so they all
           // grew by the same amount.

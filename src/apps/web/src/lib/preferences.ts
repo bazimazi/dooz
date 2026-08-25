@@ -13,7 +13,7 @@ const DEFAULTS: Preferences = { boardSize: 3, difficulty: 'hard' };
  * Last-used board size and bot difficulty.
  *
  * Reading these back means the home screen opens on whatever the player chose
- * last time instead of resetting to 3x3 on every launch — which matters more on
+ * last time instead of resetting to 3x3 on every launch - which matters more on
  * mobile and desktop, where the app is relaunched rather than kept in a tab.
  */
 export function loadPreferences(): Preferences {

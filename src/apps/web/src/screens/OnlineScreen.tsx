@@ -182,7 +182,7 @@ function NameField() {
  *
  * The travelling block is a gradient with soft ends rather than a hard pill, so
  * it reads as a sweep of light across the track instead of a brick sliding
- * along it — and it eases at both ends, which is what stops the loop looking
+ * along it - and it eases at both ends, which is what stops the loop looking
  * like a stutter every time it wraps.
  */
 function ProgressBar() {
@@ -216,7 +216,7 @@ function InvitePanel({ code }: { code: string }) {
     <>
       <p className="animate-rise text-xl">waiting for your friend</p>
 
-      {/* The code arrives a character at a time — it is the one thing on this
+      {/* The code arrives a character at a time - it is the one thing on this
           screen the player has to read out or type, so it is worth the beat. */}
       <div
         className="w-full animate-rise rounded-tile border border-b8 bg-b2 px-4 py-3"
@@ -252,7 +252,7 @@ function InvitePanel({ code }: { code: string }) {
 
       {feedback === 'failed' ? (
         <p className="animate-toast-in text-sm text-p3">
-          could not copy — read the code out instead
+          could not copy - read the code out instead
         </p>
       ) : null}
     </>
@@ -444,7 +444,7 @@ function RoomCodeChip({ code }: { code: string }) {
     >
       {code}
       {/* The tick replaces the copy glyph with a pop, which is the whole
-          confirmation — there is no room here for a message. */}
+          confirmation - there is no room here for a message. */}
       <span key={copied ? 'copied' : 'idle'} className="block animate-pop">
         {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
       </span>

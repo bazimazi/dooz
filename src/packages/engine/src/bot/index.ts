@@ -10,7 +10,7 @@ export type BotDifficulty = (typeof BOT_DIFFICULTIES)[number];
 
 const DIFFICULTY_SET: ReadonlySet<string> = new Set(BOT_DIFFICULTIES);
 
-/** Narrows untrusted input — a URL parameter, a stored preference. */
+/** Narrows untrusted input - a URL parameter, a stored preference. */
 export function isBotDifficulty(value: unknown): value is BotDifficulty {
   return typeof value === 'string' && DIFFICULTY_SET.has(value);
 }
@@ -34,7 +34,7 @@ interface Profile {
  * Search settings per board size.
  *
  * 3x3 is small enough to solve outright, so it gets unlimited width and enough
- * depth to reach every terminal position — the bot is unbeatable there. The
+ * depth to reach every terminal position - the bot is unbeatable there. The
  * larger boards cannot be solved, so they trade width and depth for a fixed
  * thinking time and lean on the static evaluation instead.
  */
@@ -99,7 +99,7 @@ function findImmediateWin(board: Board, size: BoardSize, player: Player): number
   return null;
 }
 
-/** Best move by static heuristic alone — the fallback when there is no time to search. */
+/** Best move by static heuristic alone - the fallback when there is no time to search. */
 function greedyMove(board: Board, size: BoardSize, player: Player): number {
   let best = -1;
   let bestScore = Number.NEGATIVE_INFINITY;

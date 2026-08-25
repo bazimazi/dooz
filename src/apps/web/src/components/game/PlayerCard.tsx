@@ -13,7 +13,7 @@ interface PlayerCardProps {
   connected?: boolean;
   /** Marks the seat as belonging to the person at this device. */
   isYou?: boolean;
-  /** Seat is working on something — the bot searching for its move. */
+  /** Seat is working on something - the bot searching for its move. */
   busy?: boolean;
 }
 
