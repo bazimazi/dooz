@@ -6,6 +6,7 @@
   "description": "dooz client - runs as a web app, a Tauri desktop app and a Tauri mobile app",
   "scripts": {
     "dev": "vite",
+    "start": "vite --open",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
