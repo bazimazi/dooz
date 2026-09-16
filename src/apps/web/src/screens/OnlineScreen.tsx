@@ -152,6 +152,13 @@ function OnlineLobby({ size }: { size: BoardSize }) {
 function NameField() {
   const { name, setName } = useOnlineStore();
   const [draft, setDraft] = useState(name);
+  // The stored name arrives before the first paint, but a rename from anywhere
+  // else would otherwise leave this field showing the old one indefinitely.
+  const [lastName, setLastName] = useState(name);
+  if (name !== lastName) {
+    setLastName(name);
+    setDraft(name);
+  }
 
   return (
     <label className="flex w-full max-w-78 items-center gap-3 text-sm text-g8/70">
@@ -201,12 +208,20 @@ function ProgressBar() {
 
 function InvitePanel({ code }: { code: string }) {
   const [feedback, setFeedback] = useState<'idle' | 'shared' | 'copied' | 'failed'>('idle');
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const link = inviteUrl(code);
+
+  // The share sheet can sit open longer than the screen lasts, so the timer it
+  // schedules has to be cancellable.
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   async function share() {
     const result = await shareOrCopy(link, 'Play dooz with me');
     setFeedback(result);
-    if (result !== 'failed') setTimeout(() => setFeedback('idle'), 2500);
+    if (result !== 'failed') {
+      clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setFeedback('idle'), 2500);
+    }
   }
 
   const label =
@@ -425,6 +440,9 @@ function OnlineGame() {
 
 function RoomCodeChip({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   return (
     <button
@@ -433,7 +451,8 @@ function RoomCodeChip({ code }: { code: string }) {
         const result = await shareOrCopy(inviteUrl(code), 'Play dooz with me');
         if (result === 'failed') return;
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        clearTimeout(resetTimer.current);
+        resetTimer.current = setTimeout(() => setCopied(false), 2000);
       }}
       className={cx(
         'glass-edge flex h-12 items-center gap-2 rounded-tile px-3 font-mono text-sm tracking-[0.2em]',

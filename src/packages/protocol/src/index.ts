@@ -9,7 +9,7 @@ import { z } from 'zod';
  * server-side change cannot crash the UI with an unexpected shape.
  */
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** Room codes people read aloud, so ambiguous glyphs (0/O, 1/I/L) are excluded. */
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -27,16 +27,42 @@ export const playerSchema = z.union([z.literal(1), z.literal(2)]);
 export const cellSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
 export const displayNameSchema = z.string().trim().min(1).max(24);
 
-/** Authoritative game state, as the server sees it. */
-export const snapshotSchema = z.object({
-  size: boardSizeSchema,
-  board: z.array(cellSchema),
-  currentPlayer: playerSchema,
-  status: z.enum(['playing', 'won', 'draw']),
-  winner: playerSchema.nullable(),
-  winLine: z.array(z.number().int().nonnegative()).nullable(),
-  lastMove: z.number().int().nonnegative().nullable(),
-});
+/** The secret that, with a client id, reclaims a seat. Opaque to the client. */
+export const RESUME_TOKEN_LENGTH = 43;
+export const resumeTokenSchema = z
+  .string()
+  .length(RESUME_TOKEN_LENGTH)
+  .regex(/^[\w-]+$/, 'Invalid resume token');
+
+/**
+ * Authoritative game state, as the server sees it.
+ *
+ * The cross-field checks are what stop a malformed frame reaching the board
+ * components: a `size` and a `board` that disagree, or an index pointing off the
+ * end of it, would otherwise render as a broken grid rather than be rejected.
+ */
+export const snapshotSchema = z
+  .object({
+    size: boardSizeSchema,
+    board: z.array(cellSchema),
+    currentPlayer: playerSchema,
+    status: z.enum(['playing', 'won', 'draw']),
+    winner: playerSchema.nullable(),
+    winLine: z.array(z.number().int().nonnegative()).nullable(),
+    lastMove: z.number().int().nonnegative().nullable(),
+  })
+  .refine((snapshot) => snapshot.board.length === snapshot.size * snapshot.size, {
+    message: 'Board length does not match the board size',
+    path: ['board'],
+  })
+  .refine(
+    (snapshot) =>
+      [
+        ...(snapshot.winLine ?? []),
+        ...(snapshot.lastMove === null ? [] : [snapshot.lastMove]),
+      ].every((index) => index < snapshot.board.length),
+    { message: 'Cell index outside the board', path: ['winLine'] },
+  );
 
 export const opponentSchema = z.object({
   name: displayNameSchema,
@@ -49,14 +75,21 @@ export const opponentSchema = z.object({
 
 export const clientMessageSchema = z.discriminatedUnion('type', [
   /**
-   * First message on every connection. Establishes the display name and, when
-   * reconnecting, the identity used to reclaim a seat in an in-progress room.
+   * First message on every connection, and only ever sent once. Establishes the
+   * display name and, when reconnecting, the credentials used to reclaim a seat
+   * in an in-progress room.
+   *
+   * `clientId` alone proves nothing - it is echoed to nobody, but it is still
+   * only an identifier. `resumeToken` is the secret half, issued by the server
+   * in `welcome` and never shown to the opponent, and both must match a held
+   * seat before the server will hand it over.
    */
   z.object({
     type: z.literal('hello'),
     version: z.number().int(),
     name: displayNameSchema.optional(),
     clientId: z.uuid().optional(),
+    resumeToken: resumeTokenSchema.optional(),
   }),
   /** Join the public queue for the given board size. */
   z.object({ type: z.literal('quickMatch'), boardSize: boardSizeSchema }),
@@ -88,13 +121,23 @@ export const ERROR_CODES = [
   'notYourTurn',
   'illegalMove',
   'rateLimited',
+  'serverFull',
 ] as const;
 
 export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const serverMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('welcome'), clientId: z.string(), version: z.number().int() }),
+  /**
+   * Issued once per connection. The client keeps both values for the length of
+   * the tab and sends them back in `hello` after a drop.
+   */
+  z.object({
+    type: z.literal('welcome'),
+    clientId: z.string(),
+    resumeToken: resumeTokenSchema,
+    version: z.number().int(),
+  }),
   z.object({ type: z.literal('searching'), boardSize: boardSizeSchema }),
   z.object({
     type: z.literal('roomCreated'),

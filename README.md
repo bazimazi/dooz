@@ -19,10 +19,10 @@ build for each platform.
 
 ## The earlier versions
 
-The top-level `React/`, `Vue/`, `Svelte/`, `Solid/` and `Vanilla/` folders are
-the original build of the game, written once per framework as a comparison.
-They are kept for reference; `React/` was the most complete of them and is what
-`src/` was rebuilt from.
+The game began as one build per framework - React, Vue, Svelte, Solid and
+vanilla JavaScript - written as a comparison between them. The React one was the
+most complete, and `src/` is the rebuild of it. The others are in the history
+rather than the working tree.
 
 ## Design
 

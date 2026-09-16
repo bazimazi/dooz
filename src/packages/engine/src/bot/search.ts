@@ -28,6 +28,38 @@ const EXACT = 0;
 const LOWER_BOUND = 1;
 const UPPER_BOUND = 2;
 
+/**
+ * Anything at least this large is a proven win rather than a heuristic score.
+ *
+ * Wins are scored `WIN_SCORE - ply` so a mate found sooner outranks the same
+ * mate found later, which is what stops the bot dawdling once it is winning.
+ */
+const MATE_THRESHOLD = WIN_SCORE - 1000;
+
+/**
+ * Convert a mate score to and from a table entry.
+ *
+ * A mate score is relative to the node that found it, but a table entry is
+ * shared by every path that reaches the position - and those paths are not all
+ * the same length. Storing the raw score would hand a later path a mate
+ * distance measured from an earlier one, so it is rebased to "plies from here"
+ * on the way in and back to "plies from the root" on the way out.
+ *
+ * Without this the bot can prefer a slower win, or misjudge how far away a loss
+ * is and walk into it.
+ */
+const toEntryScore = (score: number, ply: number): number => {
+  if (score >= MATE_THRESHOLD) return score + ply;
+  if (score <= -MATE_THRESHOLD) return score - ply;
+  return score;
+};
+
+const fromEntryScore = (score: number, ply: number): number => {
+  if (score >= MATE_THRESHOLD) return score - ply;
+  if (score <= -MATE_THRESHOLD) return score + ply;
+  return score;
+};
+
 interface Entry {
   secondary: number;
   depth: number;
@@ -117,16 +149,20 @@ export function search(
 
     let alpha = alphaIn;
     const original = alpha;
+    // The bounds an entry is written with have to be the ones it was searched
+    // against, not ones a table hit has since narrowed.
+    const originalBeta = beta;
     const stored = transpositions.get(primary);
     let preferred = -1;
 
     if (stored && stored.secondary === secondary) {
       preferred = stored.best;
       if (stored.depth >= depth) {
-        if (stored.flag === EXACT) return stored.score;
-        if (stored.flag === LOWER_BOUND && stored.score > alpha) alpha = stored.score;
-        else if (stored.flag === UPPER_BOUND && stored.score < beta) beta = stored.score;
-        if (alpha >= beta) return stored.score;
+        const score = fromEntryScore(stored.score, ply);
+        if (stored.flag === EXACT) return score;
+        if (stored.flag === LOWER_BOUND && score > alpha) alpha = score;
+        else if (stored.flag === UPPER_BOUND && score < beta) beta = score;
+        if (alpha >= beta) return score;
       }
     }
 
@@ -149,8 +185,14 @@ export function search(
       if (alpha >= beta) break;
     }
 
-    const flag = best <= original ? UPPER_BOUND : best >= beta ? LOWER_BOUND : EXACT;
-    transpositions.set(primary, { secondary, depth, score: best, flag, best: bestMove });
+    const flag = best <= original ? UPPER_BOUND : best >= originalBeta ? LOWER_BOUND : EXACT;
+    transpositions.set(primary, {
+      secondary,
+      depth,
+      score: toEntryScore(best, ply),
+      flag,
+      best: bestMove,
+    });
     return best;
   };
 
@@ -188,7 +230,7 @@ export function search(
     }
 
     // A forced win or loss is proven - searching deeper cannot change it.
-    if (Math.abs(bestScore) >= WIN_SCORE - 100) break;
+    if (Math.abs(bestScore) >= MATE_THRESHOLD) break;
   }
 
   return { move: bestMove, score: bestScore, depth: completedDepth, nodes };

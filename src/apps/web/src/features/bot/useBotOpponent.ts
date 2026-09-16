@@ -12,8 +12,6 @@ interface UseBotOpponentOptions {
   difficulty: BotDifficulty;
   /** Must be stable across renders; a `useCallback` with no dependencies. */
   onMove: (index: number) => void;
-  /** Set false to suspend the bot, e.g. while a result modal is up. */
-  enabled?: boolean;
 }
 
 /**
@@ -23,13 +21,9 @@ interface UseBotOpponentOptions {
  * a restrictive content policy - it falls back to searching inline, which is
  * slower to the eye on 9x9 but never leaves the game stuck waiting.
  */
-export function useBotOpponent({
-  game,
-  botPlayer,
-  difficulty,
-  onMove,
-  enabled = true,
-}: UseBotOpponentOptions): { thinking: boolean } {
+export function useBotOpponent({ game, botPlayer, difficulty, onMove }: UseBotOpponentOptions): {
+  thinking: boolean;
+} {
   const workerRef = useRef<Worker | null>(null);
   // Tags each search, so a reply from an abandoned one is ignored.
   const requestId = useRef(0);
@@ -54,7 +48,7 @@ export function useBotOpponent({
   // "Thinking" is not separate state: the bot is thinking exactly while it is
   // the bot's turn. Deriving it avoids a second render pass per move, and it
   // cannot drift out of step with the board.
-  const thinking = enabled && game.status === 'playing' && game.currentPlayer === botPlayer;
+  const thinking = game.status === 'playing' && game.currentPlayer === botPlayer;
 
   useEffect(() => {
     if (!thinking) return;

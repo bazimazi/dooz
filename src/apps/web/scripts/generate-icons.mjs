@@ -51,7 +51,9 @@ const targets = [
 await mkdir(publicDir, { recursive: true });
 
 for (const { file, size, inset } of targets) {
-  const png = await sharp(Buffer.from(markSvg(size, inset))).png({ compressionLevel: 9 }).toBuffer();
+  const png = await sharp(Buffer.from(markSvg(size, inset)))
+    .png({ compressionLevel: 9 })
+    .toBuffer();
   await writeFile(resolve(publicDir, file), png);
   console.log(`wrote ${file} (${size}x${size})`);
 }

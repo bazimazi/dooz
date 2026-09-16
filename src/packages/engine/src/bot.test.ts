@@ -69,6 +69,32 @@ describe('findBestMove', () => {
   });
 });
 
+describe('the transposition table', () => {
+  /**
+   * The same position is reached by two different move orders, so the second
+   * search reads back what the first one stored. A mate score is relative to
+   * the node that found it, so an entry written at one depth and read at
+   * another has to be rebased - otherwise the bot sees the wrong distance to
+   * mate and can prefer a slower win, or misjudge a loss.
+   */
+  it('scores a transposed position the same as the position itself', () => {
+    const direct = fromMoves(3, X, [0, 4, 1, 8]);
+    const transposed = fromMoves(3, X, [1, 4, 0, 8]);
+
+    expect(direct.board).toEqual(transposed.board);
+    expect(findBestMove(direct, { difficulty: 'hard' })).toBe(
+      findBestMove(transposed, { difficulty: 'hard' }),
+    );
+  });
+
+  it('still finds the shortest mate when a longer one scores the same', () => {
+    // O to move with 3 and 4 held: 5 wins now. A mate score that survived the
+    // table unrebased could make a win one ply later look just as good.
+    const game = fromMoves(3, X, [0, 3, 1, 4, 8]);
+    expect(findBestMove(game, { difficulty: 'hard' })).toBe(5);
+  });
+});
+
 describe('the 3x3 bot is unbeatable', () => {
   /** Exhaustively play every line the human can choose against the bot. */
   function humanCannotWin(game: GameState, human: Player): boolean {
@@ -96,11 +122,21 @@ describe('the 3x3 bot is unbeatable', () => {
 });
 
 describe('difficulty', () => {
-  it('easy sometimes plays a move a stronger bot would not', () => {
-    // With a blunder rate above zero, a fixed low roll forces a random move.
+  it('easy throws the game away when the blunder roll comes up', () => {
+    // O to move, and X threatens 0-1-2, so any bot paying attention takes 2.
     const game = fromMoves(3, X, [0, 4, 1]);
-    const blunder = findBestMove(game, { difficulty: 'easy', random: () => 0.01 });
-    expect(blunder).not.toBeNull();
+    // A low first roll trips the blunder, and the second picks the cell. `0.01`
+    // lands at the start of the empty list, which is cell 2 - the one move that
+    // would look deliberate - so walk the roll up until it picks another.
+    const blunders = [0.3, 0.5, 0.7, 0.9].map((pick) => {
+      const rolls = [0.01, pick];
+      let call = 0;
+      return findBestMove(game, { difficulty: 'easy', random: () => rolls[call++] ?? 0.5 });
+    });
+
+    expect(blunders.some((move) => move !== 2)).toBe(true);
+    // Whatever it throws away, it still has to be a legal square.
+    for (const move of blunders) expect(emptyIndices(game.board)).toContain(move!);
   });
 
   it('easy still blocks when it is not blundering', () => {

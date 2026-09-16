@@ -71,7 +71,13 @@ export function applyMove(state: GameState, index: number): GameState | null {
   };
 }
 
-/** Rebuild a game from its move list. Used to verify a state instead of trusting it. */
+/**
+ * Rebuild a game from its move list.
+ *
+ * Returns `null` the moment a move is illegal, so a recorded game can be
+ * checked rather than taken on trust - and it is how a position is set up in a
+ * test without hand-building a board.
+ */
 export function replay(
   size: BoardSize,
   startingPlayer: Player,

@@ -10,7 +10,7 @@ import {
 } from '@dooz/protocol';
 import { create } from 'zustand';
 import { multiplayerSocketUrl } from '@/lib/server-url';
-import { loadIdentity, saveIdentity } from './identity';
+import { loadCredentials, loadName, saveCredentials, saveName } from './identity';
 
 export type OnlinePhase =
   'offline' | 'connecting' | 'idle' | 'searching' | 'hosting' | 'playing' | 'opponentLeft';
@@ -55,8 +55,16 @@ let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 let attempt = 0;
-/** Set when the user asked to disconnect, so the socket is not re-opened. */
-let intentionallyClosed = false;
+/**
+ * Set when reconnecting would be pointless or unwanted: the user asked to
+ * disconnect, or the server told us this client is too old to talk to.
+ */
+let stopReconnecting = false;
+
+/** The credentials this tab will present after a drop. Held in memory as well as
+ * in `sessionStorage`, so a socket that reopens before the store has rehydrated
+ * still resumes rather than arriving as a stranger. */
+let credentials: { clientId: string; resumeToken: string } | null = null;
 
 /**
  * The client half of online play.
@@ -73,7 +81,8 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
   function handle(message: ServerMessage) {
     switch (message.type) {
       case 'welcome': {
-        saveIdentity({ clientId: message.clientId, name: get().name });
+        credentials = { clientId: message.clientId, resumeToken: message.resumeToken };
+        saveCredentials(credentials);
         set({ clientId: message.clientId, phase: 'idle', reconnecting: false, error: null });
         attempt = 0;
         return;
@@ -120,11 +129,22 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
         set({ phase: 'opponentLeft', rematchOffered: false, rematchRequested: false });
         return;
       case 'error':
-        set({ error: message.message });
+        set({ error: message.message, rematchRequested: false });
         // These leave the client with nothing to wait for, so drop back to the
         // lobby rather than sitting on a dead "searching" screen.
-        if (message.code === 'roomNotFound' || message.code === 'roomFull') {
+        if (
+          message.code === 'roomNotFound' ||
+          message.code === 'roomFull' ||
+          message.code === 'serverFull'
+        ) {
           set({ phase: 'idle', roomCode: null });
+        }
+        // The server is about to close on us and every retry would be refused
+        // the same way, so stop before the backoff turns into a loop that only
+        // ends when the tab does.
+        if (message.code === 'versionMismatch') {
+          stopReconnecting = true;
+          set({ phase: 'offline', reconnecting: false });
         }
         return;
       case 'pong':
@@ -133,7 +153,8 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
   }
 
   function openSocket() {
-    intentionallyClosed = false;
+    reconnectTimer = null;
+    stopReconnecting = false;
 
     let url: string;
     try {
@@ -149,27 +170,36 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     socket = next;
 
     next.addEventListener('open', () => {
-      const { name, clientId } = get();
+      // Guard every handler against being the previous socket's. A close or an
+      // error can arrive after this one has been replaced - React's strict mode
+      // mounts, unmounts and remounts in a row, which is exactly that shape -
+      // and a stale handler would otherwise tear down the live connection.
+      if (socket !== next) return;
+
+      const { name } = get();
       send({
         type: 'hello',
         version: PROTOCOL_VERSION,
         name,
-        ...(clientId ? { clientId } : {}),
+        ...credentials,
       });
       keepaliveTimer = setInterval(() => send({ type: 'ping' }), KEEPALIVE_MS);
     });
 
     next.addEventListener('message', (event: MessageEvent<unknown>) => {
+      if (socket !== next) return;
       const message = decodeServerMessage(String(event.data));
       if (message) handle(message);
     });
 
     next.addEventListener('close', () => {
+      if (socket !== next) return;
+
       if (keepaliveTimer) clearInterval(keepaliveTimer);
       keepaliveTimer = null;
       socket = null;
-      if (intentionallyClosed) {
-        set({ phase: 'offline', reconnecting: false });
+      if (stopReconnecting) {
+        set({ reconnecting: false });
         return;
       }
 
@@ -181,17 +211,19 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       reconnectTimer = setTimeout(openSocket, delay);
     });
 
-    next.addEventListener('error', () => next.close());
+    next.addEventListener('error', () => {
+      if (socket === next) next.close();
+    });
   }
 
-  const stored = loadIdentity();
+  credentials = loadCredentials();
 
   return {
     phase: 'offline',
     reconnecting: false,
     error: null,
-    clientId: stored?.clientId ?? null,
-    name: stored?.name ?? 'Player',
+    clientId: credentials?.clientId ?? null,
+    name: loadName() ?? 'Player',
     roomCode: null,
     boardSize: null,
     you: null,
@@ -207,18 +239,21 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     },
 
     disconnect: () => {
-      intentionallyClosed = true;
+      stopReconnecting = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = null;
-      socket?.close();
+      if (keepaliveTimer) clearInterval(keepaliveTimer);
+      keepaliveTimer = null;
+      const closing = socket;
       socket = null;
+      closing?.close();
       set({ phase: 'offline', reconnecting: false });
     },
 
     setName: (name) => {
       const trimmed = name.trim().slice(0, 24) || 'Player';
       set({ name: trimmed });
-      saveIdentity({ clientId: get().clientId, name: trimmed });
+      saveName(trimmed);
       // Tell the server too, so a rename mid-session reaches the opponent
       // rather than waiting for the next connection.
       send({ type: 'setName', name: trimmed });

@@ -1,4 +1,4 @@
-import type { Board, BoardSize, Player } from '../types.js';
+import { type Board, type BoardSize, Empty, O, type Player } from '../types.js';
 
 /**
  * Zobrist hashing: each (cell, player) pair gets a fixed random value, and a
@@ -62,13 +62,13 @@ export function hashBoard(
 
   for (let index = 0; index < board.length; index++) {
     const cell = board[index];
-    if (cell === undefined || cell === 0) continue;
+    if (cell === undefined || cell === Empty) continue;
     const key = slot(index, cell);
     primary ^= table.primary[key]!;
     secondary ^= table.secondary[key]!;
   }
 
-  if (sideToMove === 2) {
+  if (sideToMove === O) {
     primary ^= table.sidePrimary;
     secondary ^= table.sideSecondary;
   }

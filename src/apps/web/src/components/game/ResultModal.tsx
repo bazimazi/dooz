@@ -1,9 +1,10 @@
 import { type GameState, type Player, X } from '@dooz/engine';
-import { type ReactNode, useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { Confetti } from '@/components/art/Confetti';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { useDialog } from '@/lib/useDialog';
 import { GameControls } from './GameControls';
 
 interface ResultModalProps {
@@ -22,7 +23,9 @@ interface ResultModalProps {
  * The end-of-game panel.
  *
  * There is deliberately no dismiss affordance: the two ways out of a finished
- * game are to play again or to go home, and both are in the panel.
+ * game are to play again or to go home, and both are in the panel. That is also
+ * why `useDialog` is given no escape handler here - there is nothing for Escape
+ * to do that the buttons do not.
  *
  * It arrives in pieces - dim, then panel, then the face, the verdict and the
  * buttons - because the result is the one moment in the game worth pausing on.
@@ -37,13 +40,9 @@ export function ResultModal({
   note,
   celebrate = false,
 }: ResultModalProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Move focus into the panel so the keyboard lands on the actions rather
-    // than staying on the board behind it.
-    panelRef.current?.focus();
-  }, []);
+  // Moves focus in, traps Tab, and makes the board behind it inert - without
+  // which `aria-modal` below would be a claim the page does not honour.
+  const panelRef = useDialog<HTMLDivElement>();
 
   return (
     <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]">

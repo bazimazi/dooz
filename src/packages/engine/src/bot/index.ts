@@ -1,6 +1,13 @@
 import { emptyIndices } from '../board.js';
 import { isWinningMove } from '../rules.js';
-import { type Board, type BoardSize, type GameState, opponentOf, type Player } from '../types.js';
+import {
+  type Board,
+  type BoardSize,
+  Empty,
+  type GameState,
+  opponentOf,
+  type Player,
+} from '../types.js';
 import { candidateMoves } from './candidates.js';
 import { moveHeuristic } from './evaluate.js';
 import { search } from './search.js';
@@ -88,7 +95,7 @@ export function findBestMove(state: GameState, options: BotOptions = {}): number
     branchLimit: profile.branchLimit,
   });
 
-  if (result.move >= 0 && board[result.move] === 0) return result.move;
+  if (result.move >= 0 && board[result.move] === Empty) return result.move;
   return greedyMove(board, size, me);
 }
 

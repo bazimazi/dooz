@@ -10,19 +10,19 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 
 ## The stack, and why
 
-| Layer      | Choice                          | Why this one                                                                                                                                                                                                |
-| ---------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language   | TypeScript 7                    | The Go-native compiler. Type-checks the whole workspace in well under a second.                                                                                                                              |
-| UI         | React 19                        | The design is a handful of screens with local state; React's ecosystem is the one everything else here targets.                                                                                              |
-| Build      | Vite 8 (Rolldown)               | Rust bundler, sub-second production builds, first-class worker and PWA support.                                                                                                                              |
-| Routing    | TanStack Router                 | Type-safe routes **and** type-safe search params, which is where the board size and room code live.                                                                                                          |
-| Styling    | Tailwind CSS v4                 | CSS-first `@theme` config, so the Figma palette lives in one file as real CSS variables. Zero runtime.                                                                                                        |
-| Shell      | Tauri 2                         | The one toolchain that covers desktop **and** mobile from a web frontend. Binaries are a few MB rather than a bundled browser.                                                                                |
-| State      | Zustand                         | Only the online connection needs cross-screen state; everything else is component state.                                                                                                                     |
-| Server     | Hono + `ws` on Node             | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                                              |
-| Validation | Zod 4                           | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                                                     |
-| Test       | Vitest 4                        | Same config format as Vite; the rules engine is pure TypeScript and needs no DOM.                                                                                                                            |
-| Lint       | oxlint (+ tsgolint)             | Rust linter with type-aware rules built on TypeScript 7. `typescript-eslint` does not yet support TS 7.                                                                                                       |
+| Layer      | Choice                     | Why this one                                                                                                                                                                     |
+| ---------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language   | TypeScript 7               | The Go-native compiler. Type-checks the whole workspace in well under a second.                                                                                                  |
+| UI         | React 19                   | The design is a handful of screens with local state; React's ecosystem is the one everything else here targets.                                                                  |
+| Build      | Vite 8 (Rolldown)          | Rust bundler, sub-second production builds, first-class worker and PWA support.                                                                                                  |
+| Routing    | TanStack Router            | Type-safe routes **and** type-safe search params, which is where the board size and room code live.                                                                              |
+| Styling    | Tailwind CSS v4            | CSS-first `@theme` config, so the Figma palette lives in one file as real CSS variables. Zero runtime.                                                                           |
+| Shell      | Tauri 2                    | The one toolchain that covers desktop **and** mobile from a web frontend. Binaries are a few MB rather than a bundled browser.                                                   |
+| State      | Zustand                    | Only the online connection needs cross-screen state; everything else is component state.                                                                                         |
+| Server     | Hono + `ws` on Node        | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                  |
+| Validation | Zod 4                      | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                         |
+| Test       | Vitest 4 + Testing Library | Same config format as Vite. The engine and the server run headless; the client runs against jsdom, because its reconnect and keyboard behaviour is not observable without a DOM. |
+| Lint       | oxlint (+ tsgolint)        | Rust linter with type-aware rules built on TypeScript 7. `typescript-eslint` does not yet support TS 7.                                                                          |
 
 The deliberate trade-off is **web technology everywhere** rather than native UI
 per platform. The design leans on gradients, backdrop blur and SVG, all of which
@@ -80,12 +80,19 @@ served from `tauri://localhost` and have no origin to infer a server from.
 ### Everything else
 
 ```bash
-npm test           # 64 tests: rules, AI, and the full matchmaking flow
+npm test           # 90 tests: rules, AI, matchmaking, and the client
 npm run typecheck  # whole workspace
 npm run lint       # oxlint, type-aware
 npm run format     # prettier
 npm run build      # production web build
 ```
+
+All five run on every push and pull request; see
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+
+The server runs through `tsx` in both development and production. It is not
+built ahead of time: its modules import each other with `.js` specifiers that
+resolve to `.ts` files, which Node's own type stripping does not rewrite.
 
 ## The rules
 
@@ -115,6 +122,11 @@ Zobrist hashing, and move ordering by threat value.
 The search runs in a Web Worker. A 9×9 search can spend over a second in a tight
 loop, which would otherwise freeze the interface for its whole duration.
 
+Scores that prove a win are stored in the transposition table rebased to the
+node that found them, because the same position is reached by paths of different
+lengths and a raw mate score read back along a longer one would be measured from
+the wrong place.
+
 ## Online play
 
 The server holds the game. A client can only ever send a cell index; the server
@@ -124,11 +136,40 @@ renders with, and broadcasts the result.
 - **Quick match** - a queue per board size.
 - **Private rooms** - a six-character code, drawn from an alphabet with no `0`/`O`
   or `1`/`I` confusion, shareable as a link.
-- **Reconnection** - a client id in `localStorage` reclaims a seat for 45
-  seconds, so a locked phone or a switched network does not end the game.
+- **Reconnection** - a seat is held for 45 seconds, so a locked phone or a
+  switched network does not end the game. See below for what reclaims it.
 - **Rematch** - takes both players; either can offer.
-- Inbound messages are rate-limited per connection, frames are size-capped, and
-  dead sockets are dropped by heartbeat.
+
+### Holding a seat
+
+Reclaiming a seat takes two things: the client id, and a `resumeToken` the
+server issues in `welcome` and shows to nobody else. An id on its own is an
+identifier, not a credential, and a seat that a live connection is still sitting
+in is never handed over at all.
+
+Both live in `sessionStorage`, which is per-tab. A reload keeps them, so the
+seat survives one; a second tab gets its own identity rather than the first
+tab's, so opening one cannot take over a game running in the other. The display
+name is a preference rather than a secret and stays in `localStorage`.
+
+### What the server assumes about clients
+
+Nothing. Beyond the rules above:
+
+- Every inbound frame is parsed against the schema, and every outbound one is
+  parsed again by the client - including cross-field checks, so a board that
+  disagrees with the size it claims is rejected rather than rendered.
+- The WebSocket upgrade checks `Origin` against `ALLOWED_ORIGINS`. The CORS
+  middleware does not cover this: a WebSocket handshake is not subject to the
+  same-origin policy, so without the check any page could open a socket here.
+- `hello` is accepted once per connection, so a client cannot swap identity
+  underneath a game in progress.
+- Room codes come from the CSPRNG. They are the only thing keeping an uninvited
+  player out of a private room, and a non-cryptographic generator's state can be
+  recovered from a handful of observed outputs.
+- Inbound messages are rate-limited per connection, frames are size-capped, dead
+  sockets are dropped by heartbeat, and there are ceilings on both sessions and
+  rooms so neither map can grow without bound.
 
 ## Design
 
@@ -143,11 +184,21 @@ original build shipped is now a few hundred bytes of vector.
 
 ## Accessibility
 
-The board is a `role="grid"` with a roving tabindex, so it is a single tab stop
-and the arrow keys move within it - a 9×9 board would otherwise put 81 stops in
-the page's tab order. Every cell is labelled by position and contents, turn and
-status changes are announced through a live region, and the reduced-motion
-preference is honoured.
+The board is a `role="grid"` of `role="row"`s with a roving tabindex, so it is a
+single tab stop and the arrow keys move within it - a 9×9 board would otherwise
+put 81 stops in the page's tab order. Cells are never `disabled`, only
+`aria-disabled`: a disabled button cannot take focus, and with a roving tabindex
+that would leave the grid with no tab stop at all the moment somebody played the
+anchor cell. Every cell is labelled by position and contents.
+
+Overlays that set `aria-modal` honour it: focus moves in and is restored on
+close, Tab wraps inside the panel, and the rest of the page is `inert` for as
+long as the panel is up. Turn and status changes are announced through a live
+region, the reduced-motion preference is honoured, and the page does not block
+zoom.
+
+There are tests for the parts of this that a refactor can silently break - the
+tab stop, the arrow keys, the grid structure and the focus trap.
 
 ## Licence
 

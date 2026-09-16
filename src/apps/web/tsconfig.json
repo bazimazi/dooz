@@ -9,7 +9,7 @@
     "declaration": true,
     "outDir": "dist-types",
     "rootDir": "src",
-    "types": ["vite/client", "vite-plugin-pwa/client"],
+    "types": ["vite/client", "vite-plugin-pwa/client", "vitest/globals"],
     "paths": {
       "@/*": ["./src/*"]
     }

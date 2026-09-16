@@ -17,6 +17,7 @@ import { Screen } from '@/components/ui/Screen';
 import { cx } from '@/lib/cx';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
 import { useClosing } from '@/lib/useClosing';
+import { useDialog } from '@/lib/useDialog';
 
 export function HomeScreen() {
   const navigate = useNavigate();
@@ -104,6 +105,9 @@ interface FriendsSheetProps {
  */
 function FriendsSheet({ onClose, onQuickMatch, onHost }: FriendsSheetProps) {
   const { closing, close } = useClosing(onClose);
+  // Unlike the result panel this one is dismissible, so Escape closes it - by
+  // the same path as the backdrop and the two buttons, exit animation included.
+  const panelRef = useDialog<HTMLDivElement>(close);
 
   return (
     <div
@@ -116,11 +120,13 @@ function FriendsSheet({ onClose, onQuickMatch, onHost }: FriendsSheetProps) {
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Play with friends"
+        tabIndex={-1}
         className={cx(
-          'w-full max-w-78 rounded-[3rem] border border-b8 p-2',
+          'w-full max-w-78 rounded-[3rem] border border-b8 p-2 outline-none',
           'shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}

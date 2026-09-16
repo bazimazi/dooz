@@ -14,13 +14,20 @@ export interface Transport {
 }
 
 export interface Session {
-  /** Reassigned once on `hello` when a client resumes an earlier identity. */
+  /** Reassigned once on `hello` when a client proves an earlier identity. */
   id: string;
+  /**
+   * The secret half of this session's identity. Reissued on every connection
+   * and sent only to this client, never to the opponent.
+   */
+  resumeToken: string;
   name: string;
   transport: Transport;
   /** Room the session currently occupies, if any. */
   roomCode: string | null;
   connected: boolean;
+  /** `hello` is accepted once per connection; this records that it happened. */
+  greeted: boolean;
   /** Token bucket state for rate limiting. */
   tokens: number;
   lastRefill: number;
@@ -28,6 +35,12 @@ export interface Session {
 
 export interface Seat {
   clientId: string;
+  /**
+   * What a returning client has to produce to be given this seat back. Held on
+   * the seat rather than the session because the session is gone by the time
+   * the reconnect arrives.
+   */
+  resumeToken: string;
   name: string;
   readonly player: Player;
   connected: boolean;

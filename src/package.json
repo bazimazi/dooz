@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @dooz/web",
     "dev:server": "npm run dev --workspace @dooz/server",
-    "dev:all": "npm run dev:server & npm run dev",
+    "dev:all": "npm-run-all --parallel dev:server dev",
     "dev:desktop": "npm run tauri --workspace @dooz/native -- dev",
     "dev:android": "npm run tauri --workspace @dooz/native -- android dev",
     "dev:ios": "npm run tauri --workspace @dooz/native -- ios dev",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
@@ -39,6 +40,7 @@
     "oxlint-tsgolint": "^7.0.2001"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "sharp@0.34.5": true
   }
 }

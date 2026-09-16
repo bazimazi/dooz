@@ -3,11 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <!-- `viewport-fit=cover` lets the background run under the notch; the safe
-         area is added back as padding in CSS. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
-    />
+         area is added back as padding in CSS. Zoom is deliberately left alone:
+         `user-scalable=no` would stop anyone who needs to magnify the board
+         from doing so, and the layout is fluid enough not to need it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#232599" />
     <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

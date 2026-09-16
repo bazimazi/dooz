@@ -63,8 +63,9 @@
       }
     },
     {
-      // The entry point pulls in global stylesheets, which have no export.
-      "files": ["apps/web/src/main.tsx"],
+      // The entry point pulls in global stylesheets, and the test setup pulls in
+      // matcher registrations. Neither has anything to export.
+      "files": ["apps/web/src/main.tsx", "apps/web/src/test/setup.ts"],
       "rules": {
         "import/no-unassigned-import": "off"
       }

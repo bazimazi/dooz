@@ -60,8 +60,8 @@ export function findWinLineFrom(board: Board, size: BoardSize, index: number): W
 
 /**
  * Scan the whole board for a winning run. Slower than {@link findWinLineFrom};
- * use it when there is no trusted "last move" - validating a board received
- * over the network, or checking a hand-built position in a test.
+ * use it when there is no trusted "last move" - checking a hand-built position,
+ * or auditing a board that did not arrive one move at a time.
  */
 export function findAnyWinLine(
   board: Board,
@@ -76,7 +76,14 @@ export function findAnyWinLine(
   return null;
 }
 
-/** True when placing `player` at `index` would immediately win. Does not mutate `board`. */
+/**
+ * True when placing `player` at `index` would immediately win.
+ *
+ * Tries the move on a copy. Playing it on the caller's array and undoing it
+ * would save the allocation, but the array handed in here is usually a live
+ * `GameState.board`, and briefly holding a mark nobody played is the kind of
+ * thing that only breaks once something else reads the board in between.
+ */
 export function isWinningMove(
   board: Board,
   size: BoardSize,
@@ -84,10 +91,10 @@ export function isWinningMove(
   player: Player,
 ): boolean {
   if (board[index] !== Empty) return false;
-  board[index] = player;
-  const line = findWinLineFrom(board, size, index);
-  board[index] = Empty;
-  return line !== null;
+
+  const trial = board.slice();
+  trial[index] = player;
+  return findWinLineFrom(trial, size, index) !== null;
 }
 
 function isPlayerAt(

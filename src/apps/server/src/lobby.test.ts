@@ -1,5 +1,10 @@
 import { O, X } from '@dooz/engine';
-import { PROTOCOL_VERSION, type ServerMessage } from '@dooz/protocol';
+import {
+  PROTOCOL_VERSION,
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  type ServerMessage,
+} from '@dooz/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Lobby } from './lobby.js';
 import type { Session } from './types.js';
@@ -37,6 +42,7 @@ describe('Lobby', () => {
   let clock: number;
   let lobby: Lobby;
   let nextId: number;
+  let nextToken: number;
 
   const advance = (ms: number) => {
     clock += ms;
@@ -49,26 +55,59 @@ describe('Lobby', () => {
     return client;
   };
 
+  /** A new connection presenting the credentials an earlier one was issued. */
+  const reconnect = (name: string, credentials: { clientId: string; resumeToken: string }) => {
+    const client = new FakeClient();
+    client.session = lobby.connect(client.transport);
+    lobby.handle(client.session, {
+      type: 'hello',
+      version: PROTOCOL_VERSION,
+      name,
+      ...credentials,
+    });
+    return client;
+  };
+
+  /** What a client would have kept from its `welcome`. */
+  const credentialsOf = (client: FakeClient) => {
+    const welcome = client.last('welcome')!;
+    return { clientId: welcome.clientId, resumeToken: welcome.resumeToken };
+  };
+
   beforeEach(() => {
     clock = 1_000_000;
     nextId = 0;
+    nextToken = 0;
     lobby = new Lobby({
       now: () => clock,
-      // Fixed sequence keeps room codes and starting players deterministic.
+      // Fixed sequence keeps the starting players deterministic.
       random: () => 0.42,
       newId: () => `client-${++nextId}`,
+      // Real tokens are 32 random bytes; these only have to be distinct and the
+      // right length for the protocol schema.
+      newToken: () => `token-${++nextToken}`.padEnd(43, 'x'),
       reconnectGraceMs: 1000,
     });
   });
 
   describe('handshake', () => {
-    it('welcomes a client and hands back its id', () => {
+    it('welcomes a client and hands back its id and resume token', () => {
       const alice = join('Alice');
       expect(alice.last('welcome')).toEqual({
         type: 'welcome',
         clientId: 'client-1',
+        resumeToken: 'token-1'.padEnd(43, 'x'),
         version: PROTOCOL_VERSION,
       });
+    });
+
+    it('accepts only one hello per connection', () => {
+      const alice = join('Alice');
+      alice.clear();
+      lobby.handle(alice.session, { type: 'hello', version: PROTOCOL_VERSION, name: 'Alice' });
+
+      expect(alice.last('error')?.code).toBe('badMessage');
+      expect(alice.last('welcome')).toBeUndefined();
     });
 
     it('rejects and closes a client on the wrong protocol version', () => {
@@ -326,21 +365,26 @@ describe('Lobby', () => {
       const { alice, bob } = matchedPair();
       const code = alice.last('matched')!.code;
       const before = alice.last('matched')!.snapshot;
+      const credentials = credentialsOf(alice);
       lobby.disconnect(alice.session);
 
-      const returning = new FakeClient();
-      returning.session = lobby.connect(returning.transport);
-      lobby.handle(returning.session, {
-        type: 'hello',
-        version: PROTOCOL_VERSION,
-        name: 'Alice',
-        clientId: alice.session.id,
-      });
+      const returning = reconnect('Alice', credentials);
 
       const restored = returning.last('matched');
       expect(restored?.code).toBe(code);
       expect(restored?.snapshot).toEqual(before);
       expect(bob.last('opponentPresence')?.opponent).toEqual({ name: 'Alice', connected: true });
+    });
+
+    it('clears a rematch request made just before the player dropped', () => {
+      const { alice, bob } = matchedPair();
+      lobby.handle(alice.session, { type: 'rematch' });
+      lobby.disconnect(alice.session);
+      bob.clear();
+
+      // Bob agreeing must not be enough on its own now that Alice is gone.
+      lobby.handle(bob.session, { type: 'rematch' });
+      expect(bob.last('state')).toBeUndefined();
     });
 
     it('lets a player who deliberately leaves end the game', () => {
@@ -365,6 +409,123 @@ describe('Lobby', () => {
       advance(2);
       lobby.sweep();
       expect(lobby.roomCount).toBe(0);
+    });
+  });
+
+  describe('seat credentials', () => {
+    function seatedPair() {
+      const alice = join('Alice');
+      const bob = join('Bob');
+      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
+      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
+      return { alice, bob };
+    }
+
+    it('refuses a seat to a client that knows the id but not the token', () => {
+      const { alice } = seatedPair();
+      const { clientId } = credentialsOf(alice);
+      lobby.disconnect(alice.session);
+
+      const impostor = reconnect('Mallory', {
+        clientId,
+        resumeToken: 'wrong-token'.padEnd(43, 'x'),
+      });
+
+      expect(impostor.last('matched')).toBeUndefined();
+      expect(impostor.last('welcome')?.clientId).not.toBe(clientId);
+    });
+
+    it('refuses a seat that a live connection is still holding', () => {
+      const { alice, bob } = seatedPair();
+      const credentials = credentialsOf(alice);
+
+      // A second tab of the same browser: same credentials, Alice still online.
+      const secondTab = reconnect('Alice', credentials);
+
+      expect(secondTab.last('matched')).toBeUndefined();
+      expect(secondTab.last('welcome')?.clientId).not.toBe(credentials.clientId);
+
+      // And Alice keeps the seat: her moves still reach Bob.
+      bob.clear();
+      lobby.handle(alice.session, { type: 'move', index: 0 });
+      expect(bob.last('state')).toBeDefined();
+    });
+
+    it('does not let a superseded session take the seat offline', () => {
+      const alice = join('Alice');
+      const bob = join('Bob');
+      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
+      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
+
+      const credentials = credentialsOf(alice);
+      lobby.disconnect(alice.session);
+      const returning = reconnect('Alice', credentials);
+      bob.clear();
+
+      // Alice's original socket closes only now, well after the reconnect.
+      lobby.disconnect(alice.session);
+
+      // The seat belongs to the new connection, which is online and can play.
+      expect(bob.last('opponentPresence')?.opponent.connected).not.toBe(false);
+      lobby.handle(returning.session, { type: 'move', index: 0 });
+      expect(bob.last('error')).toBeUndefined();
+      expect(bob.last('state')).toBeDefined();
+    });
+
+    it('does not let a superseded session evict the one that replaced it', () => {
+      const alice = join('Alice');
+      const credentials = credentialsOf(alice);
+      lobby.disconnect(alice.session);
+
+      const returning = reconnect('Alice', credentials);
+      expect(lobby.sessionCount).toBe(1);
+
+      // The old socket finally closes. It must not take the new one with it.
+      lobby.disconnect(alice.session);
+      expect(lobby.sessionCount).toBe(1);
+      expect(returning.session.connected).toBe(true);
+    });
+
+    it('issues a code drawn from the room alphabet', () => {
+      const alice = join('Alice');
+      lobby.handle(alice.session, { type: 'createRoom', boardSize: 3 });
+
+      const code = alice.last('roomCreated')!.code;
+      expect(code).toHaveLength(ROOM_CODE_LENGTH);
+      expect(code.split('').every((character) => ROOM_CODE_ALPHABET.includes(character))).toBe(
+        true,
+      );
+    });
+  });
+
+  describe('capacity', () => {
+    it('refuses to open a room once the ceiling is reached', () => {
+      lobby = new Lobby({
+        now: () => clock,
+        random: () => 0.42,
+        newId: () => `client-${++nextId}`,
+        newToken: () => `token-${++nextToken}`.padEnd(43, 'x'),
+        maxRooms: 1,
+      });
+
+      const first = join('First');
+      lobby.handle(first.session, { type: 'createRoom', boardSize: 3 });
+      expect(lobby.roomCount).toBe(1);
+
+      const second = join('Second');
+      lobby.handle(second.session, { type: 'createRoom', boardSize: 3 });
+
+      expect(second.last('error')?.code).toBe('serverFull');
+      expect(second.last('roomCreated')).toBeUndefined();
+      expect(lobby.roomCount).toBe(1);
+    });
+
+    it('reports capacity so the transport can refuse the handshake', () => {
+      lobby = new Lobby({ maxSessions: 1, newId: () => `client-${++nextId}` });
+      expect(lobby.atCapacity).toBe(false);
+
+      join('Only');
+      expect(lobby.atCapacity).toBe(true);
     });
   });
 
