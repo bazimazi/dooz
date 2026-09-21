@@ -1,14 +1,7 @@
 import type { BoardSize } from '@dooz/engine';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
-import {
-  BackIcon,
-  BotIcon,
-  FriendsIcon,
-  HomeIcon,
-  LinkIcon,
-  SearchPlayerIcon,
-} from '@/components/art/icons';
+import { BackIcon, BotIcon, FriendsIcon, LinkIcon, SearchPlayerIcon } from '@/components/art/icons';
 import { Logo } from '@/components/art/Logo';
 import { BoardSizeCarousel } from '@/components/game/BoardSizeCarousel';
 import { Button } from '@/components/ui/Button';
@@ -131,7 +124,7 @@ function FriendsSheet({ onClose, onQuickMatch, onHost }: FriendsSheetProps) {
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <div className="flex flex-col items-center gap-6 rounded-[2.75rem] bg-raised px-6 py-9">
+        <div className="flex flex-col items-center gap-6 rounded-[2.5rem] bg-raised px-6 py-9">
           <SheetAction icon={<SearchPlayerIcon className="size-7" />} onClick={onQuickMatch}>
             find opponent
           </SheetAction>
@@ -140,12 +133,11 @@ function FriendsSheet({ onClose, onQuickMatch, onHost }: FriendsSheetProps) {
             invite via link
           </SheetAction>
 
-          <div className="flex items-center gap-4 pt-2">
+          {/* One way out, not two: the second button here was a home icon that
+              ran the same `close`, which reads as a choice that isn't one. */}
+          <div className="flex items-center justify-center pt-2">
             <IconButton tone="solid" label="Back" onClick={close}>
               <BackIcon />
-            </IconButton>
-            <IconButton tone="solid" label="Back to home" onClick={close}>
-              <HomeIcon />
             </IconButton>
           </div>
         </div>

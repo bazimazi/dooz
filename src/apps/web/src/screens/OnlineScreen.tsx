@@ -1,12 +1,11 @@
 import { type BoardSize, O, X } from '@dooz/engine';
 import { ROOM_CODE_LENGTH } from '@dooz/protocol';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   BackIcon,
   CheckIcon,
   CopyIcon,
-  HomeIcon,
   SearchPlayerIcon,
   ShareIcon,
   WifiOffIcon,
@@ -66,7 +65,7 @@ function OnlineLobby({ size }: { size: BoardSize }) {
     <Screen>
       <div className="flex w-full flex-1 flex-col items-center justify-center gap-6">
         <div className="w-full max-w-78 animate-panel-in rounded-[3rem] border border-b8 p-2 shadow-[0_30px_70px_-34px_rgb(0_0_0/0.9)]">
-          <div className="flex flex-col items-center gap-5 rounded-[2.75rem] bg-raised px-6 py-10 text-center">
+          <div className="flex flex-col items-center gap-5 rounded-[2.5rem] bg-raised px-6 py-10 text-center">
             {phase === 'hosting' && roomCode ? (
               <InvitePanel code={roomCode} />
             ) : (
@@ -99,19 +98,18 @@ function OnlineLobby({ size }: { size: BoardSize }) {
 
             {error ? <p className="animate-toast-in text-sm text-p3">{error}</p> : null}
 
-            <div className="flex items-center gap-4 pt-2">
+            {/* Both controls here used to go home; only this one also gives up
+                the seat in the queue, so the plain link has gone. */}
+            <div className="flex items-center justify-center pt-2">
               <IconButton
                 tone="solid"
-                label="Back"
+                label="Back to home"
                 onClick={() => {
                   leave();
                   void navigate({ to: '/' });
                 }}
               >
                 <BackIcon />
-              </IconButton>
-              <IconButton as={Link} to="/" tone="solid" label="Back to home">
-                <HomeIcon />
               </IconButton>
             </div>
           </div>
@@ -161,8 +159,11 @@ function NameField() {
   }
 
   return (
-    <label className="flex w-full max-w-78 items-center gap-3 text-sm text-g8/70">
-      <span className="shrink-0">you are</span>
+    // The label sits above rather than beside the field so this row starts at
+    // the same left edge as the code row, and matches its height - inline, it
+    // indented the input by its own width and stood 8px shorter.
+    <label className="flex w-full max-w-78 flex-col gap-1.5 text-sm text-g8/70">
+      <span className="px-1">you are</span>
       <input
         value={draft}
         maxLength={24}
@@ -175,7 +176,7 @@ function NameField() {
         }}
         aria-label="Your display name"
         className={cx(
-          'h-10 min-w-0 flex-1 rounded-tile border border-b8 bg-b8/15 px-3 text-g10',
+          'h-12 w-full min-w-0 rounded-tile border border-b8 bg-b8/15 px-4 text-base text-g10',
           'transition-[background-color,border-color,box-shadow] duration-200',
           'hover:bg-b8/25 focus:bg-b8/25 focus:shadow-[0_0_0_3px_rgb(85_112_253/0.3)] focus:outline-none',
         )}
@@ -368,7 +369,12 @@ function OnlineGame() {
 
   return (
     <Screen>
-      <div className="w-full animate-rise" style={{ animationDelay: '0.04s' }}>
+      {/* `relative z-10` is load-bearing, not decoration: `animate-rise` here
+          and `animate-board-in` on <main> both leave a persistent `transform`,
+          so each is its own stacking context at `z-index: auto` - and <main>,
+          coming second, would otherwise paint over the size picker's open
+          panel and swallow the clicks on its lower options. */}
+      <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
           left={you === X ? yourSeat : theirSeat}
@@ -409,9 +415,6 @@ function OnlineGame() {
           }}
         >
           <BackIcon />
-        </IconButton>
-        <IconButton as={Link} to="/" label="Back to home">
-          <HomeIcon />
         </IconButton>
       </footer>
 

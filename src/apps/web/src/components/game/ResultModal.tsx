@@ -60,7 +60,7 @@ export function ResultModal({
         )}
         style={{ animationDelay: '0.06s' }}
       >
-        <div className="flex flex-col items-center gap-4 rounded-[3.125rem] bg-raised px-6 py-10">
+        <div className="flex flex-col items-center gap-4 rounded-[3rem] bg-raised px-6 py-10">
           <div className="animate-pop text-[5rem] leading-none" style={{ animationDelay: '0.22s' }}>
             {/* A slow bob under the one-shot entrance, so the face stays alive
                 while the panel waits for a decision. */}

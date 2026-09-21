@@ -29,7 +29,12 @@ export function LocalGameScreen({ size }: LocalGameScreenProps) {
 
   return (
     <Screen>
-      <div className="w-full animate-rise" style={{ animationDelay: '0.04s' }}>
+      {/* `relative z-10` is load-bearing, not decoration: `animate-rise` here
+          and `animate-board-in` on <main> both leave a persistent `transform`,
+          so each is its own stacking context at `z-index: auto` - and <main>,
+          coming second, would otherwise paint over the size picker's open
+          panel and swallow the clicks on its lower options. */}
+      <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
           left={{ name: 'Player 1' }}

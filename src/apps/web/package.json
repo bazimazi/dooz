@@ -1,6 +1,6 @@
 {
   "name": "@dooz/web",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "dooz client - runs as a web app, a Tauri desktop app and a Tauri mobile app",

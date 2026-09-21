@@ -71,12 +71,18 @@ These need a [Rust toolchain](https://rustup.rs); everything else does not.
 npm run dev:desktop    # Windows, macOS or Linux window
 npm run build:desktop  # installers in apps/native/src-tauri/target/release/bundle
 
-npm run tauri --workspace @dooz/native -- android init
+npm run init:android   # scaffolds src/apps/native/src-tauri/gen/android
 npm run dev:android    # needs Android Studio + NDK
 
-npm run tauri --workspace @dooz/native -- ios init
+npm run init:ios       # scaffolds src/apps/native/src-tauri/gen/apple
 npm run dev:ios        # macOS + Xcode only
 ```
+
+`gen/` is generated, not committed, and `tauri android init` scaffolds it with
+Tauri's own launcher icons. The `init:*` scripts therefore run `tauri icon`
+straight afterwards, which overwrites them with the dooz icon. If a device ever
+shows the Tauri logo, the project was scaffolded some other way — `npm run
+icons` fixes it without a re-init.
 
 The mobile and desktop builds **must** be given `VITE_SERVER_URL`: they are
 served from `tauri://localhost` and have no origin to infer a server from. The

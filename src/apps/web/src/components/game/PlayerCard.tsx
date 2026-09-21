@@ -37,6 +37,11 @@ export function PlayerCard({
 }: PlayerCardProps) {
   const Avatar = kind === 'bot' ? BotAvatarIcon : AvatarIcon;
   const accent = player === X ? 'var(--color-p2)' : 'var(--color-y2)';
+  // X sits left of the size picker and O sits right of it. Scaling from the
+  // centre would grow the active card into that gap, leaving the picker 2px
+  // nearer one card than the other. Pinning the edge that faces the picker
+  // sends the growth outwards instead, so both gaps stay equal.
+  const growAwayFromCentre = player === X ? 'origin-right' : 'origin-left';
   const glow = player === X ? 'rgb(243 51 158 / 0.45)' : 'rgb(249 189 19 / 0.45)';
   const offline = connected === false;
 
@@ -45,6 +50,7 @@ export function PlayerCard({
       className={cx(
         'relative w-[6.125rem] rounded-panel border p-1',
         'transition-[transform,border-color,opacity] duration-300 ease-spring',
+        growAwayFromCentre,
         active ? 'scale-[1.04] border-transparent' : 'scale-100 border-b8',
         active && 'animate-glow-ring',
         offline && 'opacity-60',

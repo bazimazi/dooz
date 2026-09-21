@@ -28,7 +28,11 @@ export function BoardSizeCarousel({ value, onChange }: BoardSizeCarouselProps) {
 
   return (
     <div className="relative w-full">
-      <div className="overflow-hidden">
+      {/* The neighbouring previews are meant to peek in from the sides, but a
+          plain `overflow-hidden` sliced them off mid-tile against the arrows.
+          The mask only reaches the outer 12%, which is entirely neighbour - the
+          centred preview runs from 18% to 82% and is never touched. */}
+      <div className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
         <div
           className="flex items-center transition-transform duration-500 ease-spring"
           style={{

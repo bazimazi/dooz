@@ -690,7 +690,7 @@
    * it should - just instantly, with the decorative loops stopped after one
    * pass rather than running forever.
    */
-  /* @media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
@@ -705,5 +705,5 @@
     ::view-transition-new(*) {
       animation: none !important;
     }
-  } */
+  }
 }

@@ -31,8 +31,8 @@ export function GameHeader({ game, left, right, onBoardSizeChange }: GameHeaderP
       {onBoardSizeChange ? (
         <BoardSizeSelect value={game.size} onChange={onBoardSizeChange} />
       ) : (
-        <div className="animate-fade-in self-start pt-5 text-base whitespace-nowrap opacity-70">
-          {game.size} x {game.size}
+        <div className="w-[5.25rem] animate-fade-in self-start pt-5 text-center text-base whitespace-nowrap opacity-70">
+          {game.size} × {game.size}
         </div>
       )}
 

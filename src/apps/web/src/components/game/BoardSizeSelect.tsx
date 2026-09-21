@@ -46,65 +46,74 @@ export function BoardSizeSelect({ value, onChange, disabled = false }: BoardSize
   }
 
   return (
-    <div ref={containerRef} className="relative z-20 w-[4.5rem] self-start pt-5">
-      <button
-        type="button"
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((previous) => !previous)}
-        className={cx(
-          'flex h-10 w-full items-center justify-between gap-1 rounded-tile border border-b8 px-1.5',
-          'bg-b8/20 text-base whitespace-nowrap',
-          'transition-[background-color,transform] duration-200 ease-spring',
-          'hover:bg-b8/35 active:scale-95 active:duration-75',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-        )}
-      >
-        {value} x {value}
-        <ChevronDownIcon
-          className={cx('size-4 transition-transform duration-200', open && 'rotate-180')}
-        />
-      </button>
+    <div ref={containerRef} className="relative z-20 w-[5.25rem] self-start pt-5">
+      {/* The trigger and the panel share this wrapper so the panel can hang off
+          `top-full` - positioning it against the outer box needs the outer box's
+          own top padding folded into the offset, which is how it ended up
+          tucked under the trigger's rounded foot. */}
+      <div className="relative">
+        <button
+          type="button"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={listId}
+          onClick={() => setOpen((previous) => !previous)}
+          className={cx(
+            'flex h-10 w-full items-center justify-between gap-1.5 rounded-tile border border-b8 px-2.5',
+            'bg-b8/20 text-base whitespace-nowrap',
+            'transition-[background-color,transform] duration-200 ease-spring',
+            'hover:bg-b8/35 active:scale-95 active:duration-75',
+            'disabled:cursor-not-allowed disabled:opacity-50',
+          )}
+        >
+          {value} × {value}
+          <ChevronDownIcon
+            className={cx('size-4 transition-transform duration-200', open && 'rotate-180')}
+          />
+        </button>
 
-      <ul
-        id={listId}
-        role="listbox"
-        aria-label="Board size"
-        className={cx(
-          'absolute inset-x-0 top-13 origin-top overflow-hidden rounded-tile border border-b8',
-          'bg-b3/95 shadow-[0_18px_34px_-18px_rgb(0_0_0/0.9)] backdrop-blur-sm',
-          'transition-all duration-300 ease-spring',
-          open
-            ? 'max-h-40 scale-y-100 opacity-100'
-            : 'pointer-events-none max-h-0 scale-y-90 border-transparent opacity-0',
-        )}
-      >
-        {BOARD_SIZES.map((size, position) => (
-          <li key={size}>
-            <button
-              // Keyed on `open` so the stagger replays every time it is opened.
-              key={`${size}-${open}`}
-              type="button"
-              role="option"
-              aria-selected={size === value}
-              onClick={() => pick(size)}
-              className={cx(
-                'flex h-10 w-full items-center border-t border-b8 px-1.5 text-base first:border-t-0',
-                'transition-colors duration-150 hover:bg-b8/35',
-                size === value && 'bg-b8/20',
-                // The options unroll one after another rather than arriving as
-                // a block, which reads as the panel opening.
-                open && 'animate-option-in',
-              )}
-              style={open ? { animationDelay: `${0.05 + position * 0.05}s` } : undefined}
-            >
-              {size} x {size}
-            </button>
-          </li>
-        ))}
-      </ul>
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label="Board size"
+          className={cx(
+            'absolute inset-x-0 top-[calc(100%+0.375rem)] origin-top overflow-hidden',
+            'rounded-tile border border-b8',
+            'bg-b3/95 shadow-[0_18px_34px_-18px_rgb(0_0_0/0.9)] backdrop-blur-sm',
+            'transition-all duration-300 ease-spring',
+            open
+              ? 'max-h-40 scale-y-100 opacity-100'
+              : 'pointer-events-none max-h-0 scale-y-90 border-transparent opacity-0',
+          )}
+        >
+          {BOARD_SIZES.map((size, position) => (
+            <li key={size}>
+              <button
+                // Keyed on `open` so the stagger replays every time it is opened.
+                key={`${size}-${open}`}
+                type="button"
+                role="option"
+                aria-selected={size === value}
+                onClick={() => pick(size)}
+                className={cx(
+                  // Same horizontal padding as the trigger, so the closed and
+                  // open states read as one column of text.
+                  'flex h-10 w-full items-center border-t border-b8 px-2.5 text-base first:border-t-0',
+                  'transition-colors duration-150 hover:bg-b8/35',
+                  size === value && 'bg-b8/20',
+                  // The options unroll one after another rather than arriving as
+                  // a block, which reads as the panel opening.
+                  open && 'animate-option-in',
+                )}
+                style={open ? { animationDelay: `${0.05 + position * 0.05}s` } : undefined}
+              >
+                {size} × {size}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

@@ -45,7 +45,12 @@ export function BotGameScreen({ size, difficulty }: BotGameScreenProps) {
 
   return (
     <Screen>
-      <div className="w-full animate-rise" style={{ animationDelay: '0.04s' }}>
+      {/* `relative z-10` is load-bearing, not decoration: `animate-rise` here
+          and `animate-board-in` on <main> both leave a persistent `transform`,
+          so each is its own stacking context at `z-index: auto` - and <main>,
+          coming second, would otherwise paint over the size picker's open
+          panel and swallow the clicks on its lower options. */}
+      <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
           left={{ name: 'You' }}
@@ -136,16 +141,19 @@ function DifficultyPicker({
   const index = DIFFICULTIES.findIndex((option) => option.value === value);
 
   return (
+    // The track's inset is 4px rather than 2px: at 2px the selected pill all
+    // but touched the border it sits inside, and `rounded-xl` is exactly
+    // `rounded-tile` minus that inset, so the two corners nest.
     <div
       role="radiogroup"
       aria-label="Bot difficulty"
-      className="relative grid grid-cols-3 rounded-tile border border-b8 bg-b8/15 p-0.5"
+      className="relative grid grid-cols-3 rounded-tile border border-b8 bg-b8/15 p-1"
     >
       <span
         aria-hidden="true"
         className={cx(
-          'pointer-events-none absolute inset-y-0.5 left-0.5 rounded-xl bg-b8',
-          'w-[calc((100%-0.25rem)/3)] transition-transform duration-300 ease-spring',
+          'pointer-events-none absolute inset-y-1 left-1 rounded-xl bg-b8',
+          'w-[calc((100%-0.5rem)/3)] transition-transform duration-300 ease-spring',
         )}
         style={{ transform: `translateX(${index * 100}%)` }}
       />
@@ -158,7 +166,7 @@ function DifficultyPicker({
           aria-checked={option.value === value}
           onClick={() => onChange(option.value)}
           className={cx(
-            'relative z-1 rounded-xl px-3.5 py-1.5 text-sm',
+            'relative z-1 rounded-xl px-3.5 py-2 text-sm',
             'transition-[color,transform] duration-200 ease-spring active:scale-95',
             option.value === value ? 'text-g10' : 'text-g8/70 hover:text-g10',
           )}

@@ -1,6 +1,6 @@
 {
   "name": "@dooz/native",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Tauri shell that ships the dooz web client as a desktop and mobile app",
@@ -8,10 +8,10 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
-    "android:init": "tauri android init",
+    "android:init": "tauri android init && npm run icons",
     "android:dev": "tauri android dev",
     "android:build": "tauri android build",
-    "ios:init": "tauri ios init",
+    "ios:init": "tauri ios init && npm run icons",
     "ios:dev": "tauri ios dev",
     "ios:build": "tauri ios build",
     "icons": "tauri icon ../web/public/icon-512.png"
