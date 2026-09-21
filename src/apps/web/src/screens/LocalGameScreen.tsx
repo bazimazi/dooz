@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { Board } from '@/components/game/Board';
 import { GameControls } from '@/components/game/GameControls';
 import { GameHeader } from '@/components/game/GameHeader';
-import { outcomeMark, ResultModal } from '@/components/game/ResultModal';
+import { outcomeMark, ResultModal, revealDelayFor } from '@/components/game/ResultModal';
 import { Screen } from '@/components/ui/Screen';
 import { useGame } from '@/features/game/useGame';
 import { savePreferences } from '@/lib/preferences';
@@ -17,9 +17,20 @@ export function LocalGameScreen({ size }: LocalGameScreenProps) {
   const navigate = useNavigate();
   const { game, play, restart } = useGame(size);
 
+  /**
+   * The size lives in the URL so the screen can be linked to or reloaded, but
+   * changing it is a setting change, not a move between screens:
+   * `viewTransition: false` keeps the document from cross-fading, and `replace`
+   * keeps Back pointing at the home screen rather than at the previous size.
+   */
   function changeSize(next: BoardSize) {
     savePreferences({ boardSize: next });
-    void navigate({ to: '/play/local', search: { size: next } });
+    void navigate({
+      to: '/play/local',
+      search: { size: next },
+      replace: true,
+      viewTransition: false,
+    });
   }
 
   const finished = game.status !== 'playing';
@@ -60,6 +71,7 @@ export function LocalGameScreen({ size }: LocalGameScreenProps) {
           art={outcomeMark(game.winner)}
           onRestart={restart}
           celebrate={game.winner !== null}
+          revealDelay={revealDelayFor(game)}
         />
       ) : null}
     </Screen>

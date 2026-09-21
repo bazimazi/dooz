@@ -1,5 +1,5 @@
 import { type GameState, type Player, X } from '@dooz/engine';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Confetti } from '@/components/art/Confetti';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
@@ -17,11 +17,67 @@ interface ResultModalProps {
   note?: ReactNode;
   /** Fires the confetti. Set only when the person at this device won. */
   celebrate?: boolean;
+  /**
+   * Milliseconds to leave the finished board uncovered before arriving.
+   * `revealDelayFor` works it out from the game; zero arrives immediately.
+   */
+  revealDelay?: number;
 }
 
 /**
  * The end-of-game panel.
  *
+ * It holds off for `revealDelay` first. The panel dims and blurs the whole
+ * board behind it, so arriving the instant the game ends means covering the
+ * winning line while it is still being drawn - the one thing the player has
+ * been waiting the whole game to see.
+ *
+ * The wait is a delay to the mount rather than a hidden panel, so the panel and
+ * its focus trap come up together and nothing invisible is holding focus over
+ * the board in the meantime. A tap or a keypress ends it early.
+ */
+export function ResultModal({ revealDelay = 0, ...panel }: ResultModalProps) {
+  return useRevealed(revealDelay) ? <ResultPanel {...panel} /> : null;
+}
+
+/** `true` once `delay` has passed since mounting, or the player cuts it short. */
+function useRevealed(delay: number): boolean {
+  const [revealed, setRevealed] = useState(delay <= 0);
+
+  useEffect(() => {
+    if (revealed) return;
+
+    const reveal = () => setRevealed(true);
+    const timer = setTimeout(reveal, delay);
+    // Somebody who has seen enough should not have to sit through the rest of
+    // it, so any tap or key brings the panel in early. The interaction that
+    // ended the game is already over by the time this is listening.
+    document.addEventListener('pointerdown', reveal);
+    document.addEventListener('keydown', reveal);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', reveal);
+      document.removeEventListener('keydown', reveal);
+    };
+  }, [delay, revealed]);
+
+  return revealed;
+}
+
+/**
+ * How long to leave a finished board alone before the panel covers it.
+ *
+ * A win line takes 0.55s to draw itself - a 0.1s delay and a 0.45s sweep - and
+ * is the point of the whole game, so the panel waits for that and leaves it on
+ * screen a beat longer. A draw has no line to watch, only the board settling,
+ * so its pause is just long enough that the panel does not feel like a cut.
+ */
+export function revealDelayFor(game: GameState): number {
+  return game.winLine ? 1250 : 700;
+}
+
+/**
  * There is deliberately no dismiss affordance: the two ways out of a finished
  * game are to play again or to go home, and both are in the panel. That is also
  * why `useDialog` is given no escape handler here - there is nothing for Escape
@@ -31,7 +87,7 @@ interface ResultModalProps {
  * buttons - because the result is the one moment in the game worth pausing on.
  * The whole sequence is under half a second, so it never delays a rematch.
  */
-export function ResultModal({
+function ResultPanel({
   title,
   art,
   onRestart,
@@ -39,7 +95,7 @@ export function ResultModal({
   restartDisabled,
   note,
   celebrate = false,
-}: ResultModalProps) {
+}: Omit<ResultModalProps, 'revealDelay'>) {
   // Moves focus in, traps Tab, and makes the board behind it inert - without
   // which `aria-modal` below would be a claim the page does not honour.
   const panelRef = useDialog<HTMLDivElement>();

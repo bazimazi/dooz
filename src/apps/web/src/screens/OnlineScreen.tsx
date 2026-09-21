@@ -12,7 +12,12 @@ import {
 } from '@/components/art/icons';
 import { Board } from '@/components/game/Board';
 import { GameHeader } from '@/components/game/GameHeader';
-import { outcomeFor, outcomeMark, ResultModal } from '@/components/game/ResultModal';
+import {
+  outcomeFor,
+  outcomeMark,
+  ResultModal,
+  revealDelayFor,
+} from '@/components/game/ResultModal';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
@@ -426,6 +431,9 @@ function OnlineGame() {
           restartLabel={rematchRequested ? 'waiting for opponent' : 'play again'}
           restartDisabled={phase === 'opponentLeft' || rematchRequested}
           celebrate={phase !== 'opponentLeft' && outcome === 'win'}
+          // An opponent walking out is not a board moment to watch, so that
+          // panel arrives at once; a finished game waits for its win line.
+          revealDelay={phase === 'opponentLeft' ? 0 : revealDelayFor(game)}
           note={
             phase === 'opponentLeft'
               ? 'they closed the game'

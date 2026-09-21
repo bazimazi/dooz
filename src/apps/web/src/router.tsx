@@ -39,9 +39,7 @@ const localRoute = createRoute({
   }),
   component: function LocalRoute() {
     const { size } = localRoute.useSearch();
-    // Remounting on a size change resets the game rather than trying to carry
-    // a position onto a different board.
-    return <LocalGameScreen key={size} size={size} />;
+    return <LocalGameScreen size={size} />;
   },
 });
 
@@ -59,7 +57,7 @@ const botRoute = createRoute({
   },
   component: function BotRoute() {
     const { size, difficulty } = botRoute.useSearch();
-    return <BotGameScreen key={size} size={size} difficulty={difficulty} />;
+    return <BotGameScreen size={size} difficulty={difficulty} />;
   },
 });
 
@@ -105,7 +103,10 @@ export const router = createRouter({
   scrollRestoration: false,
   // Every navigation goes through the View Transitions API where the browser
   // has it, so a screen change is one continuous move. Browsers without it
-  // simply swap as before - the styling for it lives in `theme.css`.
+  // simply swap as before - the styling for it lives in `theme.css`. Changing a
+  // setting on the screen you are already on opts out per navigation: the
+  // transition animates the whole document, which on a game screen reads as the
+  // page reloading under you.
   defaultViewTransition: true,
 });
 

@@ -3,7 +3,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { Board } from '@/components/game/Board';
 import { GameControls } from '@/components/game/GameControls';
 import { GameHeader } from '@/components/game/GameHeader';
-import { outcomeFace, outcomeFor, ResultModal } from '@/components/game/ResultModal';
+import {
+  outcomeFace,
+  outcomeFor,
+  ResultModal,
+  revealDelayFor,
+} from '@/components/game/ResultModal';
 import { Screen } from '@/components/ui/Screen';
 import { useBotOpponent } from '@/features/bot/useBotOpponent';
 import { useGame } from '@/features/game/useGame';
@@ -33,10 +38,17 @@ export function BotGameScreen({ size, difficulty }: BotGameScreenProps) {
     onMove: play,
   });
 
+  /**
+   * Board size and difficulty live in the URL, so the screen can be linked to
+   * or reloaded - but changing one is a setting change, not a move between
+   * screens. `viewTransition: false` keeps the document from cross-fading, and
+   * `replace` keeps Back pointing at the home screen rather than walking back
+   * through every setting the player tried.
+   */
   function goTo(next: { size?: BoardSize; difficulty?: BotDifficulty }) {
     const search = { size: next.size ?? size, difficulty: next.difficulty ?? difficulty };
-    savePreferences(search);
-    void navigate({ to: '/play/bot', search });
+    savePreferences({ boardSize: search.size, difficulty: search.difficulty });
+    void navigate({ to: '/play/bot', search, replace: true, viewTransition: false });
   }
 
   const finished = game.status !== 'playing';
@@ -87,6 +99,7 @@ export function BotGameScreen({ size, difficulty }: BotGameScreenProps) {
           art={outcomeFace(outcome)}
           onRestart={restart}
           celebrate={outcome === 'win'}
+          revealDelay={revealDelayFor(game)}
         />
       ) : null}
     </Screen>

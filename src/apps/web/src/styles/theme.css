@@ -104,6 +104,8 @@
   --animate-float-c: float-c 22s ease-in-out infinite;
   --animate-glow-ring: glow-ring 2.4s ease-in-out infinite;
   --animate-bob: bob 2.2s ease-in-out infinite;
+  /* The ring that pings out from the avatar of whoever is to move. */
+  --animate-turn-ping: turn-ping 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   --animate-dot: dot 1.1s ease-in-out infinite;
   --animate-tear: tear 3s 0.8s ease-in infinite;
   --animate-wiggle: wiggle 2.6s ease-in-out infinite;
@@ -428,6 +430,26 @@
   }
   50% {
     transform: translateY(-4px);
+  }
+}
+
+/**
+ * Whose turn it is, said once every few seconds.
+ *
+ * It starts a touch inside the avatar and leaves from outside it, so the ping
+ * reads as coming off the player rather than sitting around them. The long
+ * still tail is deliberate: two of these on screen would be a strobe, and only
+ * one card ever runs it.
+ */
+@keyframes turn-ping {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.94);
+  }
+  55%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
   }
 }
 

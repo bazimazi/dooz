@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { createGame, X } from '@dooz/engine';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithRouter } from '@/test/router';
-import { ResultModal } from './ResultModal';
+import { ResultModal, revealDelayFor } from './ResultModal';
 
 function renderModal() {
   return renderWithRouter(
@@ -40,6 +41,35 @@ describe('ResultModal', () => {
     expect(
       screen.getByRole('button', { name: 'behind the panel' }).closest('[inert]'),
     ).not.toBeNull();
+  });
+
+  /**
+   * The panel dims and blurs the board behind it, so arriving the moment the
+   * game ends covers the winning line while it is still being drawn.
+   */
+  describe('the wait before it arrives', () => {
+    it('leaves the board alone for the reveal delay', async () => {
+      await renderWithRouter(
+        <ResultModal title="you Won!" art={null} onRestart={vi.fn()} revealDelay={1000} />,
+      );
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('can be cut short by a tap', async () => {
+      await renderWithRouter(
+        <ResultModal title="you Won!" art={null} onRestart={vi.fn()} revealDelay={100_000} />,
+      );
+
+      await userEvent.click(document.body);
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    });
+
+    it('waits longer for a game with a line to watch than for a draw', () => {
+      const won = createGame(3, X);
+      expect(revealDelayFor({ ...won, winLine: [0, 1, 2] })).toBeGreaterThan(
+        revealDelayFor({ ...won, status: 'draw' }),
+      );
+    });
   });
 
   it('gives the page back when it closes', async () => {

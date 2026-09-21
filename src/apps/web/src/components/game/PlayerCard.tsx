@@ -21,10 +21,13 @@ interface PlayerCardProps {
  * One of the two cards flanking the board header.
  *
  * Whose turn it is has to be readable at a glance from across a table, so the
- * active card does four things at once: it lifts, its edge takes the player's
- * colour, that edge breathes, and the avatar bobs. Every one of them is a
- * transition or a loop rather than a swap, so the turn passing between the two
- * cards is a single visible handover.
+ * two cards are pushed apart rather than the active one being decorated: the
+ * card to move lifts, brightens, takes the player's colour and pings; the one
+ * waiting sinks, dims and goes flat. Reading either card alone is enough,
+ * because it is being compared with the other one right beside it.
+ *
+ * Every part of that is a transition or a loop rather than a swap, so the turn
+ * passing between the two cards is a single visible handover.
  */
 export function PlayerCard({
   name,
@@ -42,27 +45,77 @@ export function PlayerCard({
   // nearer one card than the other. Pinning the edge that faces the picker
   // sends the growth outwards instead, so both gaps stay equal.
   const growAwayFromCentre = player === X ? 'origin-right' : 'origin-left';
-  const glow = player === X ? 'rgb(243 51 158 / 0.45)' : 'rgb(249 189 19 / 0.45)';
+  const glow = player === X ? 'rgb(243 51 158 / 0.55)' : 'rgb(249 189 19 / 0.55)';
   const offline = connected === false;
 
   return (
     <div
+      // `aria-current` rather than a label, so a screen reader hears which seat
+      // is to move from the seat itself - the visual cues all say it in colour
+      // and movement, which is to say they do not say it at all.
+      aria-current={active ? 'true' : undefined}
       className={cx(
         'relative w-[6.125rem] rounded-panel border p-1',
-        'transition-[transform,border-color,opacity] duration-300 ease-spring',
+        'transition-[transform,border-color,background-color,opacity,filter] duration-300 ease-spring',
         growAwayFromCentre,
-        active ? 'scale-[1.04] border-transparent' : 'scale-100 border-b8',
+        // The gap between the two states carries the meaning, so it is a wide
+        // one: six per cent up against five per cent down is a difference of
+        // size you can see without having to look for it.
+        active ? 'scale-[1.06] border-transparent' : 'scale-[0.95] border-b8/50',
         active && 'animate-glow-ring',
-        offline && 'opacity-60',
+        offline && 'opacity-50',
       )}
-      style={active ? ({ borderColor: accent, '--glow': glow } as React.CSSProperties) : undefined}
+      style={
+        active
+          ? // The card to move is framed in the player's own colour rather than
+            // outlined in it: filling the 4px gutter between the card's edge and
+            // its panel makes the colour a band you can see from across a table
+            // instead of a hairline. Tinting the panel itself was the other
+            // candidate and it muddied - pink and amber both go grey mixed into
+            // this blue.
+            ({
+              borderColor: accent,
+              backgroundColor: `color-mix(in srgb, ${accent} 85%, transparent)`,
+              '--glow': glow,
+            } as React.CSSProperties)
+          : // The waiting seat is turned down rather than faded out. Fading it
+            // let the canvas through, and this canvas is blue: at 70% the
+            // yellow O went a muddy brown, which reads as a disabled seat
+            // rather than one whose turn is simply next.
+            { filter: 'brightness(0.82) saturate(0.9)' }
+      }
     >
-      <div className="flex h-[7.5rem] flex-col items-center justify-around rounded-[1.25rem] bg-raised px-1">
-        {/* A bot that is searching casts about; a waiting player just bobs. */}
-        <Avatar
-          className={cx('size-12 origin-bottom', busy ? 'animate-sweep' : active && 'animate-bob')}
-          ring="var(--color-b2)"
-        />
+      <div
+        className={cx(
+          'flex h-[7.5rem] flex-col items-center justify-around rounded-[1.25rem] px-1',
+          'transition-colors duration-300 ease-soft',
+          // The waiting seat also sinks a step back into the canvas, so the two
+          // are separated by brightness as well as by the frame.
+          active ? 'bg-raised' : 'bg-b5',
+        )}
+      >
+        <span
+          className={cx(
+            'relative flex size-12 items-center justify-center',
+            active && !busy && 'animate-bob',
+          )}
+        >
+          {/* The ping, behind the avatar and pinned to it, so the card's own
+              breathing edge is not the only thing in motion on a turn. */}
+          {active ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 animate-turn-ping rounded-full"
+              style={{ boxShadow: `0 0 0 2px ${accent}` }}
+            />
+          ) : null}
+
+          {/* A bot that is searching casts about; a waiting player just bobs. */}
+          <Avatar
+            className={cx('size-12 origin-bottom', busy && 'animate-sweep')}
+            ring="var(--color-b2)"
+          />
+        </span>
 
         <div className="flex items-center gap-1">
           <span className="max-w-[5rem] truncate text-base leading-5" title={name}>
@@ -73,12 +126,15 @@ export function PlayerCard({
 
         <Mark
           player={player}
-          hole="var(--color-raised)"
+          // The cut-out has to match whichever panel the mark is sitting on.
+          hole={active ? 'var(--color-raised)' : 'var(--color-b5)'}
+          // Size and glow only: the card above is already dimming this mark, and
+          // fading it a second time here is what turned the yellow O brown.
           className={cx(
             'size-8 transition-[transform,filter] duration-300 ease-spring',
-            active ? 'scale-110' : 'scale-100 opacity-80',
+            active ? 'scale-115' : 'scale-90',
           )}
-          style={active ? { filter: `drop-shadow(0 0 8px ${glow})` } : undefined}
+          style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
         />
       </div>
 

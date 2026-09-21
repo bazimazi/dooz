@@ -45,6 +45,11 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
   // Roving tabindex: the grid is one tab stop and the arrow keys move within
   // it, so a 9x9 board does not put 81 stops in the page's tab order.
   const [focusIndex, setFocusIndex] = useState(0);
+  // The board changes size without this component remounting, so the anchor can
+  // be left pointing past the end of a smaller board - which would leave the
+  // grid with no tab stop at all. Falling back to the first cell keeps it
+  // reachable without discarding the anchor when the size comes back.
+  const focus = focusIndex < board.length ? focusIndex : 0;
 
   // Position in the winning run, so the run can light up cell by cell along
   // its own direction rather than all at once.
@@ -61,8 +66,8 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
     if (delta === undefined) return;
 
     // Left and right must not jump between rows.
-    const row = Math.floor(focusIndex / size);
-    const next = focusIndex + delta;
+    const row = Math.floor(focus / size);
+    const next = focus + delta;
     if (next < 0 || next >= board.length) return;
     if (Math.abs(delta) === 1 && Math.floor(next / size) !== row) return;
 
@@ -75,7 +80,10 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
     <div
       className={cx(
         'glass-edge relative w-full max-w-78 p-3 backdrop-blur-[3px]',
-        'transition-[box-shadow,opacity] duration-500 ease-soft',
+        // The radius is part of the transition because it changes with the
+        // board size, which now happens in place: the frame eases to the new
+        // rounding instead of snapping to it.
+        'transition-[box-shadow,opacity,border-radius] duration-500 ease-soft',
         // Waiting on the bot or the opponent: the board steps back rather than
         // going grey, so it is clear input is not wanted without the position
         // becoming harder to read.
@@ -87,7 +95,7 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
       style={{ borderRadius: radii.frame }}
     >
       <div
-        className="relative aspect-square w-full overflow-hidden bg-surface"
+        className="relative aspect-square w-full overflow-hidden bg-surface transition-[border-radius] duration-500 ease-soft"
         style={{ borderRadius: radii.inner }}
       >
         <div
@@ -127,7 +135,7 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
                     cell={cell}
                     currentPlayer={game.currentPlayer}
                     playable={cell === Empty && status === 'playing' && !disabled}
-                    tabStop={index === focusIndex}
+                    tabStop={index === focus}
                     winOrder={winOrder.get(index)}
                     onFocus={() => setFocusIndex(index)}
                     onPlay={onPlay}
