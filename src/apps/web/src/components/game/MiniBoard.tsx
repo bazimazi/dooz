@@ -1,67 +1,73 @@
-import { type BoardSize, Empty, O, WIN_LENGTH, X } from '@dooz/engine';
+import { type GameConfig, Empty, O, X } from '@dooz/engine';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 
 /**
- * A small, non-interactive board used as the preview on the home screen.
+ * A small, non-interactive board used as the preview on the mode picker.
  *
  * The sample position is generated rather than hand-listed so it stays honest:
- * the highlighted run is exactly `WIN_LENGTH` long for the size on show, which
- * is the one thing the preview is there to communicate.
+ * the highlighted run is exactly as long as the mode's win length, which is the
+ * one thing the preview is there to communicate. Ultimate gets its sub-board
+ * grid instead of a run, because that is what makes it different.
  */
-function samplePosition(size: BoardSize): { cells: number[]; winLine: number[] } {
+function samplePosition(config: GameConfig): { cells: number[]; winLine: number[] } {
+  const { size, winLength } = config;
   const cells: number[] = Array.from({ length: size * size }, () => Empty);
-  const need = WIN_LENGTH[size];
 
-  // A diagonal of X starting one cell in from the top-left corner.
-  const offset = size === 3 ? 0 : 1;
+  // A diagonal of X, centred so it reads as part of a board rather than an
+  // edge case, with O replies below it to show both marks.
+  const offset = Math.max(0, Math.floor((size - winLength) / 2));
   const winLine: number[] = [];
-  for (let step = 0; step < need; step++) {
+
+  for (let step = 0; step < winLength; step++) {
     const index = (offset + step) * size + (offset + step);
     cells[index] = X;
     winLine.push(index);
   }
 
-  // Some O replies below the diagonal, to show both marks.
-  for (let step = 0; step < need - 1; step++) {
+  for (let step = 0; step < winLength - 1; step++) {
     const row = offset + step + 1;
     const col = offset + step;
-    if (row < size) cells[row * size + col] = O;
+    if (row < size && col < size) cells[row * size + col] = O;
   }
 
   return { cells, winLine };
 }
 
 interface MiniBoardProps {
-  size: BoardSize;
+  config: GameConfig;
   /**
-   * True for the preview currently centred in the carousel. The sample position
-   * replays itself when a preview takes the centre, which is what makes the
-   * carousel feel like it is showing you a board rather than a thumbnail.
+   * True for the preview currently selected. The sample position replays
+   * itself when a preview is chosen, which is what makes the picker feel like
+   * it is showing you a board rather than a thumbnail.
    */
   active?: boolean;
   className?: string;
 }
 
-export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
-  const { cells, winLine } = samplePosition(size);
-  const first = winLine[0]!;
-  const last = winLine[winLine.length - 1]!;
+export function MiniBoard({ config, active = false, className }: MiniBoardProps) {
+  const { size } = config;
+  const { cells, winLine } = samplePosition(config);
+  const first = winLine[0] ?? 0;
+  const last = winLine.at(-1) ?? 0;
 
   const from = { x: (first % size) + 0.5, y: Math.floor(first / size) + 0.5 };
   const to = { x: (last % size) + 0.5, y: Math.floor(last / size) + 0.5 };
   const length = Math.hypot(to.x - from.x, to.y - from.y);
 
-  // Keying on `active` remounts the contents as a preview takes or gives up the
-  // centre, which is the only way to replay a one-shot CSS animation.
+  // Keying on `active` remounts the contents as a preview is chosen or dropped,
+  // which is the only way to replay a one-shot CSS animation.
   const replayKey = active ? 'active' : 'idle';
+  // Above this the marks are smaller than the animation is worth, and there are
+  // enough of them for the stagger to take longer than anybody will watch.
+  const animate = active && size <= 9;
 
   return (
     <div
       className={cx(
-        'relative aspect-square overflow-hidden rounded-2xl border border-b8/70 bg-surface/70',
+        'relative aspect-square overflow-hidden rounded-2xl border border-stroke-soft bg-surface/70',
         'transition-shadow duration-300 ease-soft',
-        active && 'shadow-[0_10px_30px_-14px_rgb(0_0_0/0.8)]',
+        active && 'shadow-[0_10px_30px_-14px_var(--color-shadow)]',
         className,
       )}
     >
@@ -72,9 +78,7 @@ export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
           // Both axes need explicit 1fr tracks. Left on `auto`, a row holding a
           // mark sizes to that mark and takes height from the empty ones, so
           // the cells stop being square - and the win line, which is drawn in
-          // an overlay whose units are cells, no longer lands on them. It only
-          // showed on 6x6 and 9x9: on 3x3 every row has a mark, so they all
-          // grew by the same amount.
+          // an overlay whose units are cells, no longer lands on them.
           gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
         }}
@@ -86,19 +90,28 @@ export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
               'flex items-center justify-center border-t border-r border-dashed border-grid/40',
               index < size && 'border-t-0',
               index % size === size - 1 && 'border-r-0',
+              // Ultimate's sub-board rules, so its preview looks like itself.
+              config.variant === 'ultimate' &&
+                index % 3 === 0 &&
+                index % size !== 0 &&
+                'border-l-2 border-l-stroke/70',
+              config.variant === 'ultimate' &&
+                Math.floor(index / size) % 3 === 0 &&
+                index >= size &&
+                'border-t-2 border-t-stroke/70',
             )}
           >
             {cell !== Empty ? (
               <Mark
-                player={cell as 1 | 2}
+                player={cell === X ? X : O}
                 hole="var(--color-surface)"
                 className={cx(
                   'w-[70%]',
-                  active && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                  animate && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
                 )}
                 // The marks land in reading order rather than all together, so
                 // the eye is led along the run the preview is demonstrating.
-                style={active ? { animationDelay: `${0.06 + index * 0.012}s` } : undefined}
+                style={animate ? { animationDelay: `${0.06 + index * 0.012}s` } : undefined}
               />
             ) : null}
           </div>
@@ -116,7 +129,7 @@ export function MiniBoard({ size, active = false, className }: MiniBoardProps) {
           y1={from.y}
           x2={to.x}
           y2={to.y}
-          stroke="var(--color-p3)"
+          stroke="var(--color-mark-x-soft)"
           strokeWidth={0.08}
           strokeLinecap="round"
           strokeDasharray={length}

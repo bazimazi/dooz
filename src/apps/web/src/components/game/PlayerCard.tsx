@@ -1,20 +1,33 @@
 import { type Player, X } from '@dooz/engine';
-import { AvatarIcon, BotAvatarIcon, TurnCaret, WifiOffIcon } from '@/components/art/icons';
+import type { Avatar } from '@dooz/protocol';
+import { AvatarBadge } from '@/components/art/avatars';
+import { BotAvatarIcon, TurnCaret, WifiOffIcon } from '@/components/art/icons';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { MatchClock } from './MatchClock';
 
-interface PlayerCardProps {
+export interface SeatInfo {
   name: string;
-  player: Player;
-  /** Draws the caret and the coloured edge when it is this player's turn. */
-  active: boolean;
-  kind?: 'human' | 'bot';
+  avatar?: Avatar;
+  kind?: 'human' | 'bot' | 'local';
   /** Online only. `undefined` means presence does not apply. */
   connected?: boolean;
   /** Marks the seat as belonging to the person at this device. */
   isYou?: boolean;
   /** Seat is working on something - the bot searching for its move. */
   busy?: boolean;
+  /** Shown under the name in ranked play. */
+  rating?: number | null;
+  /** Milliseconds left, when this game is timed. */
+  timeMs?: number | null;
+  /** True while this seat's clock is the one running down. */
+  ticking?: boolean;
+}
+
+interface PlayerCardProps extends SeatInfo {
+  player: Player;
+  /** Draws the caret and the coloured edge when it is this player's turn. */
+  active: boolean;
 }
 
 /**
@@ -33,19 +46,22 @@ export function PlayerCard({
   name,
   player,
   active,
+  avatar,
   kind = 'human',
   connected,
   isYou = false,
   busy = false,
+  rating = null,
+  timeMs = null,
+  ticking = false,
 }: PlayerCardProps) {
-  const Avatar = kind === 'bot' ? BotAvatarIcon : AvatarIcon;
-  const accent = player === X ? 'var(--color-p2)' : 'var(--color-y2)';
-  // X sits left of the size picker and O sits right of it. Scaling from the
-  // centre would grow the active card into that gap, leaving the picker 2px
-  // nearer one card than the other. Pinning the edge that faces the picker
+  const accent = player === X ? 'var(--color-mark-x)' : 'var(--color-mark-o)';
+  // X sits left of the centre column and O sits right of it. Scaling from the
+  // centre would grow the active card into that gap, leaving the column 2px
+  // nearer one card than the other. Pinning the edge that faces the centre
   // sends the growth outwards instead, so both gaps stay equal.
   const growAwayFromCentre = player === X ? 'origin-right' : 'origin-left';
-  const glow = player === X ? 'rgb(243 51 158 / 0.55)' : 'rgb(249 189 19 / 0.55)';
+  const glow = player === X ? 'var(--color-glow-x)' : 'var(--color-glow-o)';
   const offline = connected === false;
 
   return (
@@ -55,48 +71,45 @@ export function PlayerCard({
       // and movement, which is to say they do not say it at all.
       aria-current={active ? 'true' : undefined}
       className={cx(
-        'relative w-[6.125rem] rounded-panel border p-1',
-        'transition-[transform,border-color,background-color,opacity,filter] duration-300 ease-spring',
+        'relative w-[6.5rem] rounded-panel border p-1',
+        'transition-[transform,border-color,background-color,opacity] duration-300 ease-spring',
         growAwayFromCentre,
         // The gap between the two states carries the meaning, so it is a wide
         // one: six per cent up against five per cent down is a difference of
         // size you can see without having to look for it.
-        active ? 'scale-[1.06] border-transparent' : 'scale-[0.95] border-b8/50',
+        active ? 'scale-[1.06] border-transparent' : 'scale-[0.95] border-stroke-soft',
         active && 'animate-glow-ring',
         offline && 'opacity-50',
       )}
+      // The card to move is framed in the player's own colour rather than
+      // outlined in it: filling the gutter between the card's edge and its
+      // panel makes the colour a band you can see from across a table instead
+      // of a hairline.
+      //
+      // The waiting card carries no filter. Dimming it worked on the dark
+      // canvas and turned a near-white card grey on the light one; the size,
+      // the border and the two background tokens already say everything the
+      // filter was saying.
       style={
         active
-          ? // The card to move is framed in the player's own colour rather than
-            // outlined in it: filling the 4px gutter between the card's edge and
-            // its panel makes the colour a band you can see from across a table
-            // instead of a hairline. Tinting the panel itself was the other
-            // candidate and it muddied - pink and amber both go grey mixed into
-            // this blue.
-            ({
+          ? ({
               borderColor: accent,
               backgroundColor: `color-mix(in srgb, ${accent} 85%, transparent)`,
               '--glow': glow,
             } as React.CSSProperties)
-          : // The waiting seat is turned down rather than faded out. Fading it
-            // let the canvas through, and this canvas is blue: at 70% the
-            // yellow O went a muddy brown, which reads as a disabled seat
-            // rather than one whose turn is simply next.
-            { filter: 'brightness(0.82) saturate(0.9)' }
+          : undefined
       }
     >
       <div
         className={cx(
-          'flex h-[7.5rem] flex-col items-center justify-around rounded-[1.25rem] px-1',
+          'flex flex-col items-center justify-between gap-1 rounded-[1.25rem] px-1 py-2.5',
           'transition-colors duration-300 ease-soft',
-          // The waiting seat also sinks a step back into the canvas, so the two
-          // are separated by brightness as well as by the frame.
-          active ? 'bg-raised' : 'bg-b5',
+          active ? 'bg-raised' : 'bg-seat-idle',
         )}
       >
         <span
           className={cx(
-            'relative flex size-12 items-center justify-center',
+            'relative flex size-11 items-center justify-center',
             active && !busy && 'animate-bob',
           )}
         >
@@ -110,36 +123,68 @@ export function PlayerCard({
             />
           ) : null}
 
-          {/* A bot that is searching casts about; a waiting player just bobs. */}
-          <Avatar
-            className={cx('size-12 origin-bottom', busy && 'animate-sweep')}
-            ring="var(--color-b2)"
-          />
+          {kind === 'bot' ? (
+            <BotAvatarIcon
+              className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
+              ring="var(--color-seat-idle)"
+            />
+          ) : kind === 'local' ? (
+            // Two people at one device have no accounts and so no avatars. A
+            // pair of identical default faces told them apart less well than
+            // the marks they are actually playing with.
+            <Mark
+              player={player}
+              hole={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
+              className="size-10"
+              style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
+            />
+          ) : (
+            <AvatarBadge
+              avatar={avatar ?? 'fox'}
+              ring={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
+              className="size-11"
+            />
+          )}
         </span>
 
-        <div className="flex items-center gap-1">
-          <span className="max-w-[5rem] truncate text-base leading-5" title={name}>
-            {name}
+        <div className="flex w-full flex-col items-center gap-0.5">
+          <span className="flex items-center gap-1">
+            <span
+              className={cx(
+                'max-w-[5rem] truncate text-sm leading-4',
+                active ? 'text-on-raised' : 'text-ink',
+              )}
+              title={name}
+            >
+              {name}
+            </span>
+            {offline ? <WifiOffIcon className="size-3.5 animate-pulse-soft" /> : null}
           </span>
-          {offline ? <WifiOffIcon className="size-3.5 animate-pulse-soft text-g8" /> : null}
+
+          {rating !== null ? (
+            <span className={cx('tnum text-xs', active ? 'text-on-raised/70' : 'text-ink-faint')}>
+              {rating}
+            </span>
+          ) : null}
         </div>
 
-        <Mark
-          player={player}
-          // The cut-out has to match whichever panel the mark is sitting on.
-          hole={active ? 'var(--color-raised)' : 'var(--color-b5)'}
-          // Size and glow only: the card above is already dimming this mark, and
-          // fading it a second time here is what turned the yellow O brown.
-          className={cx(
-            'size-8 transition-[transform,filter] duration-300 ease-spring',
-            active ? 'scale-115' : 'scale-90',
-          )}
-          style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
-        />
+        {timeMs !== null ? (
+          <MatchClock remainingMs={timeMs} ticking={ticking} compact />
+        ) : kind === 'local' ? null : (
+          <Mark
+            player={player}
+            hole={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
+            className={cx(
+              'size-7 transition-[transform,filter] duration-300 ease-spring',
+              active ? 'scale-115' : 'scale-90',
+            )}
+            style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
+          />
+        )}
       </div>
 
       {isYou ? (
-        <span className="absolute -top-2 left-1/2 animate-badge-in rounded-full bg-b2 px-2 py-0.5 text-[0.625rem] tracking-wide uppercase">
+        <span className="absolute -top-2 left-1/2 animate-badge-in rounded-full border border-stroke-soft bg-seat-idle px-2 py-0.5 text-[0.6875rem] tracking-wide text-ink uppercase">
           you
         </span>
       ) : null}

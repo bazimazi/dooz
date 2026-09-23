@@ -35,8 +35,8 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
           {/* A pool of light behind the content column, so the middle of the
               screen sits slightly proud of the corners. */}
           <radialGradient id="dooz-glow" cx="50%" cy="42%" r="62%">
-            <stop offset="0%" stopColor="var(--color-b5)" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="var(--color-b5)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--color-backdrop-glow)" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="var(--color-backdrop-glow)" stopOpacity="0" />
           </radialGradient>
         </defs>
 
@@ -44,12 +44,15 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
 
         {/* Ring, top left */}
         <g className="origin-center animate-float-a transform-fill">
-          <circle cx="80.5" cy="9.5" r="58.5" fill="var(--color-b4)" />
+          <circle cx="80.5" cy="9.5" r="58.5" fill="var(--color-backdrop-shape)" />
           <circle cx="80.5" cy="9.5" r="32.5" fill="var(--color-canvas)" />
         </g>
 
         {/* Cross, top right */}
-        <g fill="var(--color-b4)" className="origin-center animate-float-b transform-fill">
+        <g
+          fill="var(--color-backdrop-shape)"
+          className="origin-center animate-float-b transform-fill"
+        >
           <rect
             x="248.804"
             y="37.634"
@@ -69,7 +72,10 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
         </g>
 
         {/* Small cross, middle right */}
-        <g fill="var(--color-b4)" className="origin-center animate-float-c transform-fill">
+        <g
+          fill="var(--color-backdrop-shape)"
+          className="origin-center animate-float-c transform-fill"
+        >
           <rect
             x="160.9"
             y="179.955"
@@ -90,13 +96,13 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
 
         {/* Ring, bottom left */}
         <g className="origin-center animate-float-b [animation-delay:-6s] transform-fill">
-          <circle cx="53" cy="597" r="65" fill="var(--color-b4)" />
+          <circle cx="53" cy="597" r="65" fill="var(--color-backdrop-shape)" />
           <circle cx="53" cy="597" r="36.111" fill="var(--color-canvas)" />
         </g>
 
         {/* Cross, bottom right */}
         <g
-          fill="var(--color-b4)"
+          fill="var(--color-backdrop-shape)"
           className="origin-center animate-float-a [animation-delay:-4s] transform-fill"
         >
           <rect
@@ -121,11 +127,11 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
           <g filter="url(#dooz-soft)" opacity="0.75">
             {/* Out-of-focus pieces pooled at the foot of the home screen. */}
             <g className="origin-center animate-float-c transform-fill">
-              <circle cx="248" cy="470" r="34" fill="var(--color-y2)" opacity="0.55" />
+              <circle cx="248" cy="470" r="34" fill="var(--color-mark-o)" opacity="0.55" />
               <circle cx="248" cy="470" r="16" fill="var(--color-canvas)" />
             </g>
             <g
-              fill="var(--color-p2)"
+              fill="var(--color-mark-x)"
               opacity="0.5"
               className="origin-center animate-float-a [animation-delay:-9s] transform-fill"
             >
@@ -140,7 +146,7 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
               />
             </g>
             <g className="origin-center animate-float-b [animation-delay:-12s] transform-fill">
-              <circle cx="96" cy="592" r="46" fill="var(--color-y2)" opacity="0.4" />
+              <circle cx="96" cy="592" r="46" fill="var(--color-mark-o)" opacity="0.4" />
               <circle cx="96" cy="592" r="22" fill="var(--color-canvas)" />
             </g>
           </g>

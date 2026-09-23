@@ -25,9 +25,10 @@ export default defineConfig({
             registerType: 'autoUpdate',
             includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
             manifest: {
-              name: 'dooz - Tic Tac Toe',
+              name: 'dooz - in-a-row strategy',
               short_name: 'dooz',
-              description: 'Tic Tac Toe on 3x3, 6x6 and 9x9 boards. Play a friend, or the bot.',
+              description:
+                'Tic Tac Toe, Gomoku, Misère and Ultimate. Play a friend, a six-level bot, or a rated ladder.',
               theme_color: '#232599',
               background_color: '#232599',
               display: 'standalone',

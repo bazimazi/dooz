@@ -9,29 +9,29 @@
  */
 const DEV_SERVER_PORT = 8787;
 
-export function multiplayerSocketUrl(): string {
+/** The origin the HTTP API is served from, with no trailing slash. */
+export function httpBaseUrl(): string {
   const configured = import.meta.env.VITE_SERVER_URL;
-  if (configured) return toWebSocketUrl(configured);
+  if (configured) return stripTrailingSlash(configured);
 
-  if (typeof window === 'undefined') return `ws://localhost:${DEV_SERVER_PORT}/ws`;
+  if (typeof window === 'undefined') return `http://localhost:${DEV_SERVER_PORT}`;
 
   const { protocol, hostname, origin } = window.location;
-  // A Tauri window has no HTTP origin to fall back on, so this is a
-  // misconfiguration rather than something to paper over.
   if (protocol !== 'http:' && protocol !== 'https:') {
     throw new Error('VITE_SERVER_URL must be set for the desktop and mobile builds');
   }
 
-  if (import.meta.env.DEV) return `ws://${hostname}:${DEV_SERVER_PORT}/ws`;
-  return toWebSocketUrl(origin);
+  if (import.meta.env.DEV) return `http://${hostname}:${DEV_SERVER_PORT}`;
+  return stripTrailingSlash(origin);
 }
 
-function toWebSocketUrl(base: string): string {
-  const url = new URL(base);
-  url.protocol =
-    url.protocol === 'https:' ? 'wss:' : url.protocol === 'http:' ? 'ws:' : url.protocol;
-  if (!url.pathname.endsWith('/ws')) {
-    url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
-  }
+export function multiplayerSocketUrl(): string {
+  const url = new URL(httpBaseUrl());
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
   return url.toString();
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
 }

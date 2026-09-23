@@ -1,15 +1,8 @@
 import { colOf, rowOf } from './board.js';
-import {
-  type Board,
-  type BoardSize,
-  Empty,
-  type Player,
-  WIN_LENGTH,
-  type WinLine,
-} from './types.js';
+import { type Board, Empty, type Player, type WinLine } from './types.js';
 
 /** Horizontal, vertical, and both diagonals as [rowStep, colStep] pairs. */
-const DIRECTIONS = [
+export const DIRECTIONS = [
   [0, 1],
   [1, 0],
   [1, 1],
@@ -26,11 +19,15 @@ const DIRECTIONS = [
  * Returns the full contiguous run (which may be longer than the win length)
  * ordered from one end to the other, or `null` if `index` is not part of a win.
  */
-export function findWinLineFrom(board: Board, size: BoardSize, index: number): WinLine | null {
+export function findWinLineFrom(
+  board: Board,
+  size: number,
+  index: number,
+  winLength: number,
+): WinLine | null {
   const player = board[index];
   if (player === undefined || player === Empty) return null;
 
-  const need = WIN_LENGTH[size];
   const row = rowOf(size, index);
   const col = colOf(size, index);
 
@@ -52,10 +49,45 @@ export function findWinLineFrom(board: Board, size: BoardSize, index: number): W
       c += dCol;
     }
 
-    if (run.length >= need) return run;
+    if (run.length >= winLength) return run;
   }
 
   return null;
+}
+
+/**
+ * Whether a run of `winLength` passes through `index`, without building it.
+ *
+ * The allocation-free half of {@link findWinLineFrom}, for the search - which
+ * asks this question at every node and never looks at the answer's contents.
+ */
+export function hasWinFrom(board: Board, size: number, index: number, winLength: number): boolean {
+  const player = board[index];
+  if (player === undefined || player === Empty) return false;
+
+  const row = rowOf(size, index);
+  const col = colOf(size, index);
+
+  for (const [dRow, dCol] of DIRECTIONS) {
+    let run = 1;
+    for (
+      let step = 1;
+      isPlayerAt(board, size, row + dRow * step, col + dCol * step, player);
+      step++
+    ) {
+      run++;
+    }
+    for (
+      let step = 1;
+      isPlayerAt(board, size, row - dRow * step, col - dCol * step, player);
+      step++
+    ) {
+      run++;
+    }
+    if (run >= winLength) return true;
+  }
+
+  return false;
 }
 
 /**
@@ -65,45 +97,41 @@ export function findWinLineFrom(board: Board, size: BoardSize, index: number): W
  */
 export function findAnyWinLine(
   board: Board,
-  size: BoardSize,
+  size: number,
+  winLength: number,
 ): { player: Player; line: WinLine } | null {
   for (let index = 0; index < board.length; index++) {
     const cell = board[index];
     if (cell === undefined || cell === Empty) continue;
-    const line = findWinLineFrom(board, size, index);
+    const line = findWinLineFrom(board, size, index, winLength);
     if (line) return { player: cell, line };
   }
   return null;
 }
 
 /**
- * True when placing `player` at `index` would immediately win.
+ * True when placing `player` at `index` would immediately complete a run.
  *
- * Tries the move on a copy. Playing it on the caller's array and undoing it
- * would save the allocation, but the array handed in here is usually a live
- * `GameState.board`, and briefly holding a mark nobody played is the kind of
- * thing that only breaks once something else reads the board in between.
+ * Tries the move in place and takes it back. The board handed in is sometimes a
+ * live `GameState.board`, so the mark must never be observable afterwards -
+ * hence the restore on every path rather than only the winning one.
  */
 export function isWinningMove(
   board: Board,
-  size: BoardSize,
+  size: number,
   index: number,
   player: Player,
+  winLength: number,
 ): boolean {
   if (board[index] !== Empty) return false;
 
-  const trial = board.slice();
-  trial[index] = player;
-  return findWinLineFrom(trial, size, index) !== null;
+  board[index] = player;
+  const won = hasWinFrom(board, size, index, winLength);
+  board[index] = Empty;
+  return won;
 }
 
-function isPlayerAt(
-  board: Board,
-  size: BoardSize,
-  row: number,
-  col: number,
-  player: Player,
-): boolean {
+function isPlayerAt(board: Board, size: number, row: number, col: number, player: Player): boolean {
   if (row < 0 || row >= size || col < 0 || col >= size) return false;
   return board[row * size + col] === player;
 }

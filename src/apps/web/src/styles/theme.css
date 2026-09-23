@@ -1,10 +1,17 @@
 @import 'tailwindcss';
 
 /**
- * Design tokens, lifted straight from the Figma palette so a colour in a mockup
- * can be found here by name. The `b/g/p/y` scales are the raw palette; the
- * semantic tokens below them are what components should normally reach for, so
- * a palette change lands in one place.
+ * Design tokens.
+ *
+ * Two layers, and the separation is the whole point. The `b/g/p/y` scales are
+ * the raw palette, lifted from the Figma file under the names it uses there, so
+ * a colour in a mockup can be found here. Everything a component reaches for is
+ * a *semantic* token below - `canvas`, `surface`, `ink` - which is what makes a
+ * second theme a block of redefinitions rather than an audit of every file.
+ *
+ * No component should name a raw palette colour. Where one does, it is either
+ * a player's mark (which is the same pink and amber in both themes, because it
+ * is the game's identity) or a bug.
  */
 @theme {
   /* Blue */
@@ -16,6 +23,8 @@
   --color-b6: #4152d5;
   --color-b7: #4b61e9;
   --color-b8: #5570fd;
+  --color-b9: #8698ff;
+  --color-b10: #c3ccff;
 
   /* Gray */
   --color-g1: #262626;
@@ -39,22 +48,25 @@
   --color-y2: #f9bd13;
   --color-y3: #ffd334;
 
-  /* Semantic aliases */
-  --color-canvas: var(--color-b3);
-  --color-surface: var(--color-b2);
-  --color-raised: var(--color-b8);
-  --color-stroke: var(--color-b8);
-  --color-grid: var(--color-g7);
-  --color-mark-x: var(--color-p2);
-  --color-mark-x-edge: var(--color-p1);
-  --color-mark-o: var(--color-y2);
-  --color-mark-o-edge: var(--color-y1);
+  /* Status. Deliberately not red and green alone: the win and threat hints
+     also differ in shape, so the pair is distinguishable without colour. */
+  --color-ok: #34d399;
+  --color-warn: #fbbf24;
+  --color-danger: #fb7185;
 
   --font-display: 'Joti One', 'Comic Sans MS', cursive;
   --font-sans: 'Open Sans Variable', 'Open Sans', system-ui, -apple-system, sans-serif;
 
   --radius-panel: 24px;
   --radius-tile: 16px;
+
+  /* The board's own width cap, so every screen agrees on how big it gets.
+     On a phone the gutters are the real constraint; this is what lets the
+     board grow into a tablet or desktop window instead of sitting small in
+     the middle of it. */
+  --container-board: 26rem;
+  --container-screen: 30rem;
+  --container-wide: 46rem;
 
   /**
    * Easing.
@@ -79,6 +91,7 @@
   --animate-option-in: option-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-toast-in: toast-in 0.3s cubic-bezier(0.22, 1.4, 0.36, 1) both;
   --animate-board-in: board-in 0.5s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+  --animate-emote-in: emote-in 0.35s cubic-bezier(0.22, 1.4, 0.36, 1) both;
 
   /* The pieces landing on the board */
   --animate-mark-x: mark-x 0.4s cubic-bezier(0.22, 1.5, 0.36, 1) both;
@@ -111,9 +124,172 @@
   --animate-wiggle: wiggle 2.6s ease-in-out infinite;
   --animate-slide-track: slide-track 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
   --animate-sweep: sweep 2.4s ease-in-out infinite;
+  --animate-tick: tick 1s steps(1) infinite;
 
   /* One-shot feedback */
   --animate-spin-once: spin-once 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Semantic tokens
+   --------------------------------------------------------------------------
+   Dark is the default because the board's contrast was drawn for it. Light is
+   a full second palette rather than an inversion: the same blue at low
+   lightness on a white page is unreadable, so the surfaces become near-white
+   and the accents darken to hold their contrast against them.
+   -------------------------------------------------------------------------- */
+@theme {
+  --color-canvas: var(--color-b3);
+  --color-surface: var(--color-b2);
+  --color-raised: var(--color-b6);
+  --color-sunken: var(--color-b1);
+  --color-stroke: var(--color-b8);
+  --color-stroke-soft: color-mix(in srgb, var(--color-b8) 45%, transparent);
+  --color-grid: var(--color-g7);
+
+  --color-ink: var(--color-g10);
+  --color-ink-muted: color-mix(in srgb, var(--color-g8) 88%, transparent);
+  --color-ink-faint: color-mix(in srgb, var(--color-g8) 74%, transparent);
+  --color-on-raised: var(--color-g10);
+
+  --color-mark-x: var(--color-p2);
+  --color-mark-x-edge: var(--color-p1);
+  --color-mark-x-soft: var(--color-p3);
+  --color-mark-o: var(--color-y2);
+  --color-mark-o-edge: var(--color-y1);
+  --color-mark-o-soft: var(--color-y3);
+
+  --color-glow-win: rgb(255 255 255 / 0.35);
+  --color-glow-x: rgb(243 51 158 / 0.55);
+  --color-glow-o: rgb(249 189 19 / 0.55);
+
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+
+  /* The decorative shapes behind every screen, and the faces on the result
+     panel. Both are drawn in SVG and need to survive a theme swap. */
+  /* The waiting player's card. Between the canvas and the active card, so the
+     seat reads as "next" rather than as "switched off" - at the darkest blue it
+     looked broken next to its lit neighbour. */
+  --color-seat-idle: var(--color-b5);
+
+  /* Buttons.
+     The lead action has to be the most prominent thing on the screen in both
+     themes, and the lead action has to stand out against *both* surfaces it
+     ever sits on - the canvas and the darker panel inside a modal. A fill
+     darker than either disappears into one of them, so primary is the
+     brightest blue in both themes and secondary steps down from it. Two
+     tokens per variant rather than one, so the label's contrast travels with
+     its fill. */
+  --color-btn-primary: var(--color-b7);
+  --color-on-btn-primary: var(--color-g10);
+  --color-btn-secondary: var(--color-b4);
+  --color-on-btn-secondary: var(--color-g10);
+
+  --color-backdrop-shape: var(--color-b4);
+  --color-backdrop-glow: var(--color-b5);
+  --color-face: var(--color-g9);
+  --color-face-ink: var(--color-b8);
+}
+
+/**
+ * Light.
+ *
+ * Applied when the system asks for it and the page has not been pinned to
+ * dark, or when it has been pinned to light. Both selectors carry the same
+ * block, which is why it lives in a custom property set rather than being
+ * written out twice.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --color-canvas: #eef1ff;
+    --color-surface: #ffffff;
+    --color-raised: #ffffff;
+    --color-sunken: #dde3ff;
+    --color-stroke: #b9c4ff;
+    --color-stroke-soft: rgb(85 112 253 / 0.28);
+    --color-grid: #aab4e0;
+
+    --color-ink: #16175e;
+    --color-ink-muted: rgb(22 23 94 / 0.86);
+    --color-ink-faint: rgb(22 23 94 / 0.72);
+    --color-on-raised: #16175e;
+
+    --color-mark-x: #d4008a;
+    --color-mark-x-edge: #8e0058;
+    --color-mark-x-soft: #ff6fd8;
+    --color-mark-o: #b07f00;
+    --color-mark-o-edge: #6f5000;
+    --color-mark-o-soft: #f2b400;
+
+    --color-ok: #047857;
+    --color-warn: #a16207;
+    --color-danger: #be123c;
+
+    --color-glow-win: rgb(85 112 253 / 0.3);
+    --color-glow-x: rgb(212 0 138 / 0.4);
+    --color-glow-o: rgb(176 127 0 / 0.4);
+
+    --color-scrim: rgb(22 23 94 / 0.45);
+    --color-shadow: rgb(22 23 94 / 0.35);
+
+    --color-seat-idle: #e4e9ff;
+
+    --color-btn-primary: #3b45c9;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #16175e;
+
+    --color-backdrop-shape: #dbe1ff;
+    --color-backdrop-glow: #c7d0ff;
+    --color-face: #ffd98a;
+    --color-face-ink: #16175e;
+  }
+}
+
+:root[data-theme='light'] {
+  --color-canvas: #eef1ff;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+  --color-sunken: #dde3ff;
+  --color-stroke: #b9c4ff;
+  --color-stroke-soft: rgb(85 112 253 / 0.28);
+  --color-grid: #aab4e0;
+
+  --color-ink: #16175e;
+  --color-ink-muted: rgb(22 23 94 / 0.86);
+  --color-ink-faint: rgb(22 23 94 / 0.72);
+  --color-on-raised: #16175e;
+
+  --color-mark-x: #d4008a;
+  --color-mark-x-edge: #8e0058;
+  --color-mark-x-soft: #ff6fd8;
+  --color-mark-o: #b07f00;
+  --color-mark-o-edge: #6f5000;
+  --color-mark-o-soft: #f2b400;
+
+  --color-ok: #047857;
+  --color-warn: #a16207;
+  --color-danger: #be123c;
+
+  --color-glow-win: rgb(85 112 253 / 0.3);
+  --color-glow-x: rgb(212 0 138 / 0.4);
+  --color-glow-o: rgb(176 127 0 / 0.4);
+
+  --color-scrim: rgb(22 23 94 / 0.45);
+  --color-shadow: rgb(22 23 94 / 0.35);
+
+  --color-seat-idle: #e4e9ff;
+
+  --color-btn-primary: #3b45c9;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #16175e;
+
+  --color-backdrop-shape: #dbe1ff;
+  --color-backdrop-glow: #c7d0ff;
+  --color-face: #ffd98a;
+  --color-face-ink: #16175e;
 }
 
 /* --------------------------------------------------------------------------
@@ -240,6 +416,22 @@
   }
 }
 
+/* An emote arrives from the side of the board its sender sits on. */
+@keyframes emote-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* X is dropped in with a twist; O is pressed down flat. Two different gestures
    so the two players' moves do not read as the same event. */
 @keyframes mark-x {
@@ -302,11 +494,11 @@
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 0 6px rgb(255 255 255 / 0.35));
+    filter: drop-shadow(0 0 6px var(--color-glow-win));
   }
   50% {
     transform: scale(1.12);
-    filter: drop-shadow(0 0 16px rgb(255 255 255 / 0.75));
+    filter: drop-shadow(0 0 16px var(--color-glow-win));
   }
 }
 
@@ -416,10 +608,10 @@
 @keyframes glow-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--glow, rgb(255 255 255 / 0.35));
+    box-shadow: 0 0 0 0 var(--glow, var(--color-glow-win));
   }
   50% {
-    box-shadow: 0 0 18px 2px var(--glow, rgb(255 255 255 / 0.35));
+    box-shadow: 0 0 18px 2px var(--glow, var(--color-glow-win));
   }
 }
 
@@ -463,6 +655,18 @@
   40% {
     opacity: 1;
     transform: translateY(-3px) scale(1);
+  }
+}
+
+/* The clock's own pulse once it is nearly out, one beat a second. */
+@keyframes tick {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0.45;
   }
 }
 
@@ -535,8 +739,8 @@
 
 /**
  * Utilities for the two gradient-bordered surfaces that recur all over the
- * design: the pill buttons on the home screen and the rounded tiles used for
- * player cards, the board frame and the icon buttons.
+ * design: the pill buttons and the rounded tiles used for player cards, the
+ * board frame and the icon buttons.
  *
  * Both use the `padding-box` / `border-box` two-gradient trick, which is the
  * only way to get a gradient border with a rounded corner and a solid fill.
@@ -546,17 +750,21 @@
   background:
     linear-gradient(var(--tile-fill, var(--color-b7)), var(--tile-fill, var(--color-b7)))
       padding-box,
-    linear-gradient(to right, rgb(255 255 255 / 0.5), var(--color-b8)) border-box;
+    linear-gradient(to right, var(--color-stroke-soft), var(--color-stroke)) border-box;
 }
 
 @utility glass-edge {
-  border: 1px solid var(--color-b8);
+  border: 1px solid var(--color-stroke);
+  /* A gradient rather than a flat tint: the board frame has to read as a raised
+     pane over the canvas, and a single translucent fill against a background
+     this close in value disappears. */
   background: linear-gradient(
     173deg,
-    rgb(73 93 228 / 0.32) -6%,
-    rgb(73 93 228 / 0.76) 13%,
-    rgb(73 93 228 / 0.46) 113%
+    color-mix(in srgb, var(--color-raised) 14%, transparent) -6%,
+    color-mix(in srgb, var(--color-raised) 42%, transparent) 13%,
+    color-mix(in srgb, var(--color-raised) 22%, transparent) 113%
   );
+  backdrop-filter: blur(3px);
 }
 
 @layer components {
@@ -624,6 +832,18 @@
   .stagger > *:nth-child(n + 8) {
     animation-delay: 0.46s;
   }
+
+  /**
+   * The only text style that is not a utility.
+   *
+   * Numbers that count - a clock, a rating, a score - are read as they change,
+   * and proportional digits make them jitter as the glyphs swap. Tabular
+   * figures hold the column still.
+   */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
 }
 
 @layer base {
@@ -643,7 +863,7 @@
 
   body {
     background-color: var(--color-canvas);
-    color: var(--color-g10);
+    color: var(--color-ink);
     font-family: var(--font-sans);
     /* The board is a tap target grid; stop iOS turning drags into text
        selections and double-taps into zooms. */
@@ -652,6 +872,18 @@
     user-select: none;
     overscroll-behavior: none;
     touch-action: manipulation;
+    transition:
+      background-color 0.3s var(--ease-soft),
+      color 0.3s var(--ease-soft);
+  }
+
+  /* Anything the player may want to copy - a room code, a rating - opts back
+     in. Blanket `user-select: none` is right for a board and wrong for text. */
+  .selectable,
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   button {
@@ -661,7 +893,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-g10);
+    outline: 2px solid var(--color-ink);
     outline-offset: 3px;
     border-radius: 4px;
     transition: outline-offset 0.15s cubic-bezier(0.22, 1, 0.36, 1);

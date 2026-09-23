@@ -5,22 +5,39 @@ import { decodeClientMessage, encode, PROTOCOL_VERSION } from '@dooz/protocol';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { createApi } from './api.js';
+import { Accounts } from './db/accounts.js';
+import { openDatabase } from './db/database.js';
+import { Matches } from './db/matches.js';
 import { Lobby } from './lobby.js';
+import { log } from './log.js';
 import type { Session } from './types.js';
 
-const PORT = Number(process.env.PORT ?? 8787);
+const PORT = Number(process.env['PORT'] ?? 8787);
 if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65_535) {
-  throw new Error(`PORT must be a port number, got ${process.env.PORT}`);
+  throw new Error(`PORT must be a port number, got ${process.env['PORT']}`);
 }
 
-const HOST = process.env.HOST ?? '0.0.0.0';
+const HOST = process.env['HOST'] ?? '0.0.0.0';
 /** Comma-separated list, or `*` to allow any origin (the default in development). */
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ?? '*';
+const ALLOWED_ORIGINS = process.env['ALLOWED_ORIGINS'] ?? '*';
 const ORIGIN_ALLOWLIST = ALLOWED_ORIGINS.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const SWEEP_INTERVAL_MS = 15_000;
+const DATA_FILE = process.env['DATA_FILE'] ?? './data/dooz.sqlite';
+
+/**
+ * How many accounts one address may create an hour.
+ *
+ * Configurable because the right number depends on what is in front of the
+ * server: behind a shared NAT or a corporate proxy every player looks like one
+ * address, and a test rig creating an account per run hits it in minutes.
+ */
+const SIGNUPS_PER_HOUR = Number(process.env['SIGNUPS_PER_HOUR'] ?? 20);
+
+/** How often clocks, abandoned games and the matchmaking bands are re-examined. */
+const TICK_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 /** Refuse frames larger than any legitimate client message could possibly be. */
 const MAX_FRAME_BYTES = 4 * 1024;
@@ -44,24 +61,32 @@ function isOriginAllowed(origin: string | undefined): boolean {
   return ORIGIN_ALLOWLIST.includes(origin);
 }
 
-const lobby = new Lobby();
+const db = openDatabase(DATA_FILE);
+const accounts = new Accounts(db);
+const matches = new Matches(db);
+const lobby = new Lobby(accounts, matches);
 
 const app = new Hono();
 
 app.use('*', cors({ origin: ALLOWED_ORIGINS === '*' ? '*' : ORIGIN_ALLOWLIST }));
 
-app.get('/health', (c) =>
-  c.json({
-    status: 'ok',
-    version: PROTOCOL_VERSION,
-    sessions: lobby.sessionCount,
-    rooms: lobby.roomCount,
-    queued: lobby.queuedCount,
+app.route(
+  '/',
+  createApi({
+    accounts,
+    matches,
+    db,
+    signupsPerHour: Number.isFinite(SIGNUPS_PER_HOUR) ? SIGNUPS_PER_HOUR : 20,
+    health: () => ({
+      sessions: lobby.sessionCount,
+      rooms: lobby.roomCount,
+      queued: lobby.queuedCount,
+    }),
   }),
 );
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST, createServer }, (info) => {
-  console.log(`dooz server listening on http://${HOST}:${info.port} (ws: /ws)`);
+  log.info('server.listening', { host: HOST, port: info.port, version: PROTOCOL_VERSION });
 });
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
@@ -73,11 +98,13 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
   if (!isOriginAllowed(request.headers.origin)) {
+    log.warn('ws.origin.rejected', { origin: request.headers.origin ?? null });
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;
   }
   if (lobby.atCapacity) {
+    log.warn('ws.capacity.rejected', { sessions: lobby.sessionCount });
     socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
     socket.destroy();
     return;
@@ -125,6 +152,7 @@ wss.on('connection', (socket: WebSocket) => {
     const text = Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8');
     const message = decodeClientMessage(text);
     if (!message) {
+      log.warn('ws.badMessage', { sessionId: session.id, bytes: text.length });
       session.transport.send({
         type: 'error',
         code: 'badMessage',
@@ -135,7 +163,10 @@ wss.on('connection', (socket: WebSocket) => {
     try {
       lobby.handle(session, message);
     } catch (error) {
-      console.error('failed to handle message', message.type, error);
+      log.exception('ws.handler.failed', error, {
+        sessionId: session.id,
+        messageType: message.type,
+      });
       session.transport.send({ type: 'error', code: 'badMessage', message: 'Server error.' });
     }
   });
@@ -148,7 +179,13 @@ wss.on('connection', (socket: WebSocket) => {
   socket.on('error', () => socket.close());
 });
 
-const sweeper = setInterval(() => lobby.sweep(), SWEEP_INTERVAL_MS);
+const ticker = setInterval(() => {
+  try {
+    lobby.tick();
+  } catch (error) {
+    log.exception('lobby.tick.failed', error);
+  }
+}, TICK_INTERVAL_MS);
 
 /**
  * Stop accepting work and go.
@@ -164,17 +201,28 @@ let shuttingDown = false;
 function shutdown(): void {
   if (shuttingDown) return;
   shuttingDown = true;
+  log.info('server.shutdown');
 
-  clearInterval(sweeper);
+  clearInterval(ticker);
   for (const client of wss.clients) client.terminate();
   wss.close();
 
-  const forced = setTimeout(() => process.exit(1), SHUTDOWN_GRACE_MS);
+  const forced = setTimeout(() => {
+    db.close();
+    process.exit(1);
+  }, SHUTDOWN_GRACE_MS);
   forced.unref();
+
   server.close(() => {
     clearTimeout(forced);
+    // Closing the database last checkpoints the write-ahead log, so a restart
+    // does not have to replay it.
+    db.close();
     process.exit(0);
   });
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
+
+process.on('uncaughtException', (error) => log.exception('process.uncaught', error));
+process.on('unhandledRejection', (reason) => log.exception('process.unhandled', reason));

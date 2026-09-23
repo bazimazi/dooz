@@ -1,21 +1,37 @@
 import type { ComponentPropsWithoutRef, CSSProperties, ElementType, ReactNode } from 'react';
 import { cx } from '@/lib/cx';
 
-type Variant = 'primary' | 'secondary';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Size = 'normal' | 'small';
 
-const VARIANT_FILL: Record<Variant, string> = {
-  // The lead action sits darker than the surface it is on, as in the design.
-  primary: 'var(--color-b2)',
-  secondary: 'var(--color-b7)',
+/**
+ * Fill and label colour per variant.
+ *
+ * Both travel together because the relationship between them inverts across
+ * the themes: on the dark canvas the lead action is the deepest block on the
+ * page, on the light one it is the only saturated one, and a single shared
+ * text colour cannot be legible on both.
+ */
+const VARIANT: Record<Variant, { fill: string; ink: string }> = {
+  primary: { fill: 'var(--color-btn-primary)', ink: 'var(--color-on-btn-primary)' },
+  secondary: { fill: 'var(--color-btn-secondary)', ink: 'var(--color-on-btn-secondary)' },
+  ghost: { fill: 'transparent', ink: 'var(--color-ink)' },
+  danger: {
+    fill: 'color-mix(in srgb, var(--color-danger) 70%, var(--color-btn-primary))',
+    ink: 'var(--color-g10)',
+  },
 };
 
 interface ButtonOwnProps {
   variant?: Variant;
+  size?: Size;
   icon?: ReactNode;
   children: ReactNode;
   className?: string;
   /** Merged with the variant fill rather than replacing it. */
   style?: CSSProperties;
+  /** Stretch to the container instead of the design's fixed pill width. */
+  block?: boolean;
 }
 
 type ButtonProps<T extends ElementType> = ButtonOwnProps &
@@ -23,6 +39,40 @@ type ButtonProps<T extends ElementType> = ButtonOwnProps &
     /** Render as something else - a router `Link`, usually. */
     as?: T;
   };
+
+/**
+ * The button's classes on their own.
+ *
+ * `as={Link}` covers most navigation, but a polymorphic component cannot carry
+ * the router's own inference for `search` and `params` - passing them through
+ * `ComponentPropsWithoutRef` loses the route-specific types that make those
+ * safe. Where a link needs them it is written as a real `<Link>` with these
+ * classes on it, which keeps the type checking and costs one import.
+ */
+export function buttonClasses(
+  options: { variant?: Variant; size?: Size; block?: boolean; className?: string } = {},
+): string {
+  const { variant = 'secondary', size = 'normal', block = false, className } = options;
+  const ghost = variant === 'ghost';
+
+  return cx(
+    'group flex items-center justify-center rounded-3xl no-underline',
+    !ghost && 'sheen tile-edge shadow-[0_4px_14px_-8px_var(--color-shadow)]',
+    ghost && 'border border-stroke-soft',
+    size === 'small' ? 'h-11 px-5 text-base font-semibold' : 'h-14 px-6 text-2xl font-semibold',
+    block ? 'w-full' : 'w-full max-w-68',
+    'transition-[transform,box-shadow,filter] duration-200 ease-soft',
+    'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_var(--color-shadow)]',
+    'active:translate-y-0 active:scale-[0.965] active:duration-75',
+    'disabled:pointer-events-none disabled:opacity-50',
+    className,
+  );
+}
+
+/** The fill and label colour for a link using {@link buttonClasses}. */
+export function buttonStyle(variant: Variant = 'secondary'): CSSProperties {
+  return { '--tile-fill': VARIANT[variant].fill, color: VARIANT[variant].ink } as CSSProperties;
+}
 
 /**
  * The gradient-edged pill used for every primary action.
@@ -38,32 +88,48 @@ type ButtonProps<T extends ElementType> = ButtonOwnProps &
 export function Button<T extends ElementType = 'button'>({
   as,
   variant = 'secondary',
+  size = 'normal',
   icon,
   children,
   className,
   style,
+  block = false,
   ...rest
 }: ButtonProps<T>) {
   const Component: ElementType = as ?? 'button';
+  const ghost = variant === 'ghost';
 
   return (
     <Component
       className={cx(
-        'sheen group tile-edge flex h-14 w-full max-w-68 items-center justify-center rounded-3xl',
-        'text-2xl font-semibold text-g10 no-underline',
-        'shadow-[0_4px_14px_-8px_rgb(0_0_0/0.6)]',
+        'group flex items-center justify-center rounded-3xl no-underline',
+        !ghost && 'sheen tile-edge shadow-[0_4px_14px_-8px_var(--color-shadow)]',
+        ghost && 'border border-stroke-soft',
+        size === 'small' ? 'h-11 px-5 text-base font-semibold' : 'h-14 px-6 text-2xl font-semibold',
+        block ? 'w-full' : 'w-full max-w-68',
         'transition-[transform,box-shadow,filter] duration-200 ease-soft',
-        'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_rgb(0_0_0/0.65)]',
+        'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_var(--color-shadow)]',
         'active:translate-y-0 active:scale-[0.965] active:duration-75',
         'disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
-      style={{ '--tile-fill': VARIANT_FILL[variant], ...style } as CSSProperties}
+      style={
+        {
+          '--tile-fill': VARIANT[variant].fill,
+          color: VARIANT[variant].ink,
+          ...style,
+        } as CSSProperties
+      }
       {...rest}
     >
       <span className="relative z-2 flex items-center gap-2.5">
         {icon ? (
-          <span className="text-[1.4rem] leading-none transition-transform duration-200 ease-spring group-hover:scale-115">
+          <span
+            className={cx(
+              'leading-none transition-transform duration-200 ease-spring group-hover:scale-115',
+              size === 'small' ? 'text-[1.1rem]' : 'text-[1.4rem]',
+            )}
+          >
             {icon}
           </span>
         ) : null}

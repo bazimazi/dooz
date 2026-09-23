@@ -1,20 +1,21 @@
 import { type GameState, type Player, X } from '@dooz/engine';
+import type { EndReason } from '@dooz/protocol';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Confetti } from '@/components/art/Confetti';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 import { useDialog } from '@/lib/useDialog';
-import { GameControls } from './GameControls';
 
 interface ResultModalProps {
   title: string;
   art: ReactNode;
-  onRestart: () => void;
-  restartLabel?: string;
-  restartDisabled?: boolean;
-  /** Extra line under the title - a rematch prompt, say. */
+  /** Extra line under the title - how the game ended, a rematch prompt. */
   note?: ReactNode;
+  /** The rating change, the streak: anything worth a moment's attention. */
+  detail?: ReactNode;
+  /** The buttons. Given rather than assembled here, because they differ by screen. */
+  actions: ReactNode;
   /** Fires the confetti. Set only when the person at this device won. */
   celebrate?: boolean;
   /**
@@ -72,16 +73,20 @@ function useRevealed(delay: number): boolean {
  * is the point of the whole game, so the panel waits for that and leaves it on
  * screen a beat longer. A draw has no line to watch, only the board settling,
  * so its pause is just long enough that the panel does not feel like a cut.
+ * A game that ended without a final move - a resignation, a flag - has nothing
+ * to watch at all.
  */
-export function revealDelayFor(game: GameState): number {
-  return game.winLine ? 1250 : 700;
+export function revealDelayFor(game: GameState, reason?: EndReason): number {
+  if (reason && reason !== 'line' && reason !== 'draw') return 0;
+  if (game.winLine) return 1250;
+  if (game.ultimate?.winBoards) return 1100;
+  return 700;
 }
 
 /**
- * There is deliberately no dismiss affordance: the two ways out of a finished
- * game are to play again or to go home, and both are in the panel. That is also
- * why `useDialog` is given no escape handler here - there is nothing for Escape
- * to do that the buttons do not.
+ * There is deliberately no dismiss affordance: the ways out of a finished game
+ * are in the panel. That is also why `useDialog` is given no escape handler -
+ * there is nothing for Escape to do that the buttons do not.
  *
  * It arrives in pieces - dim, then panel, then the face, the verdict and the
  * buttons - because the result is the one moment in the game worth pausing on.
@@ -90,10 +95,9 @@ export function revealDelayFor(game: GameState): number {
 function ResultPanel({
   title,
   art,
-  onRestart,
-  restartLabel,
-  restartDisabled,
   note,
+  detail,
+  actions,
   celebrate = false,
 }: Omit<ResultModalProps, 'revealDelay'>) {
   // Moves focus in, traps Tab, and makes the board behind it inert - without
@@ -101,7 +105,7 @@ function ResultPanel({
   const panelRef = useDialog<HTMLDivElement>();
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-black/60 p-5 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-scrim p-5 backdrop-blur-[2px]">
       {celebrate ? <Confetti /> : null}
 
       <div
@@ -111,20 +115,23 @@ function ResultPanel({
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          'relative w-full max-w-78 animate-panel-in rounded-[3.5rem] border border-b8 p-2 outline-none',
-          'shadow-[0_30px_70px_-30px_rgb(0_0_0/0.9)]',
+          'relative w-full max-w-80 animate-panel-in rounded-[2.5rem] border border-stroke p-2 outline-none',
+          'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
         )}
         style={{ animationDelay: '0.06s' }}
       >
-        <div className="flex flex-col items-center gap-4 rounded-[3rem] bg-raised px-6 py-10">
-          <div className="animate-pop text-[5rem] leading-none" style={{ animationDelay: '0.22s' }}>
+        <div className="flex max-h-[85vh] flex-col items-center gap-4 overflow-y-auto rounded-[2rem] bg-surface px-6 py-8">
+          <div
+            className="animate-pop text-[4.5rem] leading-none"
+            style={{ animationDelay: '0.22s' }}
+          >
             {/* A slow bob under the one-shot entrance, so the face stays alive
                 while the panel waits for a decision. */}
             <span className="block animate-bob">{art}</span>
           </div>
 
           <h2
-            className="animate-rise text-center font-display text-2xl text-g8"
+            className="animate-rise text-center font-display text-2xl"
             style={{ animationDelay: '0.34s' }}
           >
             {title}
@@ -132,20 +139,24 @@ function ResultPanel({
 
           {note ? (
             <p
-              className="-mt-2 animate-rise text-center text-sm text-g8/80"
+              className="-mt-2 animate-rise text-center text-sm text-ink-muted"
               style={{ animationDelay: '0.4s' }}
             >
               {note}
             </p>
           ) : null}
 
-          <div className="animate-rise pt-2" style={{ animationDelay: '0.46s' }}>
-            <GameControls
-              onRestart={onRestart}
-              tone="solid"
-              restartLabel={restartLabel}
-              restartDisabled={restartDisabled}
-            />
+          {detail ? (
+            <div className="w-full animate-rise" style={{ animationDelay: '0.44s' }}>
+              {detail}
+            </div>
+          ) : null}
+
+          <div
+            className="flex w-full animate-rise flex-col items-center gap-3 pt-1"
+            style={{ animationDelay: '0.48s' }}
+          >
+            {actions}
           </div>
         </div>
       </div>
@@ -153,7 +164,7 @@ function ResultPanel({
   );
 }
 
-/** The face shown for a game played against the bot. */
+/** The face shown for a game played against the bot, or online. */
 export function outcomeFace(outcome: 'win' | 'loss' | 'draw') {
   if (outcome === 'win') return <HappyFace />;
   if (outcome === 'loss') return <SadFace />;
@@ -166,7 +177,7 @@ export function outcomeMark(winner: Player | null) {
   return (
     <Mark
       player={winner}
-      hole="var(--color-raised)"
+      hole="var(--color-surface)"
       className={cx('size-20', winner === X && 'p-0.5')}
     />
   );
@@ -176,4 +187,22 @@ export function outcomeMark(winner: Player | null) {
 export function outcomeFor(game: GameState, you: Player): 'win' | 'loss' | 'draw' {
   if (game.status !== 'won' || game.winner === null) return 'draw';
   return game.winner === you ? 'win' : 'loss';
+}
+
+/** Plain words for how a match ended, from the point of view of the reader. */
+export function describeReason(reason: EndReason, outcome: 'win' | 'loss' | 'draw'): string {
+  switch (reason) {
+    case 'line':
+      return outcome === 'win' ? 'You completed the line' : 'Your opponent completed the line';
+    case 'draw':
+      return 'The board filled up';
+    case 'agreed':
+      return 'Draw by agreement';
+    case 'resign':
+      return outcome === 'win' ? 'Your opponent resigned' : 'You resigned';
+    case 'timeout':
+      return outcome === 'win' ? 'Your opponent ran out of time' : 'You ran out of time';
+    case 'abandoned':
+      return outcome === 'win' ? 'Your opponent left the game' : 'You left the game';
+  }
 }

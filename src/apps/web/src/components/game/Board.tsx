@@ -1,7 +1,19 @@
-import { type BoardSize, type Cell, Empty, type GameState, O, X } from '@dooz/engine';
-import { type KeyboardEvent, useRef, useState } from 'react';
+import {
+  type Cell,
+  colOf,
+  Empty,
+  type GameState,
+  legalMoves,
+  O,
+  rowOf,
+  ultimateBoardOf,
+  ultimateCells,
+  X,
+} from '@dooz/engine';
+import { type KeyboardEvent, memo, useMemo, useRef, useState } from 'react';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { UltimateOverlay } from './UltimateOverlay';
 import { WinLine } from './WinLine';
 
 /** How the game ended, from the point of view of the person at this device. */
@@ -17,33 +29,49 @@ interface BoardProps {
    * win, a shake for a loss. Omitted while the game is still running.
    */
   finishTone?: FinishTone | null;
+  /** Mark the squares that win or must be blocked this move. Practice only. */
+  hints?: readonly { index: number; kind: 'win' | 'threat' }[];
+  /** Read-only: a replay, or a game being watched. */
+  readOnly?: boolean;
 }
 
 /**
- * Corner radii per board size, from the Figma frames.
+ * Corner radii by board size.
  *
- * A 9x9 grid inside the same 64px rounding the 3x3 uses would clip its corner
- * cells, so the rounding tightens as the cells shrink.
+ * A 15x15 grid inside the same rounding a 3x3 uses would clip its corner cells,
+ * so the rounding tightens as the cells shrink. Interpolated rather than
+ * tabulated now that any size between 3 and 15 is playable.
  */
-const RADII: Record<BoardSize, { frame: string; inner: string }> = {
-  3: { frame: '2rem', inner: '1.75rem' },
-  6: { frame: '1.5rem', inner: '1.125rem' },
-  9: { frame: '1.25rem', inner: '0.75rem' },
-};
+function radiiFor(size: number): { frame: string; inner: string } {
+  if (size <= 3) return { frame: '2rem', inner: '1.75rem' };
+  if (size <= 6) return { frame: '1.5rem', inner: '1.125rem' };
+  if (size <= 9) return { frame: '1.25rem', inner: '0.75rem' };
+  return { frame: '1rem', inner: '0.5rem' };
+}
 
-/** `[0, 1, ... size - 1]` per board size, so the grid is not rebuilt each render. */
-const ROWS: Record<BoardSize, readonly number[]> = {
-  3: [0, 1, 2],
-  6: [0, 1, 2, 3, 4, 5],
-  9: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-};
+/**
+ * Below this many cells a board gets the full landing animation per mark; above
+ * it, marks appear without one. A 15x15 board can take 60 marks in a game and
+ * animating every one of them on a mid-range phone drops frames exactly when
+ * the player is trying to read the position.
+ */
+const ANIMATION_CELL_LIMIT = 100;
 
-export function Board({ game, onPlay, disabled = false, finishTone = null }: BoardProps) {
-  const { size, board, winLine, status } = game;
-  const radii = RADII[size];
+export function Board({
+  game,
+  onPlay,
+  disabled = false,
+  finishTone = null,
+  hints,
+  readOnly = false,
+}: BoardProps) {
+  const { board, winLine, status, config } = game;
+  const { size } = config;
+  const radii = radiiFor(size);
   const gridRef = useRef<HTMLDivElement>(null);
+
   // Roving tabindex: the grid is one tab stop and the arrow keys move within
-  // it, so a 9x9 board does not put 81 stops in the page's tab order.
+  // it, so a 15x15 board does not put 225 stops in the page's tab order.
   const [focusIndex, setFocusIndex] = useState(0);
   // The board changes size without this component remounting, so the anchor can
   // be left pointing past the end of a smaller board - which would leave the
@@ -51,9 +79,34 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
   // reachable without discarding the anchor when the size comes back.
   const focus = focusIndex < board.length ? focusIndex : 0;
 
+  const interactive = !readOnly && !disabled && status === 'playing';
+
+  /**
+   * The moves the rules actually allow right now.
+   *
+   * On the line variants this is "every empty cell", but Ultimate confines the
+   * mover to one sub-board, and a board that lets you click a square the rules
+   * will refuse is worse than one that looks slightly busier.
+   */
+  const playable = useMemo(() => {
+    if (status !== 'playing') return new Set<number>();
+    return new Set(legalMoves(game));
+  }, [game, status]);
+
   // Position in the winning run, so the run can light up cell by cell along
   // its own direction rather than all at once.
-  const winOrder = new Map((winLine ?? []).map((cell, order) => [cell, order]));
+  const winOrder = useMemo(
+    () => new Map((winLine ?? []).map((cell, order) => [cell, order])),
+    [winLine],
+  );
+
+  const hintFor = useMemo(() => {
+    const map = new Map<number, 'win' | 'threat'>();
+    for (const hint of hints ?? []) map.set(hint.index, hint.kind);
+    return map;
+  }, [hints]);
+
+  const animate = board.length <= ANIMATION_CELL_LIMIT;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const deltas: Record<string, number> = {
@@ -62,15 +115,25 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
       ArrowDown: size,
       ArrowUp: -size,
     };
-    const delta = deltas[event.key];
-    if (delta === undefined) return;
 
-    // Left and right must not jump between rows.
+    // Home and End jump to the ends of the row, which on a 15-wide board saves
+    // fourteen key presses and is what every other grid widget does.
+    let next: number | null = null;
     const row = Math.floor(focus / size);
-    const next = focus + delta;
-    if (next < 0 || next >= board.length) return;
-    if (Math.abs(delta) === 1 && Math.floor(next / size) !== row) return;
 
+    if (event.key === 'Home') next = row * size;
+    else if (event.key === 'End') next = row * size + size - 1;
+    else {
+      const delta = deltas[event.key];
+      if (delta === undefined) return;
+      const candidate = focus + delta;
+      if (candidate < 0 || candidate >= board.length) return;
+      // Left and right must not jump between rows.
+      if (Math.abs(delta) === 1 && Math.floor(candidate / size) !== row) return;
+      next = candidate;
+    }
+
+    if (next === null) return;
     event.preventDefault();
     setFocusIndex(next);
     gridRef.current?.querySelector<HTMLButtonElement>(`[data-cell="${next}"]`)?.focus();
@@ -79,16 +142,16 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
   return (
     <div
       className={cx(
-        'glass-edge relative w-full max-w-78 p-3 backdrop-blur-[3px]',
+        'glass-edge relative w-full max-w-board p-3 backdrop-blur-[3px]',
         // The radius is part of the transition because it changes with the
-        // board size, which now happens in place: the frame eases to the new
+        // board size, which happens in place: the frame eases to the new
         // rounding instead of snapping to it.
         'transition-[box-shadow,opacity,border-radius] duration-500 ease-soft',
         // Waiting on the bot or the opponent: the board steps back rather than
         // going grey, so it is clear input is not wanted without the position
         // becoming harder to read.
         disabled && status === 'playing' && 'opacity-90',
-        finishTone === 'win' && 'animate-board-settle shadow-[0_0_36px_-6px_rgb(255_255_255/0.35)]',
+        finishTone === 'win' && 'animate-board-settle shadow-[0_0_36px_-6px_var(--color-glow-win)]',
         finishTone === 'draw' && 'animate-board-settle',
         finishTone === 'loss' && 'animate-shake',
       )}
@@ -101,8 +164,9 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
         <div
           ref={gridRef}
           role="grid"
-          aria-label={`${size} by ${size} board`}
+          aria-label={boardLabel(game)}
           aria-busy={disabled && status === 'playing'}
+          aria-readonly={readOnly || undefined}
           onKeyDown={handleKeyDown}
           className="grid h-full w-full"
           style={{
@@ -114,17 +178,15 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
             gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
           }}
         >
-          {ROWS[size].map((row) => (
+          {Array.from({ length: size }, (_row, row) => (
             <div
               key={row}
               role="row"
               className="grid"
               style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
             >
-              {ROWS[size].map((col) => {
+              {Array.from({ length: size }, (_col, col) => {
                 const index = row * size + col;
-                const cell = board[index] ?? Empty;
-
                 return (
                   <BoardCell
                     key={index}
@@ -132,12 +194,16 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
                     row={row}
                     col={col}
                     size={size}
-                    cell={cell}
+                    cell={board[index] ?? Empty}
                     currentPlayer={game.currentPlayer}
-                    playable={cell === Empty && status === 'playing' && !disabled}
+                    playable={interactive && playable.has(index)}
+                    isLastMove={game.lastMove === index}
                     tabStop={index === focus}
                     winOrder={winOrder.get(index)}
-                    onFocus={() => setFocusIndex(index)}
+                    hint={hintFor.get(index)}
+                    animate={animate}
+                    label={describeCell(game, index)}
+                    onFocus={setFocusIndex}
                     onPlay={onPlay}
                   />
                 );
@@ -146,6 +212,7 @@ export function Board({ game, onPlay, disabled = false, finishTone = null }: Boa
           ))}
         </div>
 
+        {game.ultimate ? <UltimateOverlay game={game} /> : null}
         {winLine ? <WinLine line={winLine} size={size} winner={game.winner ?? X} /> : null}
       </div>
     </div>
@@ -156,13 +223,17 @@ interface BoardCellProps {
   index: number;
   row: number;
   col: number;
-  size: BoardSize;
+  size: number;
   cell: Cell;
   currentPlayer: GameState['currentPlayer'];
   playable: boolean;
+  isLastMove: boolean;
   tabStop: boolean;
   winOrder: number | undefined;
-  onFocus: () => void;
+  hint: 'win' | 'threat' | undefined;
+  animate: boolean;
+  label: string;
+  onFocus: (index: number) => void;
   onPlay: (index: number) => void;
 }
 
@@ -174,8 +245,11 @@ interface BoardCellProps {
  * has been played has no tab stop at all - the grid becomes unreachable by
  * keyboard the moment somebody plays there. Marking them instead keeps every
  * square focusable and readable while the click is still refused.
+ *
+ * Memoised because a 15x15 board is 225 of these and a move changes one: React
+ * would otherwise re-render every cell on every mark.
  */
-function BoardCell({
+const BoardCell = memo(function BoardCell({
   index,
   row,
   col,
@@ -183,11 +257,17 @@ function BoardCell({
   cell,
   currentPlayer,
   playable,
+  isLastMove,
   tabStop,
   winOrder,
+  hint,
+  animate,
+  label,
   onFocus,
   onPlay,
 }: BoardCellProps) {
+  const big = size > 9;
+
   return (
     <button
       type="button"
@@ -195,11 +275,11 @@ function BoardCell({
       role="gridcell"
       tabIndex={tabStop ? 0 : -1}
       aria-disabled={!playable}
-      onFocus={onFocus}
+      onFocus={() => onFocus(index)}
       onClick={() => {
         if (playable) onPlay(index);
       }}
-      aria-label={describeCell(row, col, cell)}
+      aria-label={label}
       className={cx(
         'group relative flex items-center justify-center',
         // Dashed rules between cells only - the outer edge is the frame, so the
@@ -217,14 +297,17 @@ function BoardCell({
       {cell !== Empty ? (
         <>
           {/* The ring that expands out from under a piece as it lands. It only
-              ever plays once, on mount. */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
-            style={{
-              boxShadow: `0 0 0 2px ${cell === X ? 'var(--color-p3)' : 'var(--color-y3)'}`,
-            }}
-          />
+              ever plays once, on mount, and not at all on a board big enough
+              for the cost to show. */}
+          {animate ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
+              style={{
+                boxShadow: `0 0 0 2px ${cell === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)'}`,
+              }}
+            />
+          ) : null}
           <span
             className={cx(
               'relative flex w-[68%] items-center justify-center',
@@ -238,14 +321,42 @@ function BoardCell({
             <Mark
               player={cell}
               hole="var(--color-surface)"
-              className={cx('w-full', cell === X ? 'animate-mark-x' : 'animate-mark-o')}
+              className={cx(
+                'w-full',
+                animate && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+              )}
             />
           </span>
+
+          {/* The last move played, ringed so a glance finds it. On a large
+              board this is the difference between reading a position and
+              hunting for what just changed. */}
+          {isLastMove ? (
+            <span
+              aria-hidden="true"
+              className={cx(
+                'pointer-events-none absolute rounded-full ring-2 ring-g10/70',
+                big ? 'inset-[6%]' : 'inset-[10%]',
+              )}
+            />
+          ) : null}
         </>
       ) : null}
 
-      {/* Faint hint of the mark that would land here. */}
-      {playable ? (
+      {/* Practice hints: where the game is won, and where it must be saved. */}
+      {hint && cell === Empty ? (
+        <span
+          aria-hidden="true"
+          className={cx(
+            'pointer-events-none absolute inset-[18%] rounded-full border-2 animate-pulse-soft',
+            hint === 'win' ? 'border-ok' : 'border-warn',
+          )}
+        />
+      ) : null}
+
+      {/* Faint hint of the mark that would land here. Suppressed on a big
+          board, where 225 hover previews is a lot of DOM for one pointer. */}
+      {playable && !big ? (
         <Mark
           player={currentPlayer}
           hole="var(--color-surface)"
@@ -259,11 +370,49 @@ function BoardCell({
       ) : null}
     </button>
   );
+});
+
+function boardLabel(game: GameState): string {
+  const { size, variant } = game.config;
+  if (variant !== 'ultimate') {
+    return `${size} by ${size} board, ${game.config.winLength} in a row to win`;
+  }
+
+  const active = game.ultimate?.activeBoard;
+  const where =
+    active === null || active === undefined
+      ? 'you may play in any unfinished small board'
+      : `you must play in small board ${active + 1}`;
+  return `Ultimate board, nine small boards. ${where}`;
 }
 
-function describeCell(row: number, col: number, cell: number): string {
-  const position = `row ${row + 1}, column ${col + 1}`;
-  if (cell === X) return `${position}, X`;
-  if (cell === O) return `${position}, O`;
-  return `${position}, empty`;
+/**
+ * What a screen reader says about a square.
+ *
+ * Position, contents, and - on an Ultimate board - which small board it belongs
+ * to and whether that board has been won, because without it the grid is
+ * eighty-one indistinguishable squares.
+ */
+function describeCell(game: GameState, index: number): string {
+  const { size } = game.config;
+  const cell = game.board[index] ?? Empty;
+  const position = `row ${rowOf(size, index) + 1}, column ${colOf(size, index) + 1}`;
+  const contents = cell === X ? 'X' : cell === O ? 'O' : 'empty';
+
+  if (!game.ultimate) return `${position}, ${contents}`;
+
+  const board = ultimateBoardOf(index);
+  const owner = game.ultimate.boards[board] ?? Empty;
+  const won =
+    owner === X
+      ? ', board won by X'
+      : owner === O
+        ? ', board won by O'
+        : game.ultimate.drawn[board]
+          ? ', board drawn'
+          : '';
+  return `${position}, small board ${board + 1}${won}, ${contents}`;
 }
+
+/** The cells of a sub-board, for callers that need to highlight one. */
+export { ultimateCells };

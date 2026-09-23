@@ -1,8 +1,8 @@
-import { type BoardSize, type Player, type WinLine as WinLineCells, X } from '@dooz/engine';
+import { type Player, type WinLine as WinLineCells, X } from '@dooz/engine';
 
 interface WinLineProps {
   line: WinLineCells;
-  size: BoardSize;
+  size: number;
   winner: Player;
 }
 
@@ -26,7 +26,7 @@ export function WinLine({ line, size, winner }: WinLineProps) {
   const from = centre(first, size);
   const to = centre(last, size);
   const length = Math.hypot(to.x - from.x, to.y - from.y);
-  const colour = winner === X ? 'var(--color-p3)' : 'var(--color-y3)';
+  const colour = winner === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)';
 
   // The dash pair is what makes the sweep: start fully offset, animate to zero.
   const sweep = { strokeDasharray: length, strokeDashoffset: length };
@@ -77,6 +77,6 @@ export function WinLine({ line, size, winner }: WinLineProps) {
   );
 }
 
-function centre(index: number, size: BoardSize) {
+function centre(index: number, size: number) {
   return { x: (index % size) + 0.5, y: Math.floor(index / size) + 0.5 };
 }

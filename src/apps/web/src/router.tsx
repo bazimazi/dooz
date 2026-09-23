@@ -1,23 +1,56 @@
-import { type BoardSize, type BotDifficulty, isBoardSize, isBotDifficulty } from '@dooz/engine';
+import {
+  type BotDifficulty,
+  DEFAULT_MODE_ID,
+  isBotDifficulty,
+  isModeId,
+  type ModeId,
+  RANKED_MODES,
+} from '@dooz/engine';
+import { ROOM_CODE_LENGTH } from '@dooz/protocol';
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from '@tanstack/react-router';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { BotGameScreen } from '@/screens/BotGameScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { LeaderboardScreen } from '@/screens/LeaderboardScreen';
+import { LearnScreen } from '@/screens/LearnScreen';
 import { LocalGameScreen } from '@/screens/LocalGameScreen';
 import { OnlineScreen } from '@/screens/OnlineScreen';
+import { ProfileScreen } from '@/screens/ProfileScreen';
+import { ReplayScreen } from '@/screens/ReplayScreen';
 
 /**
  * Routes are declared in code rather than generated from the file system.
  *
- * The app has four screens and no data loading, so the generated route tree
- * would be one more build step and one more committed artefact for no benefit -
- * and this file stays just as type-safe.
+ * The app has eight screens and no data loading in the router, so a generated
+ * route tree would be one more build step and one more committed artefact for
+ * no benefit - and this file stays just as type-safe.
+ *
+ * Every search parameter is narrowed here rather than in the screen. A URL is
+ * untrusted input like any other: `?mode=<script>` has to become the default
+ * mode before it reaches a component, not after.
  */
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
   notFoundComponent: NotFound,
+  errorComponent: RouteError,
 });
+
+function readMode(search: Record<string, unknown>): ModeId {
+  const raw = search['mode'];
+  return isModeId(raw) ? raw : DEFAULT_MODE_ID;
+}
+
+function readCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.trim().toUpperCase().slice(0, ROOM_CODE_LENGTH);
+  return code.length === ROOM_CODE_LENGTH ? code : undefined;
+}
+
+/** A search param that may arrive as a real boolean or as the string form. */
+function readFlag(value: unknown): true | undefined {
+  return value === true || value === 'true' ? true : undefined;
+}
 
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -25,21 +58,15 @@ const homeRoute = createRoute({
   component: HomeScreen,
 });
 
-/** Board size lives in the URL, so a game screen can be linked to or reloaded. */
-function readSize(search: Record<string, unknown>): BoardSize {
-  const raw = Number(search['size']);
-  return isBoardSize(raw) ? raw : 3;
-}
-
 const localRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/local',
-  validateSearch: (search: Record<string, unknown>): { size: BoardSize } => ({
-    size: readSize(search),
+  validateSearch: (search: Record<string, unknown>): { mode: ModeId } => ({
+    mode: readMode(search),
   }),
   component: function LocalRoute() {
-    const { size } = localRoute.useSearch();
-    return <LocalGameScreen size={size} />;
+    const { mode } = localRoute.useSearch();
+    return <LocalGameScreen mode={mode} />;
   },
 });
 
@@ -48,16 +75,17 @@ const botRoute = createRoute({
   path: '/play/bot',
   validateSearch: (
     search: Record<string, unknown>,
-  ): { size: BoardSize; difficulty: BotDifficulty } => {
+  ): { mode: ModeId; difficulty: BotDifficulty; practice?: true } => {
     const difficulty = search['difficulty'];
     return {
-      size: readSize(search),
-      difficulty: isBotDifficulty(difficulty) ? difficulty : 'hard',
+      mode: readMode(search),
+      difficulty: isBotDifficulty(difficulty) ? difficulty : 'medium',
+      ...(readFlag(search['practice']) ? { practice: true as const } : {}),
     };
   },
   component: function BotRoute() {
-    const { size, difficulty } = botRoute.useSearch();
-    return <BotGameScreen size={size} difficulty={difficulty} />;
+    const { mode, difficulty, practice } = botRoute.useSearch();
+    return <BotGameScreen mode={mode} difficulty={difficulty} practice={practice} />;
   },
 });
 
@@ -66,14 +94,21 @@ const onlineRoute = createRoute({
   path: '/play/online',
   validateSearch: (
     search: Record<string, unknown>,
-  ): { size: BoardSize; host?: boolean; code?: string } => {
-    const code = search['code'];
+  ): {
+    mode: ModeId;
+    host?: true;
+    code?: string;
+    watch?: string;
+    ranked?: true;
+  } => {
+    const code = readCode(search['code']);
+    const watch = readCode(search['watch']);
     return {
-      size: readSize(search),
-      ...(search['host'] === true || search['host'] === 'true' ? { host: true } : {}),
-      ...(typeof code === 'string' && code.trim()
-        ? { code: code.trim().toUpperCase().slice(0, 6) }
-        : {}),
+      mode: readMode(search),
+      ...(readFlag(search['host']) ? { host: true as const } : {}),
+      ...(code ? { code } : {}),
+      ...(watch ? { watch } : {}),
+      ...(readFlag(search['ranked']) ? { ranked: true as const } : {}),
     };
   },
   component: function OnlineRoute() {
@@ -82,11 +117,58 @@ const onlineRoute = createRoute({
   },
 });
 
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/profile',
+  component: ProfileScreen,
+});
+
+const leaderboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/leaderboard',
+  validateSearch: (search: Record<string, unknown>): { mode: ModeId } => {
+    const mode = readMode(search);
+    // The ladder only exists for ranked modes, so a link to an unranked one
+    // lands on the first ranked mode rather than on an empty table.
+    const ranked = RANKED_MODES.some((entry) => entry.id === mode);
+    return { mode: ranked ? mode : (RANKED_MODES[0]?.id ?? DEFAULT_MODE_ID) };
+  },
+  component: function LeaderboardRoute() {
+    const { mode } = leaderboardRoute.useSearch();
+    return <LeaderboardScreen mode={mode} />;
+  },
+});
+
+const learnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/learn',
+  validateSearch: (search: Record<string, unknown>): { mode: ModeId } => ({
+    mode: readMode(search),
+  }),
+  component: function LearnRoute() {
+    const { mode } = learnRoute.useSearch();
+    return <LearnScreen mode={mode} />;
+  },
+});
+
+const replayRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/replay/$matchId',
+  component: function ReplayRoute() {
+    const { matchId } = replayRoute.useParams();
+    return <ReplayScreen matchId={matchId} />;
+  },
+});
+
 function NotFound() {
   return (
     <Screen>
       <div className="stagger flex flex-1 flex-col items-center justify-center gap-6 text-center">
-        <p className="font-display text-3xl">nothing here</p>
+        <p className="font-display text-3xl">Nothing here</p>
+        <p className="max-w-64 text-sm text-ink-muted">
+          That link does not point at a screen in this app. It may have been a room that has since
+          closed.
+        </p>
         <Button as={Link} to="/" variant="primary">
           Back to home
         </Button>
@@ -95,7 +177,45 @@ function NotFound() {
   );
 }
 
-const routeTree = rootRoute.addChildren([homeRoute, localRoute, botRoute, onlineRoute]);
+/**
+ * The last line of defence.
+ *
+ * A component that throws would otherwise leave a blank page, which is the one
+ * failure a player cannot work around. This at least says so and offers the way
+ * back - and reloading is a real fix for most of what can get here, because the
+ * game state lives on the server rather than in this tab.
+ */
+function RouteError({ error }: { error: Error }) {
+  return (
+    <Screen>
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 text-center">
+        <p className="font-display text-2xl">Something broke</p>
+        <p className="max-w-72 text-sm text-ink-muted">
+          {error.message || 'An unexpected error stopped this screen from loading.'}
+        </p>
+        <div className="flex gap-3">
+          <Button variant="primary" className="w-auto px-5" onClick={() => location.reload()}>
+            Reload
+          </Button>
+          <Button as={Link} to="/" variant="ghost" className="w-auto px-5">
+            Home
+          </Button>
+        </div>
+      </div>
+    </Screen>
+  );
+}
+
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  localRoute,
+  botRoute,
+  onlineRoute,
+  profileRoute,
+  leaderboardRoute,
+  learnRoute,
+  replayRoute,
+]);
 
 export const router = createRouter({
   routeTree,

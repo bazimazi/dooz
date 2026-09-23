@@ -1,19 +1,39 @@
-import type { BoardSize, GameState, Player } from '@dooz/engine';
+import type { GameConfig, GameState, Player } from '@dooz/engine';
 import {
   type ClientMessage,
+  type Clock,
   decodeServerMessage,
+  type Emote,
   encode,
-  type Opponent,
+  type MatchKind,
+  type MatchResult,
   PROTOCOL_VERSION,
+  type PublicProfile,
+  type Seat,
   type ServerMessage,
   type Snapshot,
 } from '@dooz/protocol';
 import { create } from 'zustand';
+import { useAccountStore } from '@/features/account/store';
 import { multiplayerSocketUrl } from '@/lib/server-url';
-import { loadCredentials, loadName, saveCredentials, saveName } from './identity';
 
 export type OnlinePhase =
-  'offline' | 'connecting' | 'idle' | 'searching' | 'hosting' | 'playing' | 'opponentLeft';
+  | 'offline'
+  | 'connecting'
+  | 'idle'
+  | 'searching'
+  | 'hosting'
+  | 'playing'
+  | 'watching'
+  | 'opponentLeft';
+
+/** An emote to show, with the moment it arrived so it can expire. */
+export interface IncomingEmote {
+  id: number;
+  from: Player;
+  emote: Emote;
+  at: number;
+}
 
 interface OnlineState {
   phase: OnlinePhase;
@@ -21,28 +41,43 @@ interface OnlineState {
   reconnecting: boolean;
   error: string | null;
 
-  clientId: string | null;
-  name: string;
+  profile: PublicProfile | null;
 
   roomCode: string | null;
-  boardSize: BoardSize | null;
-  /** Which mark this device plays. */
+  kind: MatchKind | null;
+  config: GameConfig | null;
+  ranked: boolean;
+  queued: number;
+  /** Which mark this device plays, or `null` while watching. */
   you: Player | null;
-  opponent: Opponent | null;
+  seats: Seat[];
+  spectators: number;
   game: GameState | null;
-  /** The opponent has asked for a rematch and is waiting on us. */
+  clock: Clock | null;
+  /** Set once the match is decided; the board alone cannot always say so. */
+  result: MatchResult | null;
+
   rematchOffered: boolean;
-  /** We have asked and are waiting on them. */
   rematchRequested: boolean;
+  drawOffered: boolean;
+  drawRequested: boolean;
+  muted: boolean;
+  emotes: IncomingEmote[];
 
   connect: () => void;
   disconnect: () => void;
-  setName: (name: string) => void;
-  quickMatch: (boardSize: BoardSize) => void;
-  createRoom: (boardSize: BoardSize) => void;
+  queue: (config: GameConfig, ranked: boolean) => void;
+  createRoom: (config: GameConfig) => void;
   joinRoom: (code: string) => void;
+  spectate: (code: string) => void;
   play: (index: number) => void;
+  resign: () => void;
+  offerDraw: () => void;
+  respondDraw: (accept: boolean) => void;
   rematch: () => void;
+  sendEmote: (emote: Emote) => void;
+  setMuted: (muted: boolean) => void;
+  dismissEmote: (id: number) => void;
   leave: () => void;
   clearError: () => void;
 }
@@ -55,16 +90,22 @@ let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 let attempt = 0;
+let emoteId = 0;
 /**
  * Set when reconnecting would be pointless or unwanted: the user asked to
- * disconnect, or the server told us this client is too old to talk to.
+ * disconnect, or the server told us this client cannot be talked to.
  */
 let stopReconnecting = false;
 
-/** The credentials this tab will present after a drop. Held in memory as well as
- * in `sessionStorage`, so a socket that reopens before the store has rehydrated
- * still resumes rather than arriving as a stranger. */
-let credentials: { clientId: string; resumeToken: string } | null = null;
+/** Fields reset whenever a new game or a new room starts. */
+const FRESH_MATCH = {
+  result: null,
+  rematchOffered: false,
+  rematchRequested: false,
+  drawOffered: false,
+  drawRequested: false,
+  emotes: [] as IncomingEmote[],
+} as const;
 
 /**
  * The client half of online play.
@@ -72,6 +113,11 @@ let credentials: { clientId: string; resumeToken: string } | null = null;
  * A single module-level socket backs the store, which means the connection
  * survives navigation between the lobby and the game screen - the room would
  * otherwise be abandoned every time the route changed.
+ *
+ * Nothing here decides anything about the game. Every board, clock and result
+ * is whatever the server last said, and a move is a cell index sent upward
+ * rather than a change applied locally: the two ends run identical rules, but
+ * only one of them is believed.
  */
 export const useOnlineStore = create<OnlineState>((set, get) => {
   function send(message: ClientMessage) {
@@ -80,56 +126,110 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 
   function handle(message: ServerMessage) {
     switch (message.type) {
-      case 'welcome': {
-        credentials = { clientId: message.clientId, resumeToken: message.resumeToken };
-        saveCredentials(credentials);
-        set({ clientId: message.clientId, phase: 'idle', reconnecting: false, error: null });
+      case 'welcome':
+        set({
+          profile: message.profile,
+          // A resumed connection is not idle: the room it belongs to is on its
+          // way in the next frame, and a screen that reads `idle` as "do what
+          // you came here for" would queue for a new game and abandon it.
+          phase: message.resumed ? 'connecting' : 'idle',
+          reconnecting: false,
+          error: null,
+        });
         attempt = 0;
         return;
-      }
+
       case 'searching':
-        set({ phase: 'searching', boardSize: message.boardSize, error: null });
+        set({
+          phase: 'searching',
+          config: message.config,
+          ranked: message.ranked,
+          queued: message.queued,
+          error: null,
+        });
         return;
+
       case 'roomCreated':
         set({
           phase: 'hosting',
           roomCode: message.code,
-          boardSize: message.boardSize,
+          config: message.config,
+          ranked: false,
           error: null,
         });
         return;
+
       case 'matched':
         set({
-          phase: 'playing',
+          ...FRESH_MATCH,
+          phase: message.you === null ? 'watching' : 'playing',
           roomCode: message.code,
+          kind: message.kind,
+          ranked: message.kind === 'ranked',
           you: message.you,
-          opponent: message.opponent,
-          boardSize: message.snapshot.size,
+          seats: message.seats,
+          spectators: message.spectators,
+          config: message.snapshot.config,
           game: toGame(message.snapshot),
-          rematchOffered: false,
-          rematchRequested: false,
+          clock: message.clock,
           error: null,
         });
         return;
+
       case 'state':
-        set((state) => ({
+        set(() => ({
           game: toGame(message.snapshot),
-          // A fresh board means the rematch went through.
-          rematchOffered: message.snapshot.status === 'playing' ? false : state.rematchOffered,
-          rematchRequested: message.snapshot.status === 'playing' ? false : state.rematchRequested,
+          clock: message.clock,
+          // A fresh board means a new game started under us, so anything
+          // outstanding from the last one is gone with it.
+          ...(message.snapshot.moves.length === 0
+            ? FRESH_MATCH
+            : { drawOffered: false, drawRequested: false }),
         }));
         return;
+
+      case 'result':
+        set({ result: message.result, drawOffered: false, drawRequested: false });
+        return;
+
+      case 'seats':
+        set({ seats: message.seats });
+        return;
+
+      case 'spectators':
+        set({ spectators: message.count });
+        return;
+
       case 'rematchOffered':
         set({ rematchOffered: true });
         return;
-      case 'opponentPresence':
-        set({ opponent: message.opponent });
+
+      case 'drawOffered':
+        set({ drawOffered: true });
         return;
+
+      case 'drawDeclined':
+        set({ drawRequested: false });
+        return;
+
+      case 'emote':
+        set((state) => ({
+          // Only ever a couple on screen: a stack of them would cover the board,
+          // which is the one thing an emote must never do.
+          emotes: [
+            ...state.emotes.slice(-2),
+            { id: ++emoteId, from: message.from, emote: message.emote, at: Date.now() },
+          ],
+        }));
+        return;
+
       case 'opponentLeft':
         set({ phase: 'opponentLeft', rematchOffered: false, rematchRequested: false });
         return;
+
       case 'error':
-        set({ error: message.message, rematchRequested: false });
+        set({ error: message.message, rematchRequested: false, drawRequested: false });
+
         // These leave the client with nothing to wait for, so drop back to the
         // lobby rather than sitting on a dead "searching" screen.
         if (
@@ -139,14 +239,20 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
         ) {
           set({ phase: 'idle', roomCode: null });
         }
+
         // The server is about to close on us and every retry would be refused
         // the same way, so stop before the backoff turns into a loop that only
         // ends when the tab does.
-        if (message.code === 'versionMismatch') {
+        if (
+          message.code === 'versionMismatch' ||
+          message.code === 'unauthorized' ||
+          message.code === 'alreadyPlaying'
+        ) {
           stopReconnecting = true;
           set({ phase: 'offline', reconnecting: false });
         }
         return;
+
       case 'pong':
         return;
     }
@@ -154,7 +260,6 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 
   function openSocket() {
     reconnectTimer = null;
-    stopReconnecting = false;
 
     let url: string;
     try {
@@ -164,7 +269,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       return;
     }
 
-    set({ phase: get().clientId ? get().phase : 'connecting' });
+    set({ phase: get().profile ? get().phase : 'connecting' });
 
     const next = new WebSocket(url);
     socket = next;
@@ -176,12 +281,20 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       // and a stale handler would otherwise tear down the live connection.
       if (socket !== next) return;
 
-      const { name } = get();
+      const credentials = useAccountStore.getState().credentials;
+      if (!credentials) {
+        // Nothing to introduce ourselves with. The account store creates one on
+        // launch, so this is a transient state rather than a dead end.
+        set({ phase: 'connecting' });
+        next.close();
+        return;
+      }
+
       send({
         type: 'hello',
         version: PROTOCOL_VERSION,
-        name,
-        ...credentials,
+        accountId: credentials.accountId,
+        token: credentials.token,
       });
       keepaliveTimer = setInterval(() => send({ type: 'ping' }), KEEPALIVE_MS);
     });
@@ -216,25 +329,49 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     });
   }
 
-  credentials = loadCredentials();
+  /** Clear whatever the last room left behind before asking for a new one. */
+  function resetRoom() {
+    set({
+      ...FRESH_MATCH,
+      error: null,
+      game: null,
+      clock: null,
+      roomCode: null,
+      seats: [],
+      spectators: 0,
+      you: null,
+      kind: null,
+      muted: false,
+    });
+  }
 
   return {
     phase: 'offline',
     reconnecting: false,
     error: null,
-    clientId: credentials?.clientId ?? null,
-    name: loadName() ?? 'Player',
+    profile: null,
     roomCode: null,
-    boardSize: null,
+    kind: null,
+    config: null,
+    ranked: false,
+    queued: 0,
     you: null,
-    opponent: null,
+    seats: [],
+    spectators: 0,
     game: null,
+    clock: null,
+    result: null,
     rematchOffered: false,
     rematchRequested: false,
+    drawOffered: false,
+    drawRequested: false,
+    muted: false,
+    emotes: [],
 
     connect: () => {
       if (socket || reconnectTimer) return;
       attempt = 0;
+      stopReconnecting = false;
       openSocket();
     },
 
@@ -250,48 +387,61 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       set({ phase: 'offline', reconnecting: false });
     },
 
-    setName: (name) => {
-      const trimmed = name.trim().slice(0, 24) || 'Player';
-      set({ name: trimmed });
-      saveName(trimmed);
-      // Tell the server too, so a rename mid-session reaches the opponent
-      // rather than waiting for the next connection.
-      send({ type: 'setName', name: trimmed });
+    queue: (config, ranked) => {
+      resetRoom();
+      set({ config, ranked });
+      send({ type: 'queue', config, ranked });
     },
 
-    quickMatch: (boardSize) => {
-      set({ error: null, game: null, roomCode: null, opponent: null, you: null });
-      send({ type: 'quickMatch', boardSize });
-    },
-
-    createRoom: (boardSize) => {
-      set({ error: null, game: null, roomCode: null, opponent: null, you: null });
-      send({ type: 'createRoom', boardSize });
+    createRoom: (config) => {
+      resetRoom();
+      set({ config });
+      send({ type: 'createRoom', config });
     },
 
     joinRoom: (code) => {
-      set({ error: null, game: null, opponent: null, you: null });
+      resetRoom();
       send({ type: 'joinRoom', code: code.trim().toUpperCase() });
     },
 
+    spectate: (code) => {
+      resetRoom();
+      send({ type: 'spectate', code: code.trim().toUpperCase() });
+    },
+
     play: (index) => send({ type: 'move', index }),
+
+    resign: () => send({ type: 'resign' }),
+
+    offerDraw: () => {
+      set({ drawRequested: true });
+      send({ type: 'offerDraw' });
+    },
+
+    respondDraw: (accept) => {
+      set({ drawOffered: false });
+      send({ type: 'respondDraw', accept });
+    },
 
     rematch: () => {
       set({ rematchRequested: true });
       send({ type: 'rematch' });
     },
 
+    sendEmote: (emote) => send({ type: 'emote', emote }),
+
+    setMuted: (muted) => {
+      set({ muted });
+      send({ type: 'mute', muted });
+    },
+
+    dismissEmote: (id) =>
+      set((state) => ({ emotes: state.emotes.filter((entry) => entry.id !== id) })),
+
     leave: () => {
       send({ type: 'leave' });
-      set({
-        phase: 'idle',
-        roomCode: null,
-        game: null,
-        you: null,
-        opponent: null,
-        rematchOffered: false,
-        rematchRequested: false,
-      });
+      resetRoom();
+      set({ phase: 'idle' });
     },
 
     clearError: () => set({ error: null }),
@@ -301,18 +451,41 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 /**
  * Widen a wire snapshot into the shape the board components expect.
  *
- * The move list is not sent - the client has no use for it and it would double
- * the size of every state frame - so it comes back empty.
+ * The move list now travels with the snapshot, so this is lossless - which is
+ * what lets the game screen show a move history and step back through a
+ * finished game without asking the server for anything.
  */
 function toGame(snapshot: Snapshot): GameState {
   return {
-    size: snapshot.size,
+    config: snapshot.config,
     board: snapshot.board,
     currentPlayer: snapshot.currentPlayer,
     status: snapshot.status,
     winner: snapshot.winner,
     winLine: snapshot.winLine,
     lastMove: snapshot.lastMove,
-    moves: [],
+    moves: snapshot.moves,
+    ultimate: snapshot.ultimate
+      ? {
+          boards: snapshot.ultimate.boards,
+          drawn: snapshot.ultimate.drawn,
+          activeBoard: snapshot.ultimate.activeBoard,
+          winBoards: snapshot.ultimate.winBoards,
+        }
+      : null,
+  };
+}
+
+/** The seat this device is sitting in, and the one opposite. */
+export function seatsFor(
+  seats: readonly Seat[],
+  you: Player | null,
+): { yours: Seat | null; theirs: Seat | null } {
+  if (you === null) {
+    return { yours: seats[0] ?? null, theirs: seats[1] ?? null };
+  }
+  return {
+    yours: seats.find((seat) => seat.player === you) ?? null,
+    theirs: seats.find((seat) => seat.player !== you) ?? null,
   };
 }

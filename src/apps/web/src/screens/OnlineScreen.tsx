@@ -1,7 +1,8 @@
-import { type BoardSize, O, X } from '@dooz/engine';
+import { modeById, type ModeId, O, X } from '@dooz/engine';
+import type { Avatar, Clock } from '@dooz/protocol';
 import { ROOM_CODE_LENGTH } from '@dooz/protocol';
-import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackIcon,
   CheckIcon,
@@ -10,102 +11,163 @@ import {
   ShareIcon,
   WifiOffIcon,
 } from '@/components/art/icons';
+import { EyeIcon, FlagIcon, HandshakeIcon, TrophyIcon } from '@/components/art/ui-icons';
 import { Board } from '@/components/game/Board';
+import { EmoteBar, EmoteToast } from '@/components/game/EmoteBar';
 import { GameHeader } from '@/components/game/GameHeader';
 import {
+  describeReason,
+  outcomeFace,
   outcomeFor,
-  outcomeMark,
   ResultModal,
   revealDelayFor,
 } from '@/components/game/ResultModal';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClasses, buttonStyle } from '@/components/ui/Button';
+import { StatTile } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
-import { useOnlineStore } from '@/features/online/store';
+import { useAccountStore } from '@/features/account/store';
+import { seatsFor, useOnlineStore } from '@/features/online/store';
 import { cx } from '@/lib/cx';
+import { signed } from '@/lib/format';
 import { inviteUrl, shareOrCopy } from '@/lib/invite';
 
 export interface OnlineSearch {
-  size: BoardSize;
-  /** Open a private room instead of joining the public queue. */
+  mode: ModeId;
+  /** Open a private room instead of joining a queue. */
   host?: boolean;
   /** Set by an invite link. */
   code?: string;
+  /** Watch a game rather than play one. */
+  watch?: string;
+  ranked?: boolean;
 }
 
-export function OnlineScreen({ size, host, code }: OnlineSearch) {
+export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) {
   const store = useOnlineStore();
   const { connect, disconnect } = store;
+  const accountStatus = useAccountStore((state) => state.status);
+  const initialise = useAccountStore((state) => state.initialise);
+
   // The intent behind this visit is acted on once, as soon as the socket is
   // ready; re-running it on every render would spam the server.
   const intentSent = useRef(false);
 
   useEffect(() => {
+    void initialise();
+  }, [initialise]);
+
+  // The socket cannot introduce itself until there is an account to introduce,
+  // so connecting waits on it rather than failing and retrying.
+  useEffect(() => {
+    if (accountStatus !== 'ready') return;
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [accountStatus, connect, disconnect]);
 
   useEffect(() => {
     if (intentSent.current || store.phase !== 'idle') return;
     intentSent.current = true;
 
-    if (code) store.joinRoom(code);
-    else if (host) store.createRoom(size);
-    else store.quickMatch(size);
-  }, [store, code, host, size]);
+    const config = modeById(mode).config;
+    if (watch) store.spectate(watch);
+    else if (code) store.joinRoom(code);
+    else if (host) store.createRoom(config);
+    else store.queue(config, ranked === true);
+  }, [store, code, host, watch, ranked, mode]);
 
-  if (store.phase === 'playing' || store.phase === 'opponentLeft') return <OnlineGame />;
-  return <OnlineLobby size={size} />;
+  if (store.phase === 'playing' || store.phase === 'watching' || store.phase === 'opponentLeft') {
+    return <OnlineGame mode={mode} />;
+  }
+  return <OnlineLobby mode={mode} ranked={ranked === true} />;
 }
 
 // ---------------------------------------------------------------------------
 // Lobby
 // ---------------------------------------------------------------------------
 
-function OnlineLobby({ size }: { size: BoardSize }) {
-  const { phase, reconnecting, error, roomCode, quickMatch, leave } = useOnlineStore();
+function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
+  const { phase, reconnecting, error, roomCode, queued, queue, leave } = useOnlineStore();
   const navigate = useNavigate();
+  const detail = modeById(mode);
+
+  const status =
+    phase === 'connecting' || phase === 'offline'
+      ? 'Connecting…'
+      : phase === 'searching'
+        ? ranked
+          ? 'Finding an opponent near your rating'
+          : 'Finding an opponent'
+        : 'Getting ready…';
 
   return (
     <Screen>
-      <div className="flex w-full flex-1 flex-col items-center justify-center gap-6">
-        <div className="w-full max-w-78 animate-panel-in rounded-[3rem] border border-b8 p-2 shadow-[0_30px_70px_-34px_rgb(0_0_0/0.9)]">
-          <div className="flex flex-col items-center gap-5 rounded-[2.5rem] bg-raised px-6 py-10 text-center">
+      <div className="flex w-full flex-1 flex-col items-center justify-center gap-5">
+        <div className="w-full max-w-80 animate-panel-in rounded-[2rem] border border-stroke p-2 shadow-[0_30px_70px_-34px_var(--color-shadow)]">
+          <div className="flex flex-col items-center gap-4 rounded-[1.5rem] bg-surface px-6 py-8 text-center">
             {phase === 'hosting' && roomCode ? (
-              <InvitePanel code={roomCode} />
+              <InvitePanel code={roomCode} modeName={detail.name} />
             ) : (
               <>
                 {/* The magnifier sweeps rather than blinks: a search that is
                     still going should look like it is doing something. */}
                 <SearchPlayerIcon
                   className={cx(
-                    'size-14 origin-bottom',
+                    'size-12 origin-bottom',
                     phase === 'searching' && 'animate-sweep',
                     (phase === 'connecting' || phase === 'offline') && 'animate-pulse-soft',
                   )}
                 />
-                <p className="animate-rise text-xl" style={{ animationDelay: '0.12s' }}>
-                  {phase === 'connecting' || phase === 'offline'
-                    ? 'connecting…'
-                    : phase === 'searching'
-                      ? 'searching for an opponent'
-                      : 'getting ready…'}
-                </p>
+
+                <div className="flex flex-col gap-1">
+                  <p className="animate-rise text-lg" style={{ animationDelay: '0.12s' }}>
+                    {status}
+                  </p>
+                  <p className="text-sm text-ink-faint">
+                    {detail.name}
+                    {ranked ? ' · Ranked' : phase === 'searching' ? ' · Casual' : ''}
+                  </p>
+                  {phase === 'searching' && queued > 1 ? (
+                    <p className="text-xs text-ink-faint">{queued} players waiting</p>
+                  ) : null}
+                </div>
+
                 <ProgressBar />
+
+                {phase === 'searching' ? (
+                  <p className="max-w-64 text-xs text-ink-faint">
+                    {ranked
+                      ? 'The search widens the longer you wait, so a match always arrives.'
+                      : 'Anyone in this queue will do — this should be quick.'}
+                  </p>
+                ) : null}
               </>
             )}
 
             {reconnecting ? (
-              <p className="flex animate-rise items-center gap-2 text-sm text-g8/80">
-                <WifiOffIcon className="size-4 animate-pulse-soft" /> reconnecting…
+              <p className="flex animate-rise items-center gap-2 text-sm text-ink-muted">
+                <WifiOffIcon className="size-4 animate-pulse-soft" /> Reconnecting…
               </p>
             ) : null}
 
-            {error ? <p className="animate-toast-in text-sm text-p3">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="animate-toast-in text-sm text-danger">
+                {error}
+              </p>
+            ) : null}
 
-            {/* Both controls here used to go home; only this one also gives up
-                the seat in the queue, so the plain link has gone. */}
-            <div className="flex items-center justify-center pt-2">
+            <div className="flex items-center justify-center gap-3 pt-1">
+              {phase === 'hosting' ? (
+                <Button
+                  size="small"
+                  variant="ghost"
+                  className="w-auto px-4"
+                  onClick={() => queue(detail.config, false)}
+                >
+                  Find anyone instead
+                </Button>
+              ) : null}
+
               <IconButton
                 tone="solid"
                 label="Back to home"
@@ -119,74 +181,8 @@ function OnlineLobby({ size }: { size: BoardSize }) {
             </div>
           </div>
         </div>
-
-        {phase === 'hosting' ? (
-          <button
-            type="button"
-            onClick={() => quickMatch(size)}
-            className={cx(
-              'animate-rise text-sm text-g8/80 underline underline-offset-4',
-              'transition-[color,text-underline-offset] duration-200 hover:text-g10 hover:underline-offset-[6px]',
-            )}
-            style={{ animationDelay: '0.2s' }}
-          >
-            or find any opponent instead
-          </button>
-        ) : null}
-
-        <div
-          className="flex w-full animate-rise justify-center"
-          style={{ animationDelay: '0.26s' }}
-        >
-          <JoinByCode />
-        </div>
-        <div
-          className="flex w-full animate-rise justify-center"
-          style={{ animationDelay: '0.32s' }}
-        >
-          <NameField />
-        </div>
       </div>
     </Screen>
-  );
-}
-
-/** Lets the player set the name their opponent sees. */
-function NameField() {
-  const { name, setName } = useOnlineStore();
-  const [draft, setDraft] = useState(name);
-  // The stored name arrives before the first paint, but a rename from anywhere
-  // else would otherwise leave this field showing the old one indefinitely.
-  const [lastName, setLastName] = useState(name);
-  if (name !== lastName) {
-    setLastName(name);
-    setDraft(name);
-  }
-
-  return (
-    // The label sits above rather than beside the field so this row starts at
-    // the same left edge as the code row, and matches its height - inline, it
-    // indented the input by its own width and stood 8px shorter.
-    <label className="flex w-full max-w-78 flex-col gap-1.5 text-sm text-g8/70">
-      <span className="px-1">you are</span>
-      <input
-        value={draft}
-        maxLength={24}
-        onChange={(event) => setDraft(event.target.value)}
-        // Committed on blur rather than on every keystroke, so a rename is one
-        // message to the server instead of one per letter.
-        onBlur={() => setName(draft)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur();
-        }}
-        aria-label="Your display name"
-        className={cx(
-          'h-12 w-full min-w-0 rounded-tile border border-b8 bg-b8/15 px-4 text-base text-g10',
-          'transition-[background-color,border-color,box-shadow] duration-200',
-          'hover:bg-b8/25 focus:bg-b8/25 focus:shadow-[0_0_0_3px_rgb(85_112_253/0.3)] focus:outline-none',
-        )}
-      />
-    </label>
   );
 }
 
@@ -200,19 +196,23 @@ function NameField() {
  */
 function ProgressBar() {
   return (
-    <div className="h-2.5 w-full overflow-hidden rounded-full bg-g10/90">
+    <div
+      className="h-2 w-full overflow-hidden rounded-full bg-sunken"
+      role="progressbar"
+      aria-label="Searching"
+    >
       <div
         className="h-full w-1/3 animate-slide-track rounded-full"
         style={{
           background:
-            'linear-gradient(90deg, transparent, var(--color-b2) 25%, var(--color-b4) 50%, var(--color-b2) 75%, transparent)',
+            'linear-gradient(90deg, transparent, var(--color-stroke) 35%, var(--color-stroke) 65%, transparent)',
         }}
       />
     </div>
   );
 }
 
-function InvitePanel({ code }: { code: string }) {
+function InvitePanel({ code, modeName }: { code: string; modeName: string }) {
   const [feedback, setFeedback] = useState<'idle' | 'shared' | 'copied' | 'failed'>('idle');
   const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const link = inviteUrl(code);
@@ -231,19 +231,23 @@ function InvitePanel({ code }: { code: string }) {
   }
 
   const label =
-    feedback === 'copied' ? 'link copied' : feedback === 'shared' ? 'shared' : 'share link';
+    feedback === 'copied' ? 'Link copied' : feedback === 'shared' ? 'Shared' : 'Share link';
 
   return (
     <>
-      <p className="animate-rise text-xl">waiting for your friend</p>
+      <p className="animate-rise text-lg">Waiting for your friend</p>
+      <p className="-mt-2 text-sm text-ink-faint">{modeName} · Private</p>
 
       {/* The code arrives a character at a time - it is the one thing on this
           screen the player has to read out or type, so it is worth the beat. */}
       <div
-        className="w-full animate-rise rounded-tile border border-b8 bg-b2 px-4 py-3"
+        className="w-full animate-rise rounded-tile border border-stroke bg-sunken px-4 py-3"
         style={{ animationDelay: '0.1s' }}
       >
-        <span className="flex justify-center font-mono text-3xl tracking-[0.3em]" aria-label={code}>
+        <span
+          className="selectable flex justify-center font-mono text-3xl tracking-[0.3em]"
+          aria-label={`Room code ${code.split('').join(' ')}`}
+        >
           {code.split('').map((character, position) => (
             <span
               key={position}
@@ -259,7 +263,9 @@ function InvitePanel({ code }: { code: string }) {
 
       <Button
         variant="primary"
-        className="h-12 animate-rise text-lg"
+        size="small"
+        block
+        className="animate-rise"
         style={{ animationDelay: '0.24s' }}
         onClick={share}
         icon={feedback === 'copied' || feedback === 'shared' ? <CheckIcon /> : <ShareIcon />}
@@ -272,55 +278,11 @@ function InvitePanel({ code }: { code: string }) {
       </Button>
 
       {feedback === 'failed' ? (
-        <p className="animate-toast-in text-sm text-p3">
-          could not copy - read the code out instead
+        <p className="animate-toast-in text-sm text-danger">
+          Could not copy — read the code out instead
         </p>
       ) : null}
     </>
-  );
-}
-
-function JoinByCode() {
-  const { joinRoom } = useOnlineStore();
-  const [code, setCode] = useState('');
-  const ready = code.trim().length === ROOM_CODE_LENGTH;
-
-  return (
-    <form
-      className="flex w-full max-w-78 items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (ready) joinRoom(code);
-      }}
-    >
-      <input
-        value={code}
-        onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, ROOM_CODE_LENGTH))}
-        placeholder="have a code?"
-        aria-label="Room code"
-        autoComplete="off"
-        autoCapitalize="characters"
-        spellCheck={false}
-        className={cx(
-          'h-12 min-w-0 flex-1 rounded-tile border border-b8 bg-b8/15 px-4 text-center',
-          'font-mono tracking-[0.25em] placeholder:font-sans placeholder:tracking-normal placeholder:text-g8/50',
-          'transition-[background-color,border-color,box-shadow] duration-200',
-          'hover:bg-b8/25 focus:bg-b8/25 focus:shadow-[0_0_0_3px_rgb(85_112_253/0.3)] focus:outline-none',
-          // A complete code lights the field, so the join button is not the
-          // only thing telling you it is ready to send.
-          ready && 'border-p3/70 bg-b8/30',
-        )}
-      />
-      <IconButton
-        type="submit"
-        label="Join game"
-        disabled={!ready}
-        className={ready ? 'animate-glow-ring' : undefined}
-        style={{ '--glow': 'rgb(255 153 246 / 0.45)' } as React.CSSProperties}
-      >
-        <CheckIcon />
-      </IconButton>
-    </form>
   );
 }
 
@@ -328,124 +290,349 @@ function JoinByCode() {
 // Game
 // ---------------------------------------------------------------------------
 
-function OnlineGame() {
+function OnlineGame({ mode }: { mode: ModeId }) {
+  const store = useOnlineStore();
   const {
     game,
     you,
-    opponent,
+    seats,
+    kind,
     phase,
     reconnecting,
     roomCode,
+    clock,
+    result,
+    spectators,
     rematchOffered,
     rematchRequested,
-    play,
-    rematch,
-    leave,
-  } = useOnlineStore();
+    drawOffered,
+    drawRequested,
+    emotes,
+    muted,
+  } = store;
   const navigate = useNavigate();
+  const [confirmResign, setConfirmResign] = useState(false);
 
-  if (!game || !you) return null;
+  const dismissEmote = useCallback((id: number) => useOnlineStore.getState().dismissEmote(id), []);
 
-  const yourTurn = game.status === 'playing' && game.currentPlayer === you && !reconnecting;
-  const yourSeat = { name: 'You', isYou: true, connected: !reconnecting };
-  const theirSeat = {
-    name: opponent?.name ?? 'Opponent',
-    connected: opponent?.connected ?? true,
-  };
+  if (!game) return null;
 
-  const finished = game.status !== 'playing';
-  const outcome = outcomeFor(game, you);
-  const title =
-    phase === 'opponentLeft'
-      ? 'opponent left'
-      : outcome === 'win'
-        ? 'you Won!'
-        : outcome === 'loss'
-          ? 'you lose!'
-          : 'Draw';
+  const watching = you === null;
+  const { theirs } = seatsFor(seats, you);
+  const yourTurn =
+    !watching && game.status === 'playing' && game.currentPlayer === you && !reconnecting;
+
+  const finished = result !== null || game.status !== 'playing' || phase === 'opponentLeft';
+  const outcome = watching ? 'draw' : outcomeFor(game, you);
+
+  const xSeat = seats.find((seat) => seat.player === X);
+  const oSeat = seats.find((seat) => seat.player === O);
 
   const status = reconnecting
-    ? 'reconnecting…'
-    : game.status !== 'playing'
+    ? 'Reconnecting…'
+    : finished
       ? ''
-      : yourTurn
-        ? 'your turn'
-        : `waiting for ${theirSeat.name}`;
+      : watching
+        ? `${(game.currentPlayer === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} to move`
+        : yourTurn
+          ? 'Your turn'
+          : `Waiting for ${theirs?.profile.displayName ?? 'your opponent'}`;
+
+  const title =
+    phase === 'opponentLeft' && !result
+      ? 'Opponent left'
+      : watching
+        ? game.winner === null
+          ? 'Draw'
+          : `${(game.winner === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} wins`
+        : outcome === 'win'
+          ? 'You win!'
+          : outcome === 'loss'
+            ? 'You lose'
+            : 'Draw';
+
+  const ratingChange =
+    result?.rating && you !== null ? (you === X ? result.rating.x : result.rating.o) : null;
 
   return (
     <Screen>
-      {/* `relative z-10` is load-bearing, not decoration: `animate-rise` here
-          and `animate-board-in` on <main> both leave a persistent `transform`,
-          so each is its own stacking context at `z-index: auto` - and <main>,
-          coming second, would otherwise paint over the size picker's open
-          panel and swallow the clicks on its lower options. */}
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={you === X ? yourSeat : theirSeat}
-          right={you === O ? yourSeat : theirSeat}
+          left={seatInfo(xSeat, you, X, clock, game, reconnecting)}
+          right={seatInfo(oSeat, you, O, clock, game, reconnecting)}
+          badge={
+            watching
+              ? 'Watching'
+              : kind === 'ranked'
+                ? 'Ranked'
+                : kind === 'private'
+                  ? 'Private'
+                  : 'Casual'
+          }
         />
       </div>
 
       <main
-        className="flex w-full flex-1 animate-board-in flex-col items-center justify-center gap-4 py-6"
+        className="flex w-full flex-1 animate-board-in flex-col items-center justify-center gap-3 py-5"
         style={{ animationDelay: '0.12s' }}
       >
         <Board
           game={game}
-          onPlay={play}
+          onPlay={store.play}
           disabled={!yourTurn}
-          finishTone={finished ? outcome : null}
+          readOnly={watching}
+          finishTone={finished && !watching ? outcome : null}
         />
 
         {/* Keyed on the text so each change of turn arrives as its own line
             rather than as characters mutating in place. */}
-        <p className="h-5 text-sm text-g8/80" aria-live="polite">
+        <p className="h-5 text-sm text-ink-muted" aria-live="polite">
           <span key={status} className="inline-block animate-toast-in">
             {status}
           </span>
         </p>
+
+        {emotes.length > 0 ? (
+          <div className="flex w-full max-w-board flex-col gap-1.5">
+            {emotes.map((emote) => (
+              <EmoteToast key={emote.id} emote={emote} you={you} onDone={dismissEmote} />
+            ))}
+          </div>
+        ) : null}
+
+        {drawOffered && !finished ? (
+          <div
+            role="alertdialog"
+            aria-label="Draw offered"
+            className="flex w-full max-w-board items-center gap-2 rounded-tile border border-stroke bg-surface px-3 py-2"
+          >
+            <HandshakeIcon className="size-5 shrink-0 text-ink-muted" />
+            <span className="flex-1 text-sm">Draw offered</span>
+            <Button size="small" className="w-auto px-3" onClick={() => store.respondDraw(true)}>
+              Accept
+            </Button>
+            <Button
+              size="small"
+              variant="ghost"
+              className="w-auto px-3"
+              onClick={() => store.respondDraw(false)}
+            >
+              Decline
+            </Button>
+          </div>
+        ) : null}
       </main>
 
       <footer
-        className="flex animate-rise items-center gap-4 pb-4"
+        className="flex w-full animate-rise flex-col items-center gap-2 pb-3"
         style={{ animationDelay: '0.22s' }}
       >
-        {roomCode ? <RoomCodeChip code={roomCode} /> : null}
-        <IconButton
-          label="Leave game"
-          onClick={() => {
-            leave();
-            void navigate({ to: '/' });
-          }}
-        >
-          <BackIcon />
-        </IconButton>
+        {!watching && !finished ? (
+          <EmoteBar
+            onSend={store.sendEmote}
+            muted={muted}
+            onMuteChange={store.setMuted}
+            disabled={reconnecting}
+          />
+        ) : null}
+
+        <div className="flex items-center gap-2.5">
+          {roomCode && kind === 'private' ? <RoomCodeChip code={roomCode} /> : null}
+
+          {spectators > 0 ? (
+            <span
+              className="flex h-10 items-center gap-1.5 rounded-tile border border-stroke-soft px-3 text-xs text-ink-faint"
+              title={`${spectators} watching`}
+            >
+              <EyeIcon className="size-4" /> {spectators}
+            </span>
+          ) : null}
+
+          {!watching && !finished ? (
+            <>
+              <IconButton
+                label="Offer a draw"
+                disabled={drawRequested || reconnecting}
+                onClick={store.offerDraw}
+              >
+                <HandshakeIcon />
+              </IconButton>
+              <IconButton
+                label="Resign"
+                disabled={reconnecting}
+                onClick={() => setConfirmResign(true)}
+              >
+                <FlagIcon />
+              </IconButton>
+            </>
+          ) : null}
+
+          <IconButton
+            label={watching ? 'Stop watching' : finished ? 'Back to home' : 'Leave game'}
+            onClick={() => {
+              store.leave();
+              void navigate({ to: '/' });
+            }}
+          >
+            <BackIcon />
+          </IconButton>
+        </div>
+
+        {drawRequested && !finished ? (
+          <p className="text-xs text-ink-faint" aria-live="polite">
+            Draw offered — waiting for a reply
+          </p>
+        ) : null}
       </footer>
 
-      {finished || phase === 'opponentLeft' ? (
+      {confirmResign ? (
+        <ConfirmResign
+          onCancel={() => setConfirmResign(false)}
+          onConfirm={() => {
+            setConfirmResign(false);
+            store.resign();
+          }}
+          ranked={kind === 'ranked'}
+        />
+      ) : null}
+
+      {finished ? (
         <ResultModal
           title={title}
-          art={phase === 'opponentLeft' ? <WifiOffIcon /> : outcomeMark(game.winner)}
-          onRestart={rematch}
-          restartLabel={rematchRequested ? 'waiting for opponent' : 'play again'}
-          restartDisabled={phase === 'opponentLeft' || rematchRequested}
-          celebrate={phase !== 'opponentLeft' && outcome === 'win'}
-          // An opponent walking out is not a board moment to watch, so that
-          // panel arrives at once; a finished game waits for its win line.
-          revealDelay={phase === 'opponentLeft' ? 0 : revealDelayFor(game)}
+          art={phase === 'opponentLeft' && !result ? <WifiOffIcon /> : outcomeFace(outcome)}
           note={
-            phase === 'opponentLeft'
-              ? 'they closed the game'
-              : rematchOffered
-                ? `${theirSeat.name} wants a rematch`
-                : rematchRequested
-                  ? 'waiting for them to accept…'
-                  : undefined
+            result
+              ? describeReason(result.reason, outcome)
+              : phase === 'opponentLeft'
+                ? 'They closed the game'
+                : undefined
+          }
+          detail={
+            ratingChange ? (
+              <div className="grid grid-cols-2 gap-2">
+                <StatTile label="Rating" value={ratingChange.after} hint={modeById(mode).name} />
+                <StatTile
+                  label="Change"
+                  value={signed(ratingChange.after - ratingChange.before)}
+                  tone={ratingChange.after >= ratingChange.before ? 'good' : 'bad'}
+                />
+              </div>
+            ) : undefined
+          }
+          celebrate={!watching && outcome === 'win'}
+          revealDelay={revealDelayFor(game, result?.reason)}
+          actions={
+            <>
+              {!watching ? (
+                <Button
+                  variant="primary"
+                  size="small"
+                  block
+                  disabled={phase === 'opponentLeft' || rematchRequested}
+                  onClick={store.rematch}
+                >
+                  {rematchRequested
+                    ? 'Waiting for them…'
+                    : rematchOffered
+                      ? 'Accept rematch'
+                      : 'Play again'}
+                </Button>
+              ) : null}
+
+              {result ? (
+                <Link
+                  to="/replay/$matchId"
+                  params={{ matchId: result.matchId }}
+                  className={buttonClasses({ size: 'small', variant: 'ghost', block: true })}
+                  style={buttonStyle('ghost')}
+                >
+                  Watch the replay
+                </Link>
+              ) : null}
+
+              {kind === 'ranked' ? (
+                <Button
+                  as={Link}
+                  to="/leaderboard"
+                  size="small"
+                  variant="ghost"
+                  block
+                  icon={<TrophyIcon />}
+                >
+                  Leaderboard
+                </Button>
+              ) : null}
+
+              <Button as={Link} to="/" size="small" variant="ghost" block>
+                Back to home
+              </Button>
+            </>
           }
         />
       ) : null}
     </Screen>
+  );
+}
+
+function seatInfo(
+  seat:
+    | {
+        profile: { displayName: string; avatar: Avatar; rating: number | null };
+        connected: boolean;
+      }
+    | undefined,
+  you: number | null,
+  player: number,
+  clock: Clock | null,
+  game: { currentPlayer: number; status: string },
+  reconnecting: boolean,
+) {
+  const isYou = you === player;
+  return {
+    name: seat?.profile.displayName ?? 'Opponent',
+    avatar: seat?.profile.avatar,
+    connected: isYou ? !reconnecting : (seat?.connected ?? true),
+    isYou,
+    rating: seat?.profile.rating ?? null,
+    timeMs: clock ? (player === X ? clock.x : clock.o) : null,
+    ticking: clock?.running === player && game.status === 'playing',
+  };
+}
+
+function ConfirmResign({
+  onCancel,
+  onConfirm,
+  ranked,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+  ranked: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-scrim p-5">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="Resign this game?"
+        className="w-full max-w-72 animate-panel-in rounded-[1.75rem] border border-stroke bg-surface p-5"
+      >
+        <h2 className="font-display text-lg">Resign this game?</h2>
+        <p className="mt-1.5 text-sm text-ink-muted">
+          {ranked
+            ? 'Your opponent wins and your rating will drop.'
+            : 'Your opponent wins the game.'}
+        </p>
+        <div className="mt-4 flex gap-2">
+          <Button size="small" variant="ghost" block onClick={onCancel}>
+            Keep playing
+          </Button>
+          <Button size="small" variant="danger" block onClick={onConfirm}>
+            Resign
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -481,3 +668,5 @@ function RoomCodeChip({ code }: { code: string }) {
     </button>
   );
 }
+
+export { ROOM_CODE_LENGTH };

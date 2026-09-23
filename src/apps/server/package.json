@@ -15,10 +15,12 @@
     "@dooz/engine": "*",
     "@dooz/protocol": "*",
     "@hono/node-server": "^2.1.1",
+    "better-sqlite3": "^12.11.1",
     "hono": "^4.13.3",
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.23.12"
   }

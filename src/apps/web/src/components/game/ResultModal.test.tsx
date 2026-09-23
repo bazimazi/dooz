@@ -1,86 +1,107 @@
-import { createGame, X } from '@dooz/engine';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { renderWithRouter } from '@/test/router';
-import { ResultModal, revealDelayFor } from './ResultModal';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Button } from '@/components/ui/Button';
+import { ResultModal } from './ResultModal';
 
-function renderModal() {
-  return renderWithRouter(
-    <div>
-      <button type="button">behind the panel</button>
-      <ResultModal title="you Won!" art={null} onRestart={vi.fn()} />
-    </div>,
-  );
-}
+const actions = (
+  <>
+    <Button size="small">Play again</Button>
+    <Button size="small">Back to home</Button>
+  </>
+);
 
 describe('ResultModal', () => {
-  it('moves focus into the panel', async () => {
-    await renderModal();
-    expect(screen.getByRole('dialog')).toHaveFocus();
-  });
-
-  /**
-   * `aria-modal="true"` is a promise, not an instruction to the browser. Without
-   * a trap the board and the controls behind the panel stay in the tab order,
-   * and a keyboard user tabs out of a dialog that claims nothing is outside it.
-   */
-  it('keeps tab inside the panel', async () => {
-    await renderModal();
-    const outside = screen.getByRole('button', { name: 'behind the panel' });
-
-    for (let press = 0; press < 6; press++) {
-      await userEvent.tab();
-      expect(outside).not.toHaveFocus();
-      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
-    }
-  });
-
-  it('hides the rest of the page from assistive technology', async () => {
-    await renderModal();
-    expect(
-      screen.getByRole('button', { name: 'behind the panel' }).closest('[inert]'),
-    ).not.toBeNull();
-  });
-
-  /**
-   * The panel dims and blurs the board behind it, so arriving the moment the
-   * game ends covers the winning line while it is still being drawn.
-   */
-  describe('the wait before it arrives', () => {
-    it('leaves the board alone for the reveal delay', async () => {
-      await renderWithRouter(
-        <ResultModal title="you Won!" art={null} onRestart={vi.fn()} revealDelay={1000} />,
-      );
-      expect(screen.queryByRole('dialog')).toBeNull();
-    });
-
-    it('can be cut short by a tap', async () => {
-      await renderWithRouter(
-        <ResultModal title="you Won!" art={null} onRestart={vi.fn()} revealDelay={100_000} />,
-      );
-
-      await userEvent.click(document.body);
-      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-    });
-
-    it('waits longer for a game with a line to watch than for a draw', () => {
-      const won = createGame(3, X);
-      expect(revealDelayFor({ ...won, winLine: [0, 1, 2] })).toBeGreaterThan(
-        revealDelayFor({ ...won, status: 'draw' }),
-      );
-    });
-  });
-
-  it('gives the page back when it closes', async () => {
-    const { unmount } = await renderModal();
-    unmount();
+  it('traps focus inside the panel', async () => {
     render(
-      <div>
-        <button type="button">behind the panel</button>
-      </div>,
+      <>
+        <button type="button">Behind the panel</button>
+        <ResultModal title="You win!" art={null} actions={actions} />
+      </>,
     );
 
-    expect(screen.getByRole('button', { name: 'behind the panel' }).closest('[inert]')).toBeNull();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveFocus();
+
+    // Tab cycles between the panel's own controls and never reaches the button
+    // behind it, which is what `aria-modal` promises.
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it('makes everything outside the panel inert', () => {
+    render(
+      <>
+        <div data-testid="behind">
+          <button type="button">Behind the panel</button>
+        </div>
+        <ResultModal title="Draw" art={null} actions={actions} />
+      </>,
+    );
+
+    expect(screen.getByTestId('behind')).toHaveAttribute('inert');
+  });
+
+  it('restores focus to whatever had it when the panel closes', async () => {
+    function Harness() {
+      return (
+        <>
+          <button type="button" data-testid="opener">
+            Opener
+          </button>
+          <ResultModal title="You win!" art={null} actions={actions} />
+        </>
+      );
+    }
+
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+
+    const { unmount } = render(<Harness />);
+    expect(screen.getByRole('dialog')).toHaveFocus();
+
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
+  it('is announced by its title', () => {
+    render(<ResultModal title="You lose" art={null} actions={actions} />);
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('You lose');
+  });
+});
+
+describe('ResultModal: reveal delay', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('waits before covering the finished board', () => {
+    render(<ResultModal title="You win!" art={null} actions={actions} revealDelay={1250} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1250);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('arrives at once when there is nothing to watch', () => {
+    render(<ResultModal title="Draw" art={null} actions={actions} revealDelay={0} />);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('lets a tap cut the wait short', () => {
+    render(<ResultModal title="You win!" art={null} actions={actions} revealDelay={5000} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    act(() => {
+      document.dispatchEvent(new Event('pointerdown'));
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

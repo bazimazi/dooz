@@ -13,12 +13,12 @@ import type { CSSProperties } from 'react';
  */
 
 const COLOURS = [
-  'var(--color-p2)',
-  'var(--color-p3)',
-  'var(--color-y2)',
-  'var(--color-y3)',
-  'var(--color-g10)',
-  'var(--color-b8)',
+  'var(--color-mark-x)',
+  'var(--color-mark-x-soft)',
+  'var(--color-mark-o)',
+  'var(--color-mark-o-soft)',
+  'var(--color-ink)',
+  'var(--color-stroke)',
 ];
 
 const PIECE_COUNT = 28;

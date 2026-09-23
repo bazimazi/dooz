@@ -1,19 +1,25 @@
-import { type Board, type BoardSize, Empty } from '../types.js';
+import { type Board, Empty } from '../types.js';
 
 /**
  * Empty cells worth considering: those within `radius` of a mark already on the
  * board.
  *
- * On a 9x9 board a naive search would branch 81 ways at the root and stay wide
- * for the whole tree. Play is inherently local - a mark far from every other
- * mark cannot join or block a line - so restricting to the neighbourhood keeps
- * the branching factor small enough to search several plies deep.
+ * On a 15x15 board a naive search would branch 225 ways at the root and stay
+ * wide for the whole tree. Play is inherently local - a mark far from every
+ * other mark cannot join or block a line - so restricting to the neighbourhood
+ * keeps the branching factor small enough to search several plies deep.
  *
  * On an empty board the only sensible move is the centre, so that is returned
  * directly.
  */
-export function candidateMoves(board: Board, size: BoardSize, radius = 2): number[] {
-  const occupied = board.some((cell) => cell !== Empty);
+export function candidateMoves(board: Board, size: number, radius = 2): number[] {
+  let occupied = false;
+  for (const cell of board) {
+    if (cell !== Empty) {
+      occupied = true;
+      break;
+    }
+  }
   if (!occupied) {
     const centre = Math.floor(size / 2);
     return [centre * size + centre];
@@ -39,7 +45,7 @@ export function candidateMoves(board: Board, size: BoardSize, radius = 2): numbe
 
 function hasNeighbour(
   board: Board,
-  size: BoardSize,
+  size: number,
   row: number,
   col: number,
   radius: number,

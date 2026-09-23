@@ -7,17 +7,20 @@
          `user-scalable=no` would stop anyone who needs to magnify the board
          from doing so, and the layout is fluid enough not to need it. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#232599" />
-    <meta name="color-scheme" content="dark" />
+    <!-- One per scheme, so the browser chrome matches whichever the page is
+         actually showing rather than always the dark canvas. -->
+    <meta name="theme-color" content="#eef1ff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#232599" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="description"
-      content="dooz - Tic Tac Toe on 3x3, 6x6 and 9x9 boards. Play a friend on one device, online, or against the bot."
+      content="dooz - in-a-row strategy. Classic Tic Tac Toe, bigger boards, Gomoku, Misère and Ultimate. Play a friend on one device, a six-level bot, or a rated online ladder."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>dooz - Tic Tac Toe</title>
+    <title>dooz - in-a-row strategy</title>
   </head>
   <body>
     <div id="root"></div>

@@ -51,7 +51,14 @@
       }
     },
     {
-      "files": ["**/*.test.ts", "**/*.test.tsx", "**/scripts/**"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/scripts/**",
+        "**/bench/**",
+        "**/test-support.ts",
+        "**/testing.ts"
+      ],
       "rules": {
         "no-console": "off",
         "typescript/no-non-null-assertion": "off",

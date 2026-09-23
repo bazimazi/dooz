@@ -10,6 +10,11 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --build"
+    "typecheck": "tsc --build",
+    "bench": "tsx bench/ladder.ts",
+    "bench:speed": "tsx bench/speed.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.12"
   }
 }

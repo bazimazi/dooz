@@ -1,595 +1,947 @@
-import { O, X } from '@dooz/engine';
+import { modeById, X } from '@dooz/engine';
+import { PROTOCOL_VERSION } from '@dooz/protocol';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  PROTOCOL_VERSION,
-  ROOM_CODE_ALPHABET,
-  ROOM_CODE_LENGTH,
-  type ServerMessage,
-} from '@dooz/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { Lobby } from './lobby.js';
-import type { Session } from './types.js';
+  type Client,
+  CONFIGS,
+  createHarness,
+  currentSnapshot,
+  type Harness,
+  playMoves,
+  resultOf,
+  resultsOf,
+} from './test-support.js';
 
-/** A connection that records everything sent to it. */
-class FakeClient {
-  readonly sent: ServerMessage[] = [];
-  closed = false;
-  session!: Session;
+let harness: Harness | null = null;
 
-  readonly transport = {
-    send: (message: ServerMessage) => {
-      this.sent.push(message);
-    },
-    close: () => {
-      this.closed = true;
-    },
-  };
-
-  /** Messages of one type, newest last. */
-  ofType<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }>[] {
-    return this.sent.filter((m): m is Extract<ServerMessage, { type: T }> => m.type === type);
-  }
-
-  last<T extends ServerMessage['type']>(type: T): Extract<ServerMessage, { type: T }> | undefined {
-    return this.ofType(type).at(-1);
-  }
-
-  clear(): void {
-    this.sent.length = 0;
-  }
+function newHarness(...args: Parameters<typeof createHarness>): Harness {
+  harness?.close();
+  harness = createHarness(...args);
+  return harness;
 }
 
-describe('Lobby', () => {
-  let clock: number;
-  let lobby: Lobby;
-  let nextId: number;
-  let nextToken: number;
+afterEach(() => {
+  harness?.close();
+  harness = null;
+});
 
-  const advance = (ms: number) => {
-    clock += ms;
-  };
+/** Two clients matched into a casual game, ready to move. */
+function matched(h: Harness, config = CONFIGS.classic): { a: Client; b: Client } {
+  const a = h.join('Ada');
+  const b = h.join('Bob');
+  a.send({ type: 'queue', config, ranked: false });
+  b.send({ type: 'queue', config, ranked: false });
+  return { a, b };
+}
 
-  const join = (name: string): FakeClient => {
-    const client = new FakeClient();
-    client.session = lobby.connect(client.transport);
-    lobby.handle(client.session, { type: 'hello', version: PROTOCOL_VERSION, name });
-    return client;
-  };
+/** The client whose turn it is, and the one waiting. */
+function toMove(a: Client, b: Client): { mover: Client; waiter: Client } {
+  const snapshot = currentSnapshot(a)!;
+  const you = a.last('matched')!.you;
+  return snapshot.currentPlayer === you ? { mover: a, waiter: b } : { mover: b, waiter: a };
+}
 
-  /** A new connection presenting the credentials an earlier one was issued. */
-  const reconnect = (name: string, credentials: { clientId: string; resumeToken: string }) => {
-    const client = new FakeClient();
-    client.session = lobby.connect(client.transport);
-    lobby.handle(client.session, {
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+describe('hello', () => {
+  it('welcomes a client with valid credentials', () => {
+    const h = newHarness();
+    const client = h.join('Ada');
+
+    const welcome = client.last('welcome');
+    expect(welcome?.version).toBe(PROTOCOL_VERSION);
+    expect(welcome?.profile.displayName).toBe('Ada');
+    expect(client.closed).toBe(false);
+  });
+
+  it('refuses an unknown account and closes the socket', () => {
+    const h = newHarness();
+    const client = h.connect();
+
+    client.send({
       type: 'hello',
       version: PROTOCOL_VERSION,
-      name,
-      ...credentials,
+      accountId: '00000000-0000-4000-8000-000000000000',
+      token: 'x'.repeat(43),
     });
-    return client;
-  };
 
-  /** What a client would have kept from its `welcome`. */
-  const credentialsOf = (client: FakeClient) => {
-    const welcome = client.last('welcome')!;
-    return { clientId: welcome.clientId, resumeToken: welcome.resumeToken };
-  };
-
-  beforeEach(() => {
-    clock = 1_000_000;
-    nextId = 0;
-    nextToken = 0;
-    lobby = new Lobby({
-      now: () => clock,
-      // Fixed sequence keeps the starting players deterministic.
-      random: () => 0.42,
-      newId: () => `client-${++nextId}`,
-      // Real tokens are 32 random bytes; these only have to be distinct and the
-      // right length for the protocol schema.
-      newToken: () => `token-${++nextToken}`.padEnd(43, 'x'),
-      reconnectGraceMs: 1000,
-    });
+    expect(client.last('error')?.code).toBe('unauthorized');
+    expect(client.closed).toBe(true);
   });
 
-  describe('handshake', () => {
-    it('welcomes a client and hands back its id and resume token', () => {
-      const alice = join('Alice');
-      expect(alice.last('welcome')).toEqual({
-        type: 'welcome',
-        clientId: 'client-1',
-        resumeToken: 'token-1'.padEnd(43, 'x'),
-        version: PROTOCOL_VERSION,
-      });
+  it('refuses a token that belongs to another account', () => {
+    const h = newHarness();
+    const ada = h.join('Ada');
+    const stranger = h.connect();
+    const { account } = h.accounts.create('Bob', 'owl');
+
+    stranger.send({
+      type: 'hello',
+      version: PROTOCOL_VERSION,
+      accountId: account.id,
+      token: ada.token,
     });
 
-    it('accepts only one hello per connection', () => {
-      const alice = join('Alice');
-      alice.clear();
-      lobby.handle(alice.session, { type: 'hello', version: PROTOCOL_VERSION, name: 'Alice' });
-
-      expect(alice.last('error')?.code).toBe('badMessage');
-      expect(alice.last('welcome')).toBeUndefined();
-    });
-
-    it('rejects and closes a client on the wrong protocol version', () => {
-      const client = new FakeClient();
-      client.session = lobby.connect(client.transport);
-      lobby.handle(client.session, { type: 'hello', version: PROTOCOL_VERSION + 1 });
-
-      expect(client.last('error')?.code).toBe('versionMismatch');
-      expect(client.closed).toBe(true);
-    });
+    expect(stranger.last('error')?.code).toBe('unauthorized');
   });
 
-  describe('quick match', () => {
-    it('puts the first player in the queue', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
+  it('refuses a protocol version it cannot speak', () => {
+    const h = newHarness();
+    const client = h.connect();
+    const { account, token } = h.accounts.create('Ada', 'fox');
 
-      expect(alice.last('searching')).toEqual({ type: 'searching', boardSize: 3 });
-      expect(lobby.queuedCount).toBe(1);
-      expect(lobby.roomCount).toBe(0);
-    });
+    client.send({ type: 'hello', version: PROTOCOL_VERSION + 1, accountId: account.id, token });
 
-    it('pairs the second player and deals X to the one who waited', () => {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 6 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 6 });
-
-      const forAlice = alice.last('matched');
-      const forBob = bob.last('matched');
-
-      expect(forAlice?.you).toBe(X);
-      expect(forBob?.you).toBe(O);
-      expect(forAlice?.code).toBe(forBob?.code);
-      expect(forAlice?.opponent.name).toBe('Bob');
-      expect(forBob?.opponent.name).toBe('Alice');
-      expect(forAlice?.snapshot.size).toBe(6);
-      expect(lobby.queuedCount).toBe(0);
-      expect(lobby.roomCount).toBe(1);
-    });
-
-    it('keeps queues for different board sizes apart', () => {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 9 });
-
-      expect(alice.last('matched')).toBeUndefined();
-      expect(bob.last('searching')?.boardSize).toBe(9);
-      expect(lobby.queuedCount).toBe(2);
-    });
-
-    it('does not match a player with themselves', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-
-      expect(alice.last('matched')).toBeUndefined();
-      expect(lobby.roomCount).toBe(0);
-    });
-
-    it('skips a queued player who has since disconnected', () => {
-      const ghost = join('Ghost');
-      lobby.handle(ghost.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.disconnect(ghost.session);
-
-      const bob = join('Bob');
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-
-      expect(bob.last('matched')).toBeUndefined();
-      expect(bob.last('searching')).toBeDefined();
-    });
+    expect(client.last('error')?.code).toBe('versionMismatch');
+    expect(client.closed).toBe(true);
   });
 
-  describe('private rooms', () => {
-    it('returns a shareable code', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'createRoom', boardSize: 3 });
+  it('accepts hello only once per connection', () => {
+    const h = newHarness();
+    const client = h.join('Ada');
+    client.clear();
 
-      const created = alice.last('roomCreated');
-      expect(created?.code).toMatch(/^[A-Z2-9]{6}$/);
-      expect(created?.boardSize).toBe(3);
+    client.send({
+      type: 'hello',
+      version: PROTOCOL_VERSION,
+      accountId: client.accountId,
+      token: client.token,
     });
 
-    it('matches a player who joins with the code', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'createRoom', boardSize: 3 });
-      const code = alice.last('roomCreated')!.code;
-
-      const bob = join('Bob');
-      lobby.handle(bob.session, { type: 'joinRoom', code });
-
-      expect(alice.last('matched')?.you).toBe(X);
-      expect(bob.last('matched')?.you).toBe(O);
-    });
-
-    it('rejects an unknown code', () => {
-      const bob = join('Bob');
-      lobby.handle(bob.session, { type: 'joinRoom', code: 'ZZZZZZ' });
-      expect(bob.last('error')?.code).toBe('roomNotFound');
-    });
-
-    it('rejects a third player', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'createRoom', boardSize: 3 });
-      const code = alice.last('roomCreated')!.code;
-
-      const bob = join('Bob');
-      lobby.handle(bob.session, { type: 'joinRoom', code });
-
-      const carol = join('Carol');
-      lobby.handle(carol.session, { type: 'joinRoom', code });
-
-      expect(carol.last('error')?.code).toBe('roomFull');
-    });
+    expect(client.last('error')?.code).toBe('badMessage');
   });
 
-  describe('playing', () => {
-    /** Two matched clients, with `first` holding X. */
-    function matchedPair() {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
+  it('rejects everything else before hello', () => {
+    const h = newHarness();
+    const client = h.connect();
 
-      const starting = alice.last('matched')!.snapshot.currentPlayer;
-      const first = starting === X ? alice : bob;
-      const second = first === alice ? bob : alice;
-      alice.clear();
-      bob.clear();
-      return { alice, bob, first, second };
-    }
+    client.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    client.send({ type: 'move', index: 0 });
 
-    it('broadcasts the new state to both players after a legal move', () => {
-      const { alice, bob, first } = matchedPair();
-      lobby.handle(first.session, { type: 'move', index: 4 });
-
-      const fromAlice = alice.last('state')!.snapshot;
-      const fromBob = bob.last('state')!.snapshot;
-      expect(fromAlice).toEqual(fromBob);
-      expect(fromAlice.board[4]).not.toBe(0);
-      expect(fromAlice.lastMove).toBe(4);
-    });
-
-    it('refuses a move made out of turn', () => {
-      const { second } = matchedPair();
-      lobby.handle(second.session, { type: 'move', index: 0 });
-
-      expect(second.last('error')?.code).toBe('notYourTurn');
-      expect(second.last('state')).toBeUndefined();
-    });
-
-    it('refuses a move onto an occupied square', () => {
-      const { first, second } = matchedPair();
-      lobby.handle(first.session, { type: 'move', index: 0 });
-      lobby.handle(second.session, { type: 'move', index: 0 });
-
-      expect(second.last('error')?.code).toBe('illegalMove');
-    });
-
-    it('refuses moves from a client that is not in a game', () => {
-      const drifter = join('Drifter');
-      lobby.handle(drifter.session, { type: 'move', index: 0 });
-      expect(drifter.last('error')?.code).toBe('notInRoom');
-    });
-
-    it('plays a full game through to a win and then locks the board', () => {
-      const { alice, bob, first, second } = matchedPair();
-      // First takes the top row; second answers in the middle row.
-      const script = [
-        [first, 0],
-        [second, 3],
-        [first, 1],
-        [second, 4],
-        [first, 2],
-      ] as const;
-      for (const [client, index] of script) {
-        lobby.handle(client.session, { type: 'move', index });
-      }
-
-      const final = alice.last('state')!.snapshot;
-      expect(final.status).toBe('won');
-      expect(final.winLine).toEqual([0, 1, 2]);
-
-      bob.clear();
-      lobby.handle(second.session, { type: 'move', index: 5 });
-      expect(bob.last('error')?.code).toBe('notYourTurn');
-    });
+    expect(client.all('error').map((error) => error.code)).toEqual([
+      'unauthorized',
+      'unauthorized',
+    ]);
   });
 
-  describe('rematch', () => {
-    function finishedGame() {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-      const starting = alice.last('matched')!.snapshot.currentPlayer;
-      const first = starting === X ? alice : bob;
-      const second = first === alice ? bob : alice;
-      for (const [client, index] of [
-        [first, 0],
-        [second, 3],
-        [first, 1],
-        [second, 4],
-        [first, 2],
-      ] as const) {
-        lobby.handle(client.session, { type: 'move', index });
-      }
-      alice.clear();
-      bob.clear();
-      return { alice, bob };
-    }
+  it('hands the account to the newest connection and evicts the old one', () => {
+    const h = newHarness();
+    const first = h.join('Ada');
+    const second = h.connect();
 
-    it('tells the other player that a rematch was offered', () => {
-      const { alice, bob } = finishedGame();
-      lobby.handle(alice.session, { type: 'rematch' });
-
-      expect(bob.last('rematchOffered')).toBeDefined();
-      expect(bob.last('state')).toBeUndefined();
+    second.send({
+      type: 'hello',
+      version: PROTOCOL_VERSION,
+      accountId: first.accountId,
+      token: first.token,
     });
 
-    it('resets the board once both players agree', () => {
-      const { alice, bob } = finishedGame();
-      lobby.handle(alice.session, { type: 'rematch' });
-      lobby.handle(bob.session, { type: 'rematch' });
+    expect(first.last('error')?.code).toBe('alreadyPlaying');
+    expect(first.closed).toBe(true);
+    expect(second.last('welcome')).toBeDefined();
+  });
+});
 
-      const fresh = alice.last('state')!.snapshot;
-      expect(fresh.status).toBe('playing');
-      expect(fresh.board.every((cell) => cell === 0)).toBe(true);
-      expect(bob.last('state')!.snapshot).toEqual(fresh);
-    });
+// ---------------------------------------------------------------------------
+// Matchmaking
+// ---------------------------------------------------------------------------
+
+describe('matchmaking', () => {
+  it('queues the first player and matches the second', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+
+    expect(a.last('searching')?.queued).toBe(1);
+    expect(a.last('matched')).toBeUndefined();
+
+    const b = h.join('Bob');
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+
+    expect(a.last('matched')).toBeDefined();
+    expect(b.last('matched')).toBeDefined();
+    expect(a.last('matched')?.you).not.toBe(b.last('matched')?.you);
+    expect(a.last('matched')?.code).toBe(b.last('matched')?.code);
   });
 
-  describe('presence and reconnection', () => {
-    function matchedPair() {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-      return { alice, bob };
-    }
+  it('does not match players who asked for different games', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    const b = h.join('Bob');
 
-    it('tells the opponent when a player drops', () => {
-      const { alice, bob } = matchedPair();
-      bob.clear();
-      lobby.disconnect(alice.session);
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    b.send({ type: 'queue', config: CONFIGS.grid6, ranked: false });
 
-      expect(bob.last('opponentPresence')).toEqual({
-        type: 'opponentPresence',
-        opponent: { name: 'Alice', connected: false },
-      });
-    });
-
-    it('holds the seat and restores the game on reconnect', () => {
-      const { alice, bob } = matchedPair();
-      const code = alice.last('matched')!.code;
-      const before = alice.last('matched')!.snapshot;
-      const credentials = credentialsOf(alice);
-      lobby.disconnect(alice.session);
-
-      const returning = reconnect('Alice', credentials);
-
-      const restored = returning.last('matched');
-      expect(restored?.code).toBe(code);
-      expect(restored?.snapshot).toEqual(before);
-      expect(bob.last('opponentPresence')?.opponent).toEqual({ name: 'Alice', connected: true });
-    });
-
-    it('clears a rematch request made just before the player dropped', () => {
-      const { alice, bob } = matchedPair();
-      lobby.handle(alice.session, { type: 'rematch' });
-      lobby.disconnect(alice.session);
-      bob.clear();
-
-      // Bob agreeing must not be enough on its own now that Alice is gone.
-      lobby.handle(bob.session, { type: 'rematch' });
-      expect(bob.last('state')).toBeUndefined();
-    });
-
-    it('lets a player who deliberately leaves end the game', () => {
-      const { alice, bob } = matchedPair();
-      bob.clear();
-      lobby.handle(alice.session, { type: 'leave' });
-
-      expect(bob.last('opponentLeft')).toBeDefined();
-      expect(lobby.roomCount).toBe(0);
-    });
-
-    it('sweeps a room away once the grace period expires', () => {
-      const { alice, bob } = matchedPair();
-      lobby.disconnect(alice.session);
-      lobby.disconnect(bob.session);
-      expect(lobby.roomCount).toBe(1);
-
-      advance(999);
-      lobby.sweep();
-      expect(lobby.roomCount).toBe(1);
-
-      advance(2);
-      lobby.sweep();
-      expect(lobby.roomCount).toBe(0);
-    });
+    expect(a.last('matched')).toBeUndefined();
+    expect(b.last('matched')).toBeUndefined();
   });
 
-  describe('seat credentials', () => {
-    function seatedPair() {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-      return { alice, bob };
-    }
+  it('keeps ranked and casual queues apart', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    const b = h.join('Bob');
 
-    it('refuses a seat to a client that knows the id but not the token', () => {
-      const { alice } = seatedPair();
-      const { clientId } = credentialsOf(alice);
-      lobby.disconnect(alice.session);
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
 
-      const impostor = reconnect('Mallory', {
-        clientId,
-        resumeToken: 'wrong-token'.padEnd(43, 'x'),
-      });
-
-      expect(impostor.last('matched')).toBeUndefined();
-      expect(impostor.last('welcome')?.clientId).not.toBe(clientId);
-    });
-
-    it('refuses a seat that a live connection is still holding', () => {
-      const { alice, bob } = seatedPair();
-      const credentials = credentialsOf(alice);
-
-      // A second tab of the same browser: same credentials, Alice still online.
-      const secondTab = reconnect('Alice', credentials);
-
-      expect(secondTab.last('matched')).toBeUndefined();
-      expect(secondTab.last('welcome')?.clientId).not.toBe(credentials.clientId);
-
-      // And Alice keeps the seat: her moves still reach Bob.
-      bob.clear();
-      lobby.handle(alice.session, { type: 'move', index: 0 });
-      expect(bob.last('state')).toBeDefined();
-    });
-
-    it('does not let a superseded session take the seat offline', () => {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-
-      const credentials = credentialsOf(alice);
-      lobby.disconnect(alice.session);
-      const returning = reconnect('Alice', credentials);
-      bob.clear();
-
-      // Alice's original socket closes only now, well after the reconnect.
-      lobby.disconnect(alice.session);
-
-      // The seat belongs to the new connection, which is online and can play.
-      expect(bob.last('opponentPresence')?.opponent.connected).not.toBe(false);
-      lobby.handle(returning.session, { type: 'move', index: 0 });
-      expect(bob.last('error')).toBeUndefined();
-      expect(bob.last('state')).toBeDefined();
-    });
-
-    it('does not let a superseded session evict the one that replaced it', () => {
-      const alice = join('Alice');
-      const credentials = credentialsOf(alice);
-      lobby.disconnect(alice.session);
-
-      const returning = reconnect('Alice', credentials);
-      expect(lobby.sessionCount).toBe(1);
-
-      // The old socket finally closes. It must not take the new one with it.
-      lobby.disconnect(alice.session);
-      expect(lobby.sessionCount).toBe(1);
-      expect(returning.session.connected).toBe(true);
-    });
-
-    it('issues a code drawn from the room alphabet', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'createRoom', boardSize: 3 });
-
-      const code = alice.last('roomCreated')!.code;
-      expect(code).toHaveLength(ROOM_CODE_LENGTH);
-      expect(code.split('').every((character) => ROOM_CODE_ALPHABET.includes(character))).toBe(
-        true,
-      );
-    });
+    expect(a.last('matched')).toBeUndefined();
+    expect(b.last('matched')).toBeUndefined();
   });
 
-  describe('capacity', () => {
-    it('refuses to open a room once the ceiling is reached', () => {
-      lobby = new Lobby({
-        now: () => clock,
-        random: () => 0.42,
-        newId: () => `client-${++nextId}`,
-        newToken: () => `token-${++nextToken}`.padEnd(43, 'x'),
-        maxRooms: 1,
-      });
+  it('refuses a ranked game in a mode with no ladder', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
 
-      const first = join('First');
-      lobby.handle(first.session, { type: 'createRoom', boardSize: 3 });
-      expect(lobby.roomCount).toBe(1);
-
-      const second = join('Second');
-      lobby.handle(second.session, { type: 'createRoom', boardSize: 3 });
-
-      expect(second.last('error')?.code).toBe('serverFull');
-      expect(second.last('roomCreated')).toBeUndefined();
-      expect(lobby.roomCount).toBe(1);
+    a.send({
+      type: 'queue',
+      config: { variant: 'classic', size: 7, winLength: 4 },
+      ranked: true,
     });
 
-    it('reports capacity so the transport can refuse the handshake', () => {
-      lobby = new Lobby({ maxSessions: 1, newId: () => `client-${++nextId}` });
-      expect(lobby.atCapacity).toBe(false);
-
-      join('Only');
-      expect(lobby.atCapacity).toBe(true);
-    });
+    expect(a.last('error')?.code).toBe('notRankable');
   });
 
-  describe('display names', () => {
-    it('reaches the opponent when it changes mid-game', () => {
-      const alice = join('Alice');
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-      bob.clear();
+  it('will not match ratings far apart until the band has widened', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    const b = h.join('Bob');
 
-      lobby.handle(alice.session, { type: 'setName', name: 'Alicia' });
+    // Put 600 points between them, which no opening band covers.
+    h.accounts.recordResult(a.accountId, 'classic', 'win', 1800);
+    h.accounts.recordResult(b.accountId, 'classic', 'loss', 1100);
 
-      expect(bob.last('opponentPresence')?.opponent).toEqual({
-        name: 'Alicia',
-        connected: true,
-      });
-      expect(alice.last('opponentPresence')).toBeUndefined();
-    });
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    expect(a.last('matched')).toBeUndefined();
 
-    it('is accepted outside a room and used for the next match', () => {
-      const alice = join('Alice');
-      lobby.handle(alice.session, { type: 'setName', name: 'Alicia' });
-
-      const bob = join('Bob');
-      lobby.handle(alice.session, { type: 'quickMatch', boardSize: 3 });
-      lobby.handle(bob.session, { type: 'quickMatch', boardSize: 3 });
-
-      expect(bob.last('matched')?.opponent.name).toBe('Alicia');
-    });
+    // After the band has grown past the gap, the periodic sweep pairs them.
+    h.advance(46_000);
+    expect(a.last('matched')).toBeDefined();
+    expect(b.last('matched')).toBeDefined();
   });
 
-  describe('rate limiting', () => {
-    it('rejects a client that floods past its burst allowance', () => {
-      lobby = new Lobby({
-        now: () => clock,
-        random: () => 0.42,
-        newId: () => `client-${++nextId}`,
-        messageBurst: 3,
-        messagesPerSecond: 1,
-      });
-      const alice = join('Alice');
+  it('skips over a player who dropped while waiting', () => {
+    const h = newHarness();
+    const gone = h.join('Ghost');
+    gone.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    gone.drop();
 
-      for (let i = 0; i < 5; i++) lobby.handle(alice.session, { type: 'ping' });
-      expect(alice.last('error')?.code).toBe('rateLimited');
+    const a = h.join('Ada');
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+
+    expect(a.last('matched')).toBeUndefined();
+    expect(a.last('searching')).toBeDefined();
+  });
+
+  it('never matches an account with itself', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+
+    expect(a.last('matched')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Private rooms
+// ---------------------------------------------------------------------------
+
+describe('private rooms', () => {
+  it('creates a room and lets a friend join by code', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+
+    const code = host.last('roomCreated')!.code;
+    expect(code).toMatch(/^[A-Z2-9]{6}$/);
+
+    const guest = h.join('Bob');
+    guest.send({ type: 'joinRoom', code });
+
+    expect(host.last('matched')?.kind).toBe('private');
+    expect(guest.last('matched')?.kind).toBe('private');
+  });
+
+  it('refuses a third player', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+
+    h.join('Bob').send({ type: 'joinRoom', code });
+    const third = h.join('Cat');
+    third.send({ type: 'joinRoom', code });
+
+    expect(third.last('error')?.code).toBe('roomFull');
+  });
+
+  it('refuses an unknown code', () => {
+    const h = newHarness();
+    const client = h.join('Ada');
+    client.send({ type: 'joinRoom', code: 'ZZZZZZ' });
+
+    expect(client.last('error')?.code).toBe('roomNotFound');
+  });
+
+  it('never makes a private game ranked', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+    const guest = h.join('Bob');
+    guest.send({ type: 'joinRoom', code });
+
+    const { mover, waiter } = toMove(host, guest);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    expect(resultOf(host)?.kind).toBe('private');
+    expect(resultOf(host)?.rating).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Playing
+// ---------------------------------------------------------------------------
+
+describe('moves', () => {
+  it('applies a legal move and sends both players the new board', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+
+    mover.send({ type: 'move', index: 4 });
+
+    expect(currentSnapshot(a)!.board[4]).not.toBe(0);
+    expect(currentSnapshot(b)!.board[4]).toBe(currentSnapshot(a)!.board[4]);
+  });
+
+  it('refuses a move from the player who is not to move', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { waiter } = toMove(a, b);
+
+    waiter.send({ type: 'move', index: 0 });
+
+    expect(waiter.last('error')?.code).toBe('notYourTurn');
+  });
+
+  it('refuses a move onto an occupied square', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'move', index: 4 });
+    waiter.send({ type: 'move', index: 4 });
+
+    expect(waiter.last('error')?.code).toBe('illegalMove');
+  });
+
+  it('refuses a move off the end of the board', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+
+    mover.send({ type: 'move', index: 9999 });
+
+    expect(mover.last('error')?.code).toBe('illegalMove');
+  });
+
+  it('refuses a duplicate of the move just played', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'move', index: 4 });
+    mover.send({ type: 'move', index: 4 });
+
+    expect(mover.last('error')?.code).toBe('notYourTurn');
+    expect(currentSnapshot(waiter)!.moves).toEqual([4]);
+  });
+
+  it('refuses a move from somebody not in a game', () => {
+    const h = newHarness();
+    const client = h.join('Ada');
+    client.send({ type: 'move', index: 0 });
+
+    expect(client.last('error')?.code).toBe('notInRoom');
+  });
+
+  it('freezes the game once it is won', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const snapshot = currentSnapshot(a)!;
+    expect(snapshot.status).toBe('won');
+    mover.clear();
+    mover.send({ type: 'move', index: 5 });
+    expect(mover.last('error')).toBeDefined();
+  });
+
+  it('enforces the forced-board rule in Ultimate', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, CONFIGS.ultimate);
+    const { mover, waiter } = toMove(a, b);
+
+    // Board 4 cell 0 sends the opponent to board 0.
+    mover.send({ type: 'move', index: 30 });
+    expect(currentSnapshot(a)!.ultimate?.activeBoard).toBe(0);
+
+    waiter.send({ type: 'move', index: 40 });
+    expect(waiter.last('error')?.code).toBe('illegalMove');
+
+    waiter.send({ type: 'move', index: 1 });
+    expect(currentSnapshot(a)!.board[1]).not.toBe(0);
+  });
+
+  it('gives misere games to the player who did not make the line', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, CONFIGS.misere);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const snapshot = currentSnapshot(a)!;
+    const opener = mover.last('matched')!.you;
+    expect(snapshot.status).toBe('won');
+    expect(snapshot.winner).not.toBe(opener);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ending a game
+// ---------------------------------------------------------------------------
+
+describe('results', () => {
+  it('reports a win with the reason and the match id', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const result = resultOf(a)!;
+    expect(result.reason).toBe('line');
+    expect(result.winner).toBe(mover.last('matched')!.you);
+    expect(result.matchId).toHaveLength(36);
+    expect(resultOf(b)?.matchId).toBe(result.matchId);
+  });
+
+  it('scores a game exactly once', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+    // Anything that might settle it again must be ignored.
+    mover.send({ type: 'resign' });
+    h.advance(120_000);
+
+    expect(resultsOf(a)).toHaveLength(1);
+    expect(h.accounts.statsFor(a.accountId, 'classic').played).toBe(1);
+  });
+
+  it('awards a resignation to the opponent', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'resign' });
+
+    expect(resultOf(a)?.reason).toBe('resign');
+    expect(resultOf(a)?.winner).toBe(waiter.last('matched')!.you);
+  });
+
+  it('treats walking out of a live game as a resignation', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'leave' });
+
+    expect(resultOf(waiter)?.reason).toBe('resign');
+    expect(resultOf(waiter)?.winner).toBe(waiter.last('matched')!.you);
+  });
+
+  it('draws by agreement, and only after both sides agree', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'offerDraw' });
+    expect(waiter.last('drawOffered')).toBeDefined();
+    expect(resultOf(a)).toBeUndefined();
+
+    waiter.send({ type: 'respondDraw', accept: true });
+    expect(resultOf(a)?.reason).toBe('agreed');
+    expect(resultOf(a)?.winner).toBeNull();
+  });
+
+  it('lets a draw offer be declined', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'offerDraw' });
+    waiter.send({ type: 'respondDraw', accept: false });
+
+    expect(mover.last('drawDeclined')).toBeDefined();
+    expect(resultOf(a)).toBeUndefined();
+  });
+
+  it('refuses a second draw offer until the offerer has moved again', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'offerDraw' });
+    waiter.send({ type: 'respondDraw', accept: false });
+    waiter.clear();
+
+    // Asking again straight away must not put the banner back up.
+    mover.send({ type: 'offerDraw' });
+    expect(waiter.last('drawOffered')).toBeUndefined();
+
+    // Playing a move earns the right back.
+    mover.send({ type: 'move', index: 0 });
+    waiter.send({ type: 'move', index: 1 });
+    mover.send({ type: 'offerDraw' });
+    expect(waiter.last('drawOffered')).toBeDefined();
+  });
+
+  it('ignores an acceptance nobody offered', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { waiter } = toMove(a, b);
+
+    waiter.send({ type: 'respondDraw', accept: true });
+
+    expect(resultOf(a)).toBeUndefined();
+  });
+
+  it('records the match so it can be replayed', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+    const matchId = resultOf(a)!.matchId;
+
+    const record = h.matches.find(matchId, a.accountId, (id) => h.accounts.get(id));
+    expect(record?.moves).toEqual([0, 3, 1, 4, 2]);
+    expect(record?.mode).toBe('classic');
+    expect(record?.moveTimesMs).toHaveLength(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Clocks
+// ---------------------------------------------------------------------------
+
+describe('clocks', () => {
+  it('runs the clock of whoever is to move', () => {
+    const h = newHarness();
+    const { a } = matched(h);
+
+    const clock = a.last('matched')!.clock!;
+    expect(clock.running).toBe(currentSnapshot(a)!.currentPlayer);
+    expect(clock.x).toBe(modeById('classic').clock.initialSeconds * 1000);
+  });
+
+  it('deducts thinking time and adds the increment on a move', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+    const initial = a.last('matched')!.clock!;
+
+    h.advance(10_000);
+    mover.send({ type: 'move', index: 4 });
+
+    const after = a.last('state')!.clock!;
+    const side = mover.last('matched')!.you === X ? 'x' : 'o';
+    const increment = modeById('classic').clock.incrementSeconds * 1000;
+    expect(after[side]).toBe(initial[side] - 10_000 + increment);
+    expect(after.running).not.toBe(mover.last('matched')!.you);
+  });
+
+  it('awards the game when a clock runs out', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { waiter } = toMove(a, b);
+
+    h.advance(modeById('classic').clock.initialSeconds * 1000 + 1000);
+
+    expect(resultOf(a)?.reason).toBe('timeout');
+    expect(resultOf(a)?.winner).toBe(waiter.last('matched')!.you);
+  });
+
+  it('refuses a move that arrives after the flag has fallen', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, CONFIGS.classic);
+    const { mover, waiter } = toMove(a, b);
+
+    h.advance(modeById('classic').clock.initialSeconds * 1000 + 1000);
+    mover.send({ type: 'move', index: 4 });
+
+    // A match decided on time leaves a board that is still mid-game, so the
+    // board's own status is not what closes it - the result is.
+    expect(mover.last('error')?.code).toBe('notYourTurn');
+    expect(currentSnapshot(waiter)!.board.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('keeps the clock running through a disconnection', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.drop();
+    h.advance(modeById('classic').clock.initialSeconds * 1000 + 1000);
+
+    expect(resultOf(waiter)).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ratings and statistics
+// ---------------------------------------------------------------------------
+
+describe('ratings', () => {
+  it('moves both ratings in a ranked game, and by opposite amounts', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    const b = h.join('Bob');
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+
+    const { mover, waiter } = toMove(a, b);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const rating = resultOf(a)!.rating!;
+    expect(rating).not.toBeNull();
+    const winnerIsX = resultOf(a)!.winner === X;
+    const winner = winnerIsX ? rating.x : rating.o;
+    const loser = winnerIsX ? rating.o : rating.x;
+
+    expect(winner.after).toBeGreaterThan(winner.before);
+    expect(loser.after).toBeLessThan(loser.before);
+    expect(winner.after - winner.before).toBe(loser.before - loser.after);
+  });
+
+  it('leaves ratings alone in a casual game but still counts it', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    expect(resultOf(a)?.rating).toBeNull();
+    const stats = h.accounts.statsFor(a.accountId, 'classic');
+    expect(stats.played).toBe(1);
+    expect(stats.rating).toBe(1200);
+  });
+
+  it('counts wins, losses and draws separately', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const winner = h.accounts.statsFor(mover.accountId, 'classic');
+    const loser = h.accounts.statsFor(waiter.accountId, 'classic');
+    expect(winner.won).toBe(1);
+    expect(winner.streak).toBe(1);
+    expect(loser.lost).toBe(1);
+    expect(loser.streak).toBe(0);
+  });
+
+  it('unlocks an achievement on a first win', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const unlocked = h.accounts.achievements(mover.accountId).map((entry) => entry.id);
+    expect(unlocked).toContain('first-win');
+    // Five moves on a 3x3 board is as fast as a win can be.
+    expect(unlocked).toContain('sharpshooter');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reconnection and abandonment
+// ---------------------------------------------------------------------------
+
+describe('reconnection', () => {
+  it('tells a fresh connection whether a seat is waiting for it', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+
+    // A connection with nothing to come back to is idle and should act on
+    // whatever the player asked for.
+    expect(h.join('Cat').last('welcome')?.resumed).toBe(false);
+
+    const accountId = mover.accountId;
+    const token = mover.token;
+    mover.drop();
+
+    const back = h.connect();
+    back.send({ type: 'hello', version: PROTOCOL_VERSION, accountId, token });
+
+    // A reconnect has a game on the way, and must not be treated as idle: a
+    // client that queues here abandons the game it was about to rejoin.
+    expect(back.last('welcome')?.resumed).toBe(true);
+    expect(back.last('matched')).toBeDefined();
+  });
+
+  it('holds the seat and puts a returning player back in the game', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+    mover.send({ type: 'move', index: 4 });
+
+    const accountId = mover.accountId;
+    const token = mover.token;
+    mover.drop();
+    expect(waiter.last('seats')?.seats.some((seat) => !seat.connected)).toBe(true);
+
+    const back = h.connect();
+    back.send({ type: 'hello', version: PROTOCOL_VERSION, accountId, token });
+
+    const resumed = back.last('matched');
+    expect(resumed).toBeDefined();
+    expect(resumed?.snapshot.board[4]).not.toBe(0);
+    expect(resumed?.you).toBeDefined();
+  });
+
+  it('awards the game once a player has been gone too long', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.drop();
+    h.advance(61_000);
+
+    expect(resultOf(waiter)?.reason).toBe('abandoned');
+    expect(resultOf(waiter)?.winner).toBe(waiter.last('matched')!.you);
+  });
+
+  it('does not award a game when both players have gone', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+
+    a.drop();
+    b.drop();
+    h.advance(61_000);
+
+    expect(resultOf(a)).toBeUndefined();
+    expect(resultOf(b)).toBeUndefined();
+  });
+
+  it('drops a room once everyone has been gone past the grace period', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    expect(h.lobby.roomCount).toBe(1);
+
+    a.drop();
+    b.drop();
+    h.advance(120_000);
+
+    expect(h.lobby.roomCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rematch
+// ---------------------------------------------------------------------------
+
+describe('rematch', () => {
+  it('resets the board once both players have asked', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    a.send({ type: 'rematch' });
+    expect(b.last('rematchOffered')).toBeDefined();
+    expect(currentSnapshot(a)!.status).toBe('won');
+
+    b.send({ type: 'rematch' });
+    const fresh = currentSnapshot(a)!;
+    expect(fresh.status).toBe('playing');
+    expect(fresh.board.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('starts a fresh clock for the rematch', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+    h.advance(20_000);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    a.send({ type: 'rematch' });
+    b.send({ type: 'rematch' });
+
+    const clock = a.last('matched')!.clock!;
+    expect(clock.x).toBe(modeById('classic').clock.initialSeconds * 1000);
+    expect(clock.o).toBe(modeById('classic').clock.initialSeconds * 1000);
+  });
+
+  it('scores the rematch as its own match', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const first = toMove(a, b);
+    playMoves(first.mover, first.waiter, [0, 3, 1, 4, 2]);
+
+    a.send({ type: 'rematch' });
+    b.send({ type: 'rematch' });
+
+    const second = toMove(a, b);
+    playMoves(second.mover, second.waiter, [0, 3, 1, 4, 2]);
+
+    expect(resultsOf(a)).toHaveLength(2);
+    expect(resultsOf(a)[0]!.matchId).not.toBe(resultsOf(a)[1]!.matchId);
+    expect(h.accounts.statsFor(a.accountId, 'classic').played).toBe(2);
+  });
+
+  it('does not reset the board on a rematch asked for mid-game', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+    mover.send({ type: 'move', index: 4 });
+
+    a.send({ type: 'rematch' });
+    b.send({ type: 'rematch' });
+
+    expect(currentSnapshot(a)!.board[4]).not.toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spectating and emotes
+// ---------------------------------------------------------------------------
+
+describe('spectating', () => {
+  it('shows a watcher the game without giving them a seat', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+    const guest = h.join('Bob');
+    guest.send({ type: 'joinRoom', code });
+
+    const watcher = h.join('Cat');
+    watcher.send({ type: 'spectate', code });
+
+    expect(watcher.last('matched')?.you).toBeNull();
+    expect(host.last('spectators')?.count).toBe(1);
+
+    watcher.send({ type: 'move', index: 0 });
+    expect(watcher.last('error')?.code).toBe('notInRoom');
+  });
+
+  it('sends watchers every move', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+    const guest = h.join('Bob');
+    guest.send({ type: 'joinRoom', code });
+    const watcher = h.join('Cat');
+    watcher.send({ type: 'spectate', code });
+    watcher.clear();
+
+    const { mover } = toMove(host, guest);
+    mover.send({ type: 'move', index: 4 });
+
+    expect(watcher.last('state')?.snapshot.board[4]).not.toBe(0);
+  });
+});
+
+describe('emotes', () => {
+  it('passes an emote to the opponent', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    b.clear();
+
+    a.send({ type: 'emote', emote: 'gg' });
+
+    expect(b.last('emote')?.emote).toBe('gg');
+    expect(b.last('emote')?.from).toBe(a.last('matched')!.you);
+  });
+
+  it('withholds emotes from a player who muted', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    b.send({ type: 'mute', muted: true });
+    b.clear();
+
+    a.send({ type: 'emote', emote: 'hurry' });
+
+    expect(b.last('emote')).toBeUndefined();
+  });
+
+  it('rate-limits a player spamming emotes', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    b.clear();
+
+    for (let i = 0; i < 10; i++) a.send({ type: 'emote', emote: 'hello' });
+
+    // The bucket holds three; the rest are dropped rather than delivered.
+    expect(b.all('emote').length).toBeLessThanOrEqual(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Abuse
+// ---------------------------------------------------------------------------
+
+describe('limits', () => {
+  it('rate-limits a flood of messages', () => {
+    const h = newHarness({ messageBurst: 5, messagesPerSecond: 0 });
+    const client = h.join('Ada');
+
+    for (let i = 0; i < 20; i++) client.send({ type: 'ping' });
+
+    expect(client.all('error').some((error) => error.code === 'rateLimited')).toBe(true);
+    expect(client.all('pong').length).toBeLessThanOrEqual(5);
+  });
+
+  it('refuses to open more rooms than it will hold', () => {
+    const h = newHarness({ maxRooms: 1 });
+    const first = h.join('Ada');
+    first.send({ type: 'createRoom', config: CONFIGS.classic });
+
+    const second = h.join('Bob');
+    second.send({ type: 'createRoom', config: CONFIGS.classic });
+
+    expect(second.last('error')?.code).toBe('serverFull');
+  });
+
+  it('reports capacity once the session ceiling is reached', () => {
+    const h = newHarness({ maxSessions: 1 });
+    h.join('Ada');
+    expect(h.lobby.atCapacity).toBe(true);
+  });
+
+  it('rejects a game config the rules cannot run', () => {
+    const h = newHarness();
+    const client = h.join('Ada');
+
+    client.send({
+      type: 'queue',
+      config: { variant: 'ultimate', size: 6, winLength: 3 },
+      ranked: false,
     });
 
-    it('lets the bucket refill over time', () => {
-      lobby = new Lobby({
-        now: () => clock,
-        random: () => 0.42,
-        newId: () => `client-${++nextId}`,
-        messageBurst: 2,
-        messagesPerSecond: 1,
-      });
-      const alice = join('Alice');
-      for (let i = 0; i < 4; i++) lobby.handle(alice.session, { type: 'ping' });
-      expect(alice.last('error')?.code).toBe('rateLimited');
-
-      alice.clear();
-      advance(2000);
-      lobby.handle(alice.session, { type: 'ping' });
-      expect(alice.last('pong')).toBeDefined();
-      expect(alice.last('error')).toBeUndefined();
-    });
+    expect(client.last('error')?.code).toBe('badMessage');
   });
 });

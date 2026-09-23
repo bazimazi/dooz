@@ -13,15 +13,15 @@ function FaceBubble({ children, ...props }: FaceProps) {
   return (
     <svg viewBox="0 0 72 68" fill="none" width="1em" height="1em" aria-hidden="true" {...props}>
       {/* Trailing thought bubbles, as in the design. */}
-      <circle cx="9.4" cy="17.6" r="6.2" fill="var(--color-g9)" />
-      <circle cx="4.2" cy="6.4" r="4" fill="var(--color-g9)" />
-      <circle cx="41.7" cy="37.3" r="29.9" fill="var(--color-g9)" />
+      <circle cx="9.4" cy="17.6" r="6.2" fill="var(--color-face)" />
+      <circle cx="4.2" cy="6.4" r="4" fill="var(--color-face)" />
+      <circle cx="41.7" cy="37.3" r="29.9" fill="var(--color-face)" />
       {children}
     </svg>
   );
 }
 
-const EYE = 'var(--color-raised)';
+const EYE = 'var(--color-face-ink)';
 
 export function HappyFace(props: FaceProps) {
   return (
@@ -42,7 +42,7 @@ export function HappyFace(props: FaceProps) {
       <path
         className="origin-center animate-wiggle transform-fill"
         d="M33.9 51.2a10 10 0 0 0 15.6 0c-2.2-2-5-3-7.8-3s-5.6 1-7.8 3Z"
-        fill="var(--color-p3)"
+        fill="var(--color-mark-x-soft)"
       />
     </FaceBubble>
   );

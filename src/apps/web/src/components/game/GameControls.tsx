@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { HomeIcon, RefreshIcon } from '@/components/art/icons';
+import { UndoIcon } from '@/components/art/ui-icons';
 import { IconButton } from '@/components/ui/IconButton';
 
 interface GameControlsProps {
@@ -9,6 +10,11 @@ interface GameControlsProps {
   tone?: 'glass' | 'solid';
   restartLabel?: string;
   restartDisabled?: boolean;
+  /** Offered on the local screens only; an online game cannot take a move back. */
+  onUndo?: () => void;
+  canUndo?: boolean;
+  /** Anything else this screen needs in the row - a hint toggle, say. */
+  extra?: ReactNode;
 }
 
 /** The restart and home pair that appears under the board and in the modal. */
@@ -17,6 +23,9 @@ export function GameControls({
   tone = 'glass',
   restartLabel = 'Play again',
   restartDisabled = false,
+  onUndo,
+  canUndo = false,
+  extra,
 }: GameControlsProps) {
   // Bumped on every restart. Using it as the icon's key remounts the element,
   // which is what lets the same one-shot spin replay on a second press -
@@ -24,7 +33,18 @@ export function GameControls({
   const [spins, setSpins] = useState(0);
 
   return (
-    <div className="flex items-center justify-center gap-4">
+    <div className="flex items-center justify-center gap-3">
+      {onUndo ? (
+        <IconButton
+          tone={tone}
+          label="Take back the last move"
+          disabled={!canUndo}
+          onClick={onUndo}
+        >
+          <UndoIcon />
+        </IconButton>
+      ) : null}
+
       <IconButton
         tone={tone}
         label={restartLabel}
@@ -38,6 +58,8 @@ export function GameControls({
           <RefreshIcon />
         </span>
       </IconButton>
+
+      {extra}
 
       <IconButton as={Link} to="/" tone={tone} label="Back to home">
         <span className="block transition-transform duration-200 ease-spring group-hover:-translate-y-0.5">

@@ -1,12 +1,22 @@
 # dooz
 
-Tic Tac Toe on 3×3, 6×6 and 9×9 boards. Play someone on the same device, play
-someone online, or play a bot that cannot be beaten at 3×3.
+An in-a-row strategy game. Seven modes across four rule sets — classic Tic Tac
+Toe, larger boards, Gomoku, Misère and Ultimate — against a six-level AI, a
+friend on the same device, or a stranger on a rated ladder.
 
 One codebase runs everywhere: as a web app, as an installable PWA, as a desktop
 app on Windows, macOS and Linux, and as a native app on iOS and Android.
 
 ---
+
+## What it is
+
+| | |
+| --- | --- |
+| **Modes** | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Ultimate |
+| **Play** | Pass-and-play · vs AI (6 levels) · practice with hints · ranked · casual · private rooms · spectating |
+| **Competitive** | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards |
+| **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics |
 
 ## The stack, and why
 
@@ -15,12 +25,13 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 | Language   | TypeScript 7               | The Go-native compiler. Type-checks the whole workspace in well under a second.                                                                                                  |
 | UI         | React 19                   | The design is a handful of screens with local state; React's ecosystem is the one everything else here targets.                                                                  |
 | Build      | Vite 8 (Rolldown)          | Rust bundler, sub-second production builds, first-class worker and PWA support.                                                                                                  |
-| Routing    | TanStack Router            | Type-safe routes **and** type-safe search params, which is where the board size and room code live.                                                                              |
-| Styling    | Tailwind CSS v4            | CSS-first `@theme` config, so the Figma palette lives in one file as real CSS variables. Zero runtime.                                                                           |
+| Routing    | TanStack Router            | Type-safe routes **and** type-safe search params, which is where the mode, the difficulty and the room code live.                                                                |
+| Styling    | Tailwind CSS v4            | CSS-first `@theme` config, so the palette lives in one file as real CSS variables. Zero runtime.                                                                                 |
 | Shell      | Tauri 2                    | The one toolchain that covers desktop **and** mobile from a web frontend. Binaries are a few MB rather than a bundled browser.                                                   |
-| State      | Zustand                    | Only the online connection needs cross-screen state; everything else is component state.                                                                                         |
-| Server     | Hono + `ws` on Node        | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                  |
-| Validation | Zod 4                      | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                         |
+| State      | Zustand                    | Only the connection and the account need cross-screen state; everything else is component state.                                                                                |
+| Server     | Hono + `ws` on Node        | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                 |
+| Storage    | SQLite (`better-sqlite3`)  | Accounts, ratings, matches and replays outlive a restart. Synchronous API, real transactions, one file to back up.                                                               |
+| Validation | Zod 4                      | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                        |
 | Test       | Vitest 4 + Testing Library | Same config format as Vite. The engine and the server run headless; the client runs against jsdom, because its reconnect and keyboard behaviour is not observable without a DOM. |
 | Lint       | oxlint (+ tsgolint)        | Rust linter with type-aware rules built on TypeScript 7. `typescript-eslint` does not yet support TS 7.                                                                          |
 
@@ -37,7 +48,7 @@ command below is run from there.
 ```
 src/
 ├── packages/
-│   ├── engine/      rules, win detection, and the AI - pure TypeScript, no framework
+│   ├── engine/      rules, variants, and the AI - pure TypeScript, no framework
 │   └── protocol/    the wire format, shared by client and server
 └── apps/
     ├── web/         the client: React + Vite + Tailwind, and the PWA
@@ -48,6 +59,61 @@ src/
 `engine` is a package rather than a folder inside the client because the server
 runs the identical rules. The client predicts nothing: it sends a cell index and
 renders whatever board comes back.
+
+## The engine
+
+A game is a `GameConfig` — a variant, a board size and a run length — plus the
+moves played. Everything else is derived.
+
+```ts
+const game = createGame({ variant: 'gomoku', size: 15, winLength: 5 });
+const next = applyMove(game, 112);        // null if the move is illegal
+replay(game.config, X, next!.moves);      // the same position, rebuilt
+```
+
+Variants live behind one interface (`create`, `canPlay`, `legalMoves`, `apply`)
+and are registered in a single map, so adding one touches two files and nothing
+else: the server, the client and the AI only ever see `GameState`. Three of the
+four share an implementation — `classic`, `gomoku` and `misere` differ only in
+the board they use and in who a completed line belongs to. `ultimate` is the one
+with state beyond the board, and it carries it in a field the others leave null.
+
+Because nothing in the rules reads a clock or a random number, a match is stored
+as its config, its opener and its move list. That is what makes replays exact
+rather than approximate: the client re-runs the same engine over the same moves.
+
+## The AI
+
+Six levels that differ in three independent ways, not in how much noise is added
+to one engine:
+
+- **How far ahead they look.** Beginner does not search; master searches until
+  its clock runs out.
+- **Which tactics they may use.** Every level takes a win it can see and blocks a
+  loss it can see — missing those is not "easy", it is broken. Fork-finding
+  unlocks at medium, which is where a human stops being able to win with a
+  simple trap.
+- **How close to the best move they insist on playing.** Weaker levels pick
+  uniformly among the root moves within a score window, so they play a
+  defensible move that is simply not the strongest. A forced win is never
+  subject to it.
+
+Under that sits an iterative-deepening alpha-beta search with a transposition
+table (Zobrist-hashed, with a second hash verified on lookup), killer moves,
+threat-based move ordering, and a quiescence extension that follows *forced*
+replies only. Positions are scored by their win-windows, with open and closed
+threats valued separately — the difference between a three that must be answered
+now and one that is already half dead.
+
+3×3 is solved outright from hard upwards. On the larger boards the search is
+bounded by wall clock, always has a complete answer in hand when time runs out,
+and can be cancelled mid-search when the position it was thinking about is no
+longer on screen.
+
+```bash
+npm run bench --workspace @dooz/engine    # the full strength ladder
+npm run bench:speed --workspace @dooz/engine
+```
 
 ## Getting started
 
@@ -61,7 +127,11 @@ npm run dev:all        # both at once
 ```
 
 Online play needs both. In development the client finds the server on its own;
-for anything else see [`src/apps/web/.env.example`](src/apps/web/.env.example).
+for anything else see [`src/apps/web/.env.example`](src/apps/web/.env.example)
+and [`src/apps/server/.env.example`](src/apps/server/.env.example).
+
+The server creates its SQLite database on first run (`./data/dooz.sqlite` by
+default). It is the only thing that needs to persist between deploys.
 
 ### Desktop and mobile
 
@@ -94,126 +164,111 @@ has to point at the same server.
 ### Everything else
 
 ```bash
-npm test           # 90 tests: rules, AI, matchmaking, and the client
+npm test           # rules, invariants, AI strength, server, protocol, client
 npm run typecheck  # whole workspace
 npm run lint       # oxlint, type-aware
 npm run format     # prettier
-npm run build      # production web build
+
+npm run audit:a11y --workspace @dooz/web   # contrast and naming, against a real browser
 ```
-
-All five run on every push and pull request; see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-
-The server runs through `tsx` in both development and production. It is not
-built ahead of time: its modules import each other with `.js` specifiers that
-resolve to `.ts` files, which Node's own type stripping does not rewrite.
-
-## The rules
-
-| Board | Line needed to win |
-| ----- | ------------------ |
-| 3 × 3 | 3                  |
-| 6 × 6 | 4                  |
-| 9 × 9 | 5                  |
-
-Larger boards need a shorter line than a full row; requiring nine in a row on a
-9×9 board would make every game a draw.
-
-## The bot
-
-`findBestMove` is iterative-deepening alpha-beta with a transposition table,
-Zobrist hashing, and move ordering by threat value.
-
-- **3 × 3** is solved outright. There is a test that plays every line a human
-  can choose, from both sides, and asserts the bot never loses.
-- **6 × 6 and 9 × 9** cannot be solved, so the search works to a time budget and
-  falls back on a gomoku-style evaluation that scores each potential winning
-  line by how far along it is. Candidate moves are limited to cells near an
-  existing mark, which is what keeps the branching factor manageable.
-- Winning and blocking moves are found before the search runs, so the bot never
-  misses an obvious one because it ran out of time.
-
-The search runs in a Web Worker. A 9×9 search can spend over a second in a tight
-loop, which would otherwise freeze the interface for its whole duration.
-
-Scores that prove a win are stored in the transposition table rebased to the
-node that found them, because the same position is reached by paths of different
-lengths and a raw mate score read back along a longer one would be measured from
-the wrong place.
 
 ## Online play
 
-The server holds the game. A client can only ever send a cell index; the server
-validates the turn and the move, applies it with the same engine the client
-renders with, and broadcasts the result.
+### Identity
 
-- **Quick match** - a queue per board size.
-- **Private rooms** - a six-character code, drawn from an alphabet with no `0`/`O`
-  or `1`/`I` confusion, shareable as a link.
-- **Reconnection** - a seat is held for 45 seconds, so a locked phone or a
-  switched network does not end the game. See below for what reclaims it.
-- **Rematch** - takes both players; either can offer.
+Every device gets an account on first launch — no form, no email. The server
+issues an id and a token; the token is the only credential, and only its hash is
+stored. Attaching a password later is optional and is what lets the same account
+be used on a second device.
 
-### Holding a seat
+An account holds one live connection. A second one takes over and the first is
+told why, which is the behaviour a reconnect after a crash needs and the
+behaviour two tabs fighting over one seat does not.
 
-Reclaiming a seat takes two things: the client id, and a `resumeToken` the
-server issues in `welcome` and shows to nobody else. An id on its own is an
-identifier, not a credential, and a seat that a live connection is still sitting
-in is never handed over at all.
+### What the server decides
 
-Both live in `sessionStorage`, which is per-tab. A reload keeps them, so the
-seat survives one; a second tab gets its own identity rather than the first
-tab's, so opening one cannot take over a game running in the other. The display
-name is a preference rather than a secret and stays in `localStorage`.
+Everything that a result depends on:
+
+- whether a move is legal, and whose turn it is;
+- whose clock is running, and whether it has run out;
+- what a disconnection costs, and when an abandoned game is awarded;
+- what a rating changes by.
+
+The client sends a cell index and renders what comes back. It runs the same
+rules, but only to draw a board it has already been given — never to decide one.
+
+### Ranked, casual, private
+
+They are kept apart because they are different games socially. Only ranked moves
+a rating; leaving one early is a resignation. Private rooms are never rated, and
+their codes come from the CSPRNG — a non-cryptographic generator's state can be
+recovered from a handful of observed outputs, which would make every later code
+predictable.
+
+Ranked matchmaking pairs players inside a rating band that widens the longer
+either has waited, because a perfectly fair match that never happens is worse
+than a slightly lopsided one that does.
 
 ### What the server assumes about clients
 
 Nothing. Beyond the rules above:
 
 - Every inbound frame is parsed against the schema, and every outbound one is
-  parsed again by the client - including cross-field checks, so a board that
-  disagrees with the size it claims is rejected rather than rendered.
+  parsed again by the client — including cross-field checks, so a board that
+  disagrees with the config it claims is rejected rather than rendered.
+- Nothing but `hello` is accepted before a connection has proved who it is.
 - The WebSocket upgrade checks `Origin` against `ALLOWED_ORIGINS`. The CORS
   middleware does not cover this: a WebSocket handshake is not subject to the
   same-origin policy, so without the check any page could open a socket here.
-- `hello` is accepted once per connection, so a client cannot swap identity
-  underneath a game in progress.
-- Room codes come from the CSPRNG. They are the only thing keeping an uninvited
-  player out of a private room, and a non-cryptographic generator's state can be
-  recovered from a handful of observed outputs.
-- Inbound messages are rate-limited per connection, frames are size-capped, dead
-  sockets are dropped by heartbeat, and there are ceilings on both sessions and
-  rooms so neither map can grow without bound.
+- Credentials are compared in constant time. Passwords go through scrypt with a
+  per-account salt; tokens, which are 32 bytes of entropy, through SHA-256.
+- A wrong password and an unknown name produce the same answer, after the same
+  work.
+- Inbound messages are rate-limited per connection, emotes far more tightly than
+  that, account creation per address, frames are size-capped, dead sockets are
+  dropped by heartbeat, and there are ceilings on sessions, rooms and spectators
+  so no map can grow without bound.
+- A declined draw offer cannot be repeated until the position has changed.
 
 ## Design
 
-Everything comes from the
-[Figma file](https://www.figma.com/file/qrujFLqQzWtczHCh8G0FQF). The palette
-lives in
+The palette comes from the
+[Figma file](https://www.figma.com/file/qrujFLqQzWtczHCh8G0FQF) and lives in
 [`src/apps/web/src/styles/theme.css`](src/apps/web/src/styles/theme.css) under
-the same names it has there (`b1`–`b8`, `g1`–`g10`, `p1`–`p3`, `y1`–`y3`).
+the same names it has there (`b1`–`b10`, `g1`–`g10`, `p1`–`p3`, `y1`–`y3`).
+
+Components never reach for those directly. They use the semantic layer above
+them — `canvas`, `surface`, `ink`, `stroke`, `mark-x` — which is what makes the
+light theme a block of redefinitions rather than an audit of every file. Both
+themes were measured: every piece of text meets WCAG AA against the surface it
+is actually painted on, compositing included.
 
 Artwork is inline SVG rather than image files: it scales to any display, needs
-no network, and recolours with the theme. The 109KB background bitmap the
-original build shipped is now a few hundred bytes of vector.
+no network, and recolours with the theme.
 
 ## Accessibility
 
 The board is a `role="grid"` of `role="row"`s with a roving tabindex, so it is a
-single tab stop and the arrow keys move within it - a 9×9 board would otherwise
-put 81 stops in the page's tab order. Cells are never `disabled`, only
-`aria-disabled`: a disabled button cannot take focus, and with a roving tabindex
-that would leave the grid with no tab stop at all the moment somebody played the
-anchor cell. Every cell is labelled by position and contents.
+single tab stop and the arrow keys move within it — a 15×15 board would
+otherwise put 225 stops in the page's tab order. Home and End jump to the ends
+of a row. Cells are never `disabled`, only `aria-disabled`: a disabled button
+cannot take focus, and with a roving tabindex that would leave the grid with no
+tab stop at all the moment somebody played the anchor cell. Every cell is
+labelled by position and contents, and on an Ultimate board by which small board
+it belongs to and how that board stands.
 
 Overlays that set `aria-modal` honour it: focus moves in and is restored on
 close, Tab wraps inside the panel, and the rest of the page is `inert` for as
 long as the panel is up. Turn and status changes are announced through a live
-region, the reduced-motion preference is honoured, and the page does not block
-zoom.
+region; a clock announces itself only once it is nearly out, because announcing
+every second of both clocks would make the board unusable. Reduced motion is
+honoured, and the page does not block zoom.
 
-There are tests for the parts of this that a refactor can silently break - the
-tab stop, the arrow keys, the grid structure and the focus trap.
+There are tests for the parts a refactor can silently break — the tab stop, the
+arrow keys, the grid structure, the focus trap, and the roles and names of every
+composite control. Contrast, target size and "is every control named" need
+layout and colour, so they are checked against a real browser by
+`npm run audit:a11y --workspace @dooz/web`.
 
 ## The earlier versions
 
