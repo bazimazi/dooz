@@ -54,11 +54,11 @@
     "longDescription": "dooz is Tic Tac Toe with room to breathe: play a friend on one device or online, or take on a bot that is unbeatable at 3x3 and dangerous at 6x6 and 9x9.",
     "copyright": "MIT",
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/dooz/32x32.png",
+      "icons/dooz/128x128.png",
+      "icons/dooz/128x128@2x.png",
+      "icons/dooz/icon.icns",
+      "icons/dooz/icon.ico"
     ],
     "windows": {
       "webviewInstallMode": {

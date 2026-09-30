@@ -14,7 +14,7 @@
     "ios:init": "tauri ios init && npm run icons",
     "ios:dev": "tauri ios dev",
     "ios:build": "tauri ios build",
-    "icons": "tauri icon ../web/public/icon-512.png"
+    "icons": "npm run icons --workspace @dooz/web && tauri icon ../../assets/brand/tauri-icon.json --output src-tauri/icons/dooz && node ../web/scripts/finish-native-icons.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4"

@@ -223,6 +223,16 @@ variable, so
 [`src/apps/native/src-tauri/tauri.conf.json`](src/apps/native/src-tauri/tauri.conf.json)
 has to point at the same server.
 
+### Game artwork
+
+The [brand asset guide](src/assets/brand/README.md) lists the editable sources,
+web/PWA icons, native launcher sets, and promotional images. Run `npm run icons`
+from `src/` to regenerate the entire set and refresh scaffolded mobile projects.
+The icon colors match the game's pink X, amber O, and indigo canvas.
+
+Set `VITE_PUBLIC_URL` to the deployed web app address when building for the web
+so social cards use absolute image URLs.
+
 ### Everything else
 
 ```bash

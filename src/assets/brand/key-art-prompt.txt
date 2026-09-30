@@ -1,0 +1,8 @@
+Use case: ads-marketing
+Asset type: landscape game key art / social sharing image, 1536x1024.
+Primary request: A polished playful promotional illustration for "dooz", an in-a-row strategy game with tic tac toe, Gomoku and other variants.
+Scene/backdrop: rich indigo (#232599) edge-to-edge background with very restrained electric blue lighting, ample breathing room.
+Subject: On the right half, a small floating 3 by 3 board in a subtle near-front isometric view with chunky softly rounded pink X pieces (#F3339E) and golden amber O rings (#F9BD13). Only five pieces, arranged as a plausible unfinished tic tac toe position (X top left, O top right, X center, O bottom left, X bottom middle). Board cells have understated blue separators. A few small floating crosses and rings for depth. Tactile toy-like satin surfaces, precise geometry, gentle studio shadows, no visual clutter.
+On the left half, large perfectly legible lowercase cream lettering "dooz" with friendly rounded playful typography. Under it, small clean white sans serif text exactly "IN-A-ROW STRATEGY". No other text.
+Composition/framing: landscape, generous margin. All essential text and board must stay in the middle 65 percent of image height so it can also be center-cropped to 1200x630. Clean premium indie game art, consistent with a pink / amber / indigo vector UI.
+Constraints: no device mockups, no app store badges, no watermark, no photoreal people, no unrelated objects, no extra text.

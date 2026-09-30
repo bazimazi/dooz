@@ -1,0 +1,8 @@
+{
+  "default": "../../apps/web/public/brand/icon-1024.png",
+  "bg_color": "#232599",
+  "android_bg": "android-background.svg",
+  "android_fg": "android-foreground.svg",
+  "android_fg_scale": 100,
+  "android_monochrome": "android-monochrome.svg"
+}

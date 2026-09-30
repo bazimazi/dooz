@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+    <radialGradient id="canvas" cx="30%" cy="12%" r="105%">
+      <stop stop-color="#4152d5"/><stop offset="0.55" stop-color="#232599"/><stop offset="1" stop-color="#191685"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="196" fill="url(#canvas)"/>
+  <g transform="translate(512 512) scale(1) translate(-512 -512)">
+  <title>dooz — cross and ring</title>
+  <defs>
+    <linearGradient id="pink" x1="220" y1="210" x2="480" y2="510" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff72c3"/>
+      <stop offset="0.5" stop-color="#f3339e"/>
+      <stop offset="1" stop-color="#dc1989"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="550" y1="480" x2="780" y2="850" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffe075"/>
+      <stop offset="0.5" stop-color="#f9bd13"/>
+      <stop offset="1" stop-color="#e7a508"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round">
+    <path d="M225 248 465 488 M465 248 225 488" stroke="#121357" stroke-opacity="0.28" stroke-width="94"/>
+    <path d="M225 230 465 470 M465 230 225 470" stroke="url(#pink)" stroke-width="90"/>
+    <circle cx="665" cy="682" r="143" stroke="#121357" stroke-opacity="0.28" stroke-width="92"/>
+    <circle cx="665" cy="664" r="143" stroke="url(#amber)" stroke-width="88"/>
+  </g>
+
+</g></svg>
