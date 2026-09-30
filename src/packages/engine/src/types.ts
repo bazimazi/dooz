@@ -35,10 +35,19 @@ export const MAX_WIN_LENGTH = 6;
  * `classic` and `gomoku` share one implementation - they differ only in the
  * board and run length a mode picks - and are kept apart because a player
  * choosing between them is choosing between two games, not two numbers.
- * `misere` inverts who a completed line belongs to. `ultimate` is the only one
- * with state beyond the board itself.
+ * `misere` inverts who a completed line belongs to. `gravity` drops every mark
+ * to the lowest free square of its column. `vanish` keeps only each player's
+ * three newest marks on the board, which it can derive from the move list.
+ * `ultimate` is the only one with state beyond the board and the moves.
  */
-export const VARIANT_IDS = ['classic', 'gomoku', 'misere', 'ultimate'] as const;
+export const VARIANT_IDS = [
+  'classic',
+  'gomoku',
+  'misere',
+  'gravity',
+  'vanish',
+  'ultimate',
+] as const;
 export type VariantId = (typeof VARIANT_IDS)[number];
 
 /**
@@ -146,6 +155,13 @@ export function isGameConfig(value: unknown): value is GameConfig {
   // Ultimate is nine 3x3 boards and nothing else: the sub-board geometry is
   // what the variant *is*, so there is no other size it could mean.
   if (variant === 'ultimate') return size === 9 && winLength === 3;
+
+  // Vanish caps each player at three marks, so it is only a game where three is
+  // also the run - and the board it is solved on is the one it is played on.
+  if (variant === 'vanish') return size === 3 && winLength === 3;
+
+  // A column needs room to stack a run in it, or gravity is just a smaller board.
+  if (variant === 'gravity') return size >= 4;
 
   return true;
 }

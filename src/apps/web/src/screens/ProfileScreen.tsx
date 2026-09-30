@@ -5,12 +5,20 @@ import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BackIcon } from '@/components/art/icons';
 import { LockIcon, MedalIcon, SparkIcon, TrophyIcon } from '@/components/art/ui-icons';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClasses, buttonStyle } from '@/components/ui/Button';
 import { Card, EmptyState, StatTile } from '@/components/ui/Card';
 import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
+import { MAX_STARS } from '@/features/journey/stages';
+import {
+  totalBotGames,
+  totalBotWins,
+  totalStars,
+  useProgressStore,
+} from '@/features/progress/store';
+import { isSkinUnlocked, SKIN_UNLOCKS } from '@/features/progress/unlocks';
 import { api, type MatchSummary, type ProfileResponse } from '@/lib/api';
 import { cx } from '@/lib/cx';
 import { duration, fullDate, signed, timeAgo, winRate } from '@/lib/format';
@@ -52,6 +60,7 @@ export function ProfileScreen() {
         <Card className="w-full" padding="roomy">
           <p className="text-center text-sm text-ink-faint">Loading your profile…</p>
         </Card>
+        <SoloProgress className="mt-4" />
       </Screen>
     );
   }
@@ -71,6 +80,7 @@ export function ProfileScreen() {
             }
           />
         </Card>
+        <SoloProgress className="mt-4" />
       </Screen>
     );
   }
@@ -146,6 +156,8 @@ export function ProfileScreen() {
             hint={favourite ? `in ${labelFor(favourite.mode)}` : undefined}
           />
         </div>
+
+        <SoloProgress />
 
         {/* Per mode */}
         <Card className="w-full" padding="tight">
@@ -439,3 +451,58 @@ function labelFor(mode: string): string {
 }
 
 export { modeById };
+
+/**
+ * Everything earned on this device, without the server.
+ *
+ * Shown on every state of the screen, including the ones where the server
+ * could not be reached - the journey and the puzzles never needed it, and an
+ * offline player's profile should not be an error message and nothing else.
+ */
+function SoloProgress({ className }: { className?: string }) {
+  const progress = useProgressStore();
+  const stars = totalStars(progress.journey);
+  const games = totalBotGames(progress.bot);
+  const wins = totalBotWins(progress.bot);
+  const unlocked = SKIN_UNLOCKS.filter((unlock) => isSkinUnlocked(unlock.skin, progress)).length;
+
+  return (
+    <Card className={cx('w-full', className)} padding="tight">
+      <h2 className="px-2 py-1 text-xs tracking-wide text-ink-faint uppercase">Solo</h2>
+      <div className="grid grid-cols-2 gap-2 p-2 sm:grid-cols-4">
+        <StatTile label="Journey" value={`${stars}/${MAX_STARS}`} hint="stars earned" />
+        <StatTile
+          label="Puzzles"
+          value={progress.puzzles.length}
+          hint={progress.daily.best > 0 ? `best daily streak ${progress.daily.best}` : 'solved'}
+        />
+        <StatTile
+          label="vs Bot"
+          value={games > 0 ? winRate(wins, games) : '—'}
+          hint={`${wins} won of ${games}`}
+        />
+        <StatTile
+          label="Pieces"
+          value={`${unlocked}/${SKIN_UNLOCKS.length}`}
+          hint={progress.localGames > 0 ? `${progress.localGames} local games` : 'unlocked'}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2 px-2 pb-2">
+        <Link
+          to="/journey"
+          className={buttonClasses({ size: 'small', variant: 'ghost', className: 'w-auto px-4' })}
+          style={buttonStyle('ghost')}
+        >
+          <span className="relative z-2">Journey</span>
+        </Link>
+        <Link
+          to="/puzzles"
+          className={buttonClasses({ size: 'small', variant: 'ghost', className: 'w-auto px-4' })}
+          style={buttonStyle('ghost')}
+        >
+          <span className="relative z-2">Puzzles</span>
+        </Link>
+      </div>
+    </Card>
+  );
+}

@@ -14,7 +14,15 @@ import { type GameConfig, isGameConfig, sameConfig, type VariantId } from './typ
  * leave all of them empty.
  */
 export type ModeId =
-  'classic' | 'grid-6' | 'grid-9' | 'gomoku-13' | 'gomoku-15' | 'misere' | 'ultimate';
+  | 'classic'
+  | 'grid-6'
+  | 'grid-9'
+  | 'gomoku-13'
+  | 'gomoku-15'
+  | 'misere'
+  | 'vanish'
+  | 'gravity'
+  | 'ultimate';
 
 export type ModeGroup = 'classic' | 'large' | 'variant';
 
@@ -123,6 +131,37 @@ export const GAME_MODES: readonly GameMode[] = [
     clock: { initialSeconds: 120, incrementSeconds: 3 },
   },
   {
+    id: 'vanish',
+    name: 'Vanish',
+    tagline: 'Keep only your three newest marks',
+    rules: [
+      'Take turns placing your mark on an empty square.',
+      'You may only have three marks on the board. Placing a fourth removes your oldest first.',
+      'Your next mark to vanish is shown fading — it cannot be part of your winning line.',
+      'Get three in a row to win. No line after 50 moves is a draw.',
+    ],
+    config: { variant: 'vanish', size: 3, winLength: 3 },
+    group: 'variant',
+    // New rule sets start casual: a ladder needs a crowd, and splitting the
+    // existing ones to seed a new one would leave every pool thinner.
+    ranked: false,
+    clock: { initialSeconds: 150, incrementSeconds: 3 },
+  },
+  {
+    id: 'gravity',
+    name: 'Gravity',
+    tagline: 'Marks drop — four in a row on 7×7',
+    rules: [
+      'Pick a column. Your mark drops to the lowest empty square in it.',
+      'Get four of your marks in a row — across, down or diagonally.',
+      'A square only opens once the one beneath it is taken. Plan your stacks.',
+    ],
+    config: { variant: 'gravity', size: 7, winLength: 4 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 300, incrementSeconds: 5 },
+  },
+  {
     id: 'ultimate',
     name: 'Ultimate',
     tagline: 'Nine small boards inside one big one',
@@ -175,6 +214,8 @@ const VARIANT_NAMES: Record<VariantId, string> = {
   classic: 'Custom',
   gomoku: 'Gomoku',
   misere: 'Misère',
+  gravity: 'Gravity',
+  vanish: 'Vanish',
   ultimate: 'Ultimate',
 };
 

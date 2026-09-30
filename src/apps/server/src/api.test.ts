@@ -1,4 +1,4 @@
-import { authHeader } from '@dooz/protocol';
+import { authHeader, PROTOCOL_VERSION } from '@dooz/protocol';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from './api.js';
@@ -60,7 +60,7 @@ describe('health', () => {
     const { status, body } = await call('/health');
     expect(status).toBe(200);
     expect(body['status']).toBe('ok');
-    expect(body['version']).toBe(3);
+    expect(body['version']).toBe(PROTOCOL_VERSION);
   });
 });
 

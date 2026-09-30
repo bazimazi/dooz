@@ -161,7 +161,20 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
             </li>
             <li>
               <strong className="text-ink">Practice mode.</strong> Hints ring the square that wins
-              and the one you must block, and you can take moves back.
+              and the one you must block, you can take moves back, and the target button asks the
+              engine what it would play.
+            </li>
+            <li>
+              <strong className="text-ink">Journey.</strong> Six rivals, eighteen stages, every
+              mode. You always move first; win in fewer moves for more stars.
+            </li>
+            <li>
+              <strong className="text-ink">Puzzles.</strong> Every one is a proven forced win. A new
+              daily puzzle arrives each day — solve them on consecutive days to build a streak.
+            </li>
+            <li>
+              <strong className="text-ink">Pieces.</strong> Win against the bot, solve puzzles and
+              earn journey stars to unlock new piece sets in Settings.
             </li>
           </ul>
         </Card>

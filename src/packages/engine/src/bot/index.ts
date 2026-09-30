@@ -1,12 +1,14 @@
-import { countEmpty, emptyIndices } from '../board.js';
-import { legalMoves } from '../game.js';
+import { countEmpty, emptyIndices, gravityMoves } from '../board.js';
+import { applyMove, legalMoves } from '../game.js';
 import { type Board, Empty, type GameState, opponentOf, type Player } from '../types.js';
+import { TRIPLES } from '../variants/ultimate.js';
 import { candidateMoves } from './candidates.js';
 import { type BotDifficulty, profileForBoard, radiusFor } from './difficulty.js';
 import { moveHeuristic, WIN_SCORE } from './evaluate.js';
 import { type RootScore, search } from './search.js';
 import { findForkDefence, findForkMove, findImmediateWin } from './threats.js';
 import { searchUltimate } from './ultimate-search.js';
+import { vanishPliesLeft, vanishQueues, vanishVerdict } from './vanish.js';
 
 const MATE_THRESHOLD = WIN_SCORE - 1000;
 
@@ -62,11 +64,15 @@ export function chooseMove(state: GameState, options: BotOptions = {}): BotMove 
     return chooseUltimateMove(state, legal, options, random);
   }
 
+  if (state.config.variant === 'vanish') {
+    return chooseVanishMove(state, legal, options, random);
+  }
+
   return chooseLineMove(state, legal, options, random);
 }
 
 // ---------------------------------------------------------------------------
-// Line variants: classic, gomoku, misere
+// Line variants: classic, gomoku, misere, gravity
 // ---------------------------------------------------------------------------
 
 function chooseLineMove(
@@ -80,6 +86,7 @@ function chooseLineMove(
   const { size, winLength, variant } = state.config;
   const me = state.currentPlayer;
   const misere = variant === 'misere';
+  const gravity = variant === 'gravity';
 
   const profile = profileForBoard(difficulty, board.length, countEmpty(board));
   const budget = options.timeBudgetMs ?? profile.timeMs;
@@ -88,8 +95,10 @@ function chooseLineMove(
   // Candidates are the cells near existing marks. A legal move outside that
   // set is legal but pointless, and playing one is what makes a weak opponent
   // look broken rather than merely weak - so even the beginner draws from here.
+  // Under gravity the columns already narrow it to one square each, all of them
+  // reachable and none of them pointless.
   const radius = radiusFor(profile, board.length - countEmpty(board));
-  const near = candidateMoves(board, size, radius);
+  const near = gravity ? gravityMoves(board, size) : candidateMoves(board, size, radius);
   const nearSet = new Set(near);
   const sensible = legal.filter((move) => nearSet.has(move));
   const pool = sensible.length > 0 ? sensible : legal;
@@ -112,7 +121,11 @@ function chooseLineMove(
       return { move: blockNow, reason: 'block', depth: 0, nodes: 0, score: 0 };
     }
 
-    if (profile.tactics === 'fork' && near.length <= FORK_SCAN_LIMIT) {
+    // The fork scan reads threats off one fixed candidate list, which under
+    // gravity is wrong the moment a mark lands: the square above it opens and
+    // is often exactly the threat that matters. The search regenerates moves
+    // at every node, so gravity leaves forks to it.
+    if (profile.tactics === 'fork' && !gravity && near.length <= FORK_SCAN_LIMIT) {
       // A double threat is a forced win and is safe to play on sight, now that
       // the opponent is known to have no win of their own this move.
       const fork = findForkMove(board, size, me, winLength, near);
@@ -147,7 +160,12 @@ function chooseLineMove(
     size,
     winLength,
     misere,
-    maxDepth: profile.plies,
+    gravity,
+    // A gravity node has at most one move per column, so the strong levels can
+    // afford to look further down it for the same time - and in a game decided
+    // by who is forced to fill which square, the extra plies are the ones that
+    // see it coming.
+    maxDepth: gravity && profile.plies >= 6 ? profile.plies + 2 : profile.plies,
     deadline: now() + budget,
     radius,
     branchLimit: profile.branchLimit,
@@ -156,7 +174,8 @@ function chooseLineMove(
     // hand - so the scores have to be exact for it to mean anything. That costs
     // pruning at the root, which is affordable on a small board and not on a
     // large one, where distinct positions rarely score identically anyway.
-    exactRootScores: profile.slack > 0 || board.length <= 36,
+    // Gravity's root is one move per column, so it is always affordable there.
+    exactRootScores: profile.slack > 0 || board.length <= 36 || gravity,
     ...(options.shouldStop ? { shouldStop: options.shouldStop } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
@@ -243,6 +262,114 @@ function chooseUltimateMove(
   }
 
   return { move: randomFrom(legal, random), reason: 'heuristic', depth: 0, nodes: 0, score: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Vanish
+// ---------------------------------------------------------------------------
+
+/**
+ * How many plies of the solved result each level is allowed to see.
+ *
+ * Vanish is solved, so there is no search to cut short - a level is weakened by
+ * hiding the parts of the answer that are further away than it could plausibly
+ * have calculated. Beginner sees exactly the immediate: a win on the board, and
+ * a move that hands one over. Master sees everything, which from the opening
+ * means it wins every game it starts.
+ */
+const VANISH_SIGHT: Record<BotDifficulty, number> = {
+  beginner: 2,
+  easy: 3,
+  medium: 5,
+  hard: 9,
+  expert: 13,
+  master: 255,
+};
+
+/**
+ * Score window on the static scale below. The two weakest levels play any
+ * move they cannot see losing; the rest pick among near-equals.
+ */
+const VANISH_SLACK: Record<BotDifficulty, number> = {
+  beginner: 1_000,
+  easy: 1_000,
+  medium: 12,
+  hard: 0,
+  expert: 0,
+  master: 0,
+};
+
+function chooseVanishMove(
+  state: GameState,
+  legal: number[],
+  options: BotOptions,
+  random: () => number,
+): BotMove {
+  const { difficulty = 'hard' } = options;
+  const sight = VANISH_SIGHT[difficulty];
+  const me = state.currentPlayer;
+  // Plies the game has left after this move, before the limit draws it.
+  const remaining = vanishPliesLeft(state) - 1;
+
+  const scores: RootScore[] = legal.map((move) => {
+    const next = applyMove(state, move)!;
+    if (next.status === 'won') return { move, score: WIN_SCORE - 1 };
+    if (next.status === 'draw') return { move, score: 0 };
+
+    // The verdict is for the opponent, who moves next.
+    const verdict = vanishVerdict(next);
+    const plies = verdict.distance + 1;
+    const decided = verdict.value !== 0 && verdict.distance <= remaining;
+    if (decided && plies <= sight) {
+      return { move, score: verdict.value < 0 ? WIN_SCORE - plies : -(WIN_SCORE - plies) };
+    }
+    return { move, score: vanishShape(next, me) };
+  });
+
+  const picked =
+    pickWithSlack(scores, VANISH_SLACK[difficulty], random, new Set(legal)) ?? legal[0]!;
+  const score = scores.find((entry) => entry.move === picked)?.score ?? 0;
+  return {
+    move: picked,
+    reason: Math.abs(score) >= MATE_THRESHOLD ? 'search' : 'heuristic',
+    depth: Math.min(sight, 99),
+    nodes: legal.length,
+    score,
+  };
+}
+
+/**
+ * A small static score for a vanish position, from `player`'s side.
+ *
+ * Only live pairs count: two of a player's marks on a line whose third square
+ * is free, neither of them the mark that player loses next. That is the whole
+ * of what a position "threatens" in this variant, and counting a pair that
+ * leans on a vanishing mark is exactly the mistake the variant punishes. The
+ * centre adds a little, as it does on any 3x3 board. Kept far below the mate
+ * band so it only ever orders moves the solver has not been allowed to decide.
+ */
+function vanishShape(state: GameState, player: Player): number {
+  const { mover, other } = vanishQueues(state);
+  const mine = player === state.currentPlayer ? mover : other;
+  const theirs = player === state.currentPlayer ? other : mover;
+
+  const live = (queue: readonly number[]): number => {
+    const staying = queue.length >= 3 ? queue.slice(1) : queue;
+    let pairs = 0;
+    for (const line of TRIPLES) {
+      const held = line.filter((cell) => staying.includes(cell)).length;
+      const open = line.filter((cell) => state.board[cell] === Empty).length;
+      if (held === 2 && open === 1) pairs++;
+    }
+    return pairs;
+  };
+
+  return (live(mine) - live(theirs)) * 10 + holdsCentre(mine) - holdsCentre(theirs);
+}
+
+/** The small bonus for holding the centre square, which sits on four lines. */
+function holdsCentre(queue: readonly number[]): number {
+  return queue.includes(4) ? 3 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,3 +477,12 @@ export {
   winningMoves,
 } from './threats.js';
 export { candidateMoves } from './candidates.js';
+export {
+  solveVanish,
+  type VanishSolution,
+  type VanishVerdict,
+  vanishPliesLeft,
+  vanishQueues,
+  vanishVerdict,
+  vanishWinningMoves,
+} from './vanish.js';

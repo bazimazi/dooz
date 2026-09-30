@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { cx } from '@/lib/cx';
+import { sfx } from '@/lib/sound';
 
 /** Below this the clock turns and starts beating, because it is nearly gone. */
 const URGENT_MS = 20_000;
@@ -11,6 +12,8 @@ interface MatchClockProps {
   remainingMs: number;
   /** True while this is the clock actually running down. */
   ticking: boolean;
+  /** Tick out loud in the last ten seconds. Only ever your own clock. */
+  audible?: boolean;
   compact?: boolean;
 }
 
@@ -27,7 +30,12 @@ interface MatchClockProps {
  * It stops at zero rather than going negative - the result is on its way, and
  * a negative clock is a bug every player has seen and nobody believes.
  */
-export function MatchClock({ remainingMs, ticking, compact = false }: MatchClockProps) {
+export function MatchClock({
+  remainingMs,
+  ticking,
+  audible = false,
+  compact = false,
+}: MatchClockProps) {
   const [displayed, setDisplayed] = useState(remainingMs);
   // A new server value snaps the display to it during render rather than in an
   // effect, so the corrected time is on screen in the same paint it arrived in
@@ -59,6 +67,17 @@ export function MatchClock({ remainingMs, ticking, compact = false }: MatchClock
   }, [ticking, remainingMs]);
 
   const urgent = ticking && displayed <= URGENT_MS;
+
+  // One tick per whole second in the last ten, faster-sounding in the last
+  // five. Keyed on the second rather than the frame, so it cannot stutter.
+  const second = Math.ceil(displayed / 1000);
+  const lastTick = useRef<number | null>(null);
+  useEffect(() => {
+    if (!audible || !ticking || displayed >= PRECISE_MS || displayed <= 0) return;
+    if (lastTick.current === second) return;
+    lastTick.current = second;
+    sfx.tick(second <= 5);
+  }, [audible, ticking, displayed, second]);
 
   return (
     <span

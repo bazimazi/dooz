@@ -411,6 +411,34 @@ describe('moves', () => {
     expect(snapshot.status).toBe('won');
     expect(snapshot.winner).not.toBe(opener);
   });
+
+  it('refuses a gravity move that would float', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, CONFIGS.gravity);
+    const { mover, waiter } = toMove(a, b);
+
+    // Row 0 of an empty 7x7 board has nothing under it.
+    mover.send({ type: 'move', index: 3 });
+    expect(mover.last('error')?.code).toBe('illegalMove');
+
+    // The floor of the same column is fine, and the square above it opens.
+    mover.send({ type: 'move', index: 45 });
+    waiter.send({ type: 'move', index: 38 });
+    expect(currentSnapshot(a)!.board[38]).not.toBe(0);
+  });
+
+  it('lifts the oldest mark in a vanish game, on the server', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, CONFIGS.vanish);
+    const { mover, waiter } = toMove(a, b);
+
+    // Six marks down, then the opener's fourth lifts its first (square 0).
+    playMoves(mover, waiter, [0, 4, 2, 1, 7, 3, 5]);
+    const snapshot = currentSnapshot(a)!;
+    expect(snapshot.status).toBe('playing');
+    expect(snapshot.board[0]).toBe(0);
+    expect(snapshot.board.filter((cell) => cell !== 0)).toHaveLength(6);
+  });
 });
 
 // ---------------------------------------------------------------------------

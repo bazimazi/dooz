@@ -10,10 +10,12 @@ import { z } from 'zod';
  *
  * Version 3 replaced the fixed board-size field with a full game config, folded
  * the resume token into the account credentials, and added clocks, resignation,
- * draw offers, emotes, spectators and rating results.
+ * draw offers, emotes, spectators and rating results. Version 4 added the
+ * gravity and vanish rule sets - an older client cannot parse a snapshot of
+ * either, so it is told to reload rather than handed a board it would reject.
  */
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Room codes people read aloud, so ambiguous glyphs (0/O, 1/I/L) are excluded. */
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -65,7 +67,14 @@ export const passwordSchema = z.string().min(PASSWORD_MIN).max(PASSWORD_MAX);
 // Game shape
 // ---------------------------------------------------------------------------
 
-export const VARIANT_IDS = ['classic', 'gomoku', 'misere', 'ultimate'] as const;
+export const VARIANT_IDS = [
+  'classic',
+  'gomoku',
+  'misere',
+  'gravity',
+  'vanish',
+  'ultimate',
+] as const;
 export const variantSchema = z.enum(VARIANT_IDS);
 
 export const MIN_BOARD_SIZE = 3;
@@ -96,7 +105,18 @@ export const gameConfigSchema = z
       message: 'Ultimate is played on a 9x9 board with three in a row',
       path: ['variant'],
     },
-  );
+  )
+  .refine(
+    (config) => config.variant !== 'vanish' || (config.size === 3 && config.winLength === 3),
+    {
+      message: 'Vanish is played on a 3x3 board with three in a row',
+      path: ['variant'],
+    },
+  )
+  .refine((config) => config.variant !== 'gravity' || config.size >= 4, {
+    message: 'Gravity needs a board of at least 4x4',
+    path: ['size'],
+  });
 
 export const ultimateMetaSchema = z
   .object({

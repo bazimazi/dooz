@@ -1,4 +1,5 @@
 import { type RefObject, useEffect, useRef } from 'react';
+import { sfx } from './sound';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -37,6 +38,9 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
 
     const previous = document.activeElement;
     panel.focus();
+    // A sheet the player opened arrives with a breath of air. The result panel
+    // - the one overlay with no escape - has its own sound for arriving.
+    if (escapeRef.current) sfx.whoosh(true);
 
     // Everything that is not an ancestor of the panel, which is the smallest
     // set that covers the page without needing to know the app's layout.

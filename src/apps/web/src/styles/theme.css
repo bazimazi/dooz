@@ -128,6 +128,21 @@
 
   /* One-shot feedback */
   --animate-spin-once: spin-once 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Rule-set specific motion: a gravity mark falling, a vanish mark leaving,
+     and the mark that is about to go. */
+  --animate-drop: drop var(--drop-time, 0.4s) linear both;
+  --animate-vanish-out: vanish-out 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fading: fading 1.6s ease-in-out infinite;
+
+  /* Particles and the win */
+  --animate-spark: spark 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-ripple: ripple 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shockwave: shockwave 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-star-in: star-in 0.6s cubic-bezier(0.22, 1.6, 0.36, 1) both;
+  --animate-banner: banner 1.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-flip: flip 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float-up: float-up 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* --------------------------------------------------------------------------
@@ -738,6 +753,171 @@
 }
 
 /**
+ * A gravity mark falling into place.
+ *
+ * `--fall` is how many squares it drops, and the element being moved is a full
+ * square tall, so -100% per square starts it above the column. It accelerates
+ * down, squashes on landing and bounces once - the three beats that make a
+ * thing read as having weight.
+ */
+@keyframes drop {
+  0% {
+    transform: translateY(calc(var(--fall, 1) * -100%));
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55);
+  }
+  66% {
+    transform: translateY(0) scale(1, 1);
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1);
+  }
+  74% {
+    transform: translateY(0) scale(1.1, 0.86);
+  }
+  86% {
+    transform: translateY(-10%) scale(0.97, 1.04);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.4);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+}
+
+/* A vanish mark leaving: it swells, turns and blurs away like smoke. */
+@keyframes vanish-out {
+  0% {
+    opacity: 0.85;
+    transform: scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.4) rotate(var(--spin, 14deg));
+    filter: blur(5px);
+  }
+}
+
+/* The mark that goes next, breathing - present, but not for long. */
+@keyframes fading {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.28;
+  }
+}
+
+/* One particle thrown off a landing mark. */
+@keyframes spark {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx, 0), var(--dy, 0)) scale(0.2);
+  }
+}
+
+/* The wave that crosses the board from a winning line, square by square. */
+@keyframes ripple {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: var(--ripple, rgb(255 255 255 / 0.12));
+  }
+}
+
+/* Transparent at the very start, so the ring is not a dot while it waits. */
+@keyframes shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.08);
+  }
+  2% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes star-in {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-140deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* A message that arrives, holds, and leaves on its own. */
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.85);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  22% {
+    transform: translateY(0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+}
+
+/* The opener's mark, tossed like a coin. */
+@keyframes flip {
+  0% {
+    opacity: 0;
+    transform: perspective(200px) rotateY(0deg) scale(0.5);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(200px) rotateY(720deg) scale(1);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(1);
+  }
+}
+
+@keyframes chalk-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/**
  * Utilities for the two gradient-bordered surfaces that recur all over the
  * design: the pill buttons and the rounded tiles used for player cards, the
  * board frame and the icon buttons.
@@ -843,6 +1023,31 @@
   .tnum {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
+  }
+
+  /**
+   * A chalk-set stroke drawing itself on. Every stroke has `pathLength="1"`,
+   * so one dash exactly the length of the path, offset by that length, hides
+   * it - and sliding the offset to zero draws it.
+   */
+  .chalk-stroke {
+    stroke-dasharray: 1 1;
+    animation: chalk-draw 0.42s cubic-bezier(0.6, 0, 0.35, 1) both;
+  }
+
+  /**
+   * The backdrop warming towards whoever is to move. Two layers, one per
+   * player, cross-faded by an attribute on the root - a gradient cannot be
+   * transitioned, but the opacity of the layer carrying it can.
+   */
+  .turn-tint {
+    opacity: 0;
+    transition: opacity 0.9s var(--ease-soft);
+  }
+
+  :root[data-turn='x'] .turn-tint-x,
+  :root[data-turn='o'] .turn-tint-o {
+    opacity: 1;
   }
 }
 

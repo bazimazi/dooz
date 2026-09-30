@@ -1,7 +1,8 @@
 import type { VariantId } from '../types.js';
-import { classicVariant, gomokuVariant, misereVariant } from './line.js';
+import { classicVariant, gomokuVariant, gravityVariant, misereVariant } from './line.js';
 import { ultimateVariant } from './ultimate.js';
 import type { Variant } from './variant.js';
+import { vanishVariant } from './vanish.js';
 
 /**
  * The variant registry.
@@ -15,6 +16,8 @@ const VARIANTS: Record<VariantId, Variant> = {
   classic: classicVariant,
   gomoku: gomokuVariant,
   misere: misereVariant,
+  gravity: gravityVariant,
+  vanish: vanishVariant,
   ultimate: ultimateVariant,
 };
 
@@ -24,3 +27,4 @@ export function variantFor(id: VariantId): Variant {
 
 export { type Variant } from './variant.js';
 export { TRIPLES } from './ultimate.js';
+export { VANISH_KEEP, VANISH_MOVE_LIMIT, vanishedBy, vanishingNext } from './vanish.js';

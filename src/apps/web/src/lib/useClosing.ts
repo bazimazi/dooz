@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sfx } from './sound';
 
 /**
  * Lets an overlay animate itself out before its owner unmounts it.
@@ -21,6 +22,7 @@ export function useClosing(onClose: () => void, duration = 180) {
   const close = useCallback(() => {
     if (closing) return;
     setClosing(true);
+    sfx.whoosh(false);
 
     const reduced =
       typeof window !== 'undefined' &&

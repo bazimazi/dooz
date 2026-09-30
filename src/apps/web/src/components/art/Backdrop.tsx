@@ -19,6 +19,24 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-canvas"
       style={{ viewTransitionName: 'dooz-backdrop' }}
     >
+      {/* The room warms towards whoever is to move. Pooled low, behind the
+          board, and faint: it is felt more than it is seen. See `useTurnTint`. */}
+      <div
+        className="turn-tint turn-tint-x absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 45% at 50% 58%, var(--color-glow-x), transparent 70%)',
+          mixBlendMode: 'soft-light',
+        }}
+      />
+      <div
+        className="turn-tint turn-tint-o absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 45% at 50% 58%, var(--color-glow-o), transparent 70%)',
+          mixBlendMode: 'soft-light',
+        }}
+      />
       <svg
         viewBox="0 0 360 640"
         preserveAspectRatio="xMidYMid slice"

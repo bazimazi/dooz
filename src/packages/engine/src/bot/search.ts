@@ -1,4 +1,4 @@
-import { isBoardFull } from '../board.js';
+import { gravityMoves, isBoardFull } from '../board.js';
 import { hasWinFrom } from '../rules.js';
 import { type Board, Empty, type Player, opponentOf } from '../types.js';
 import { candidateMoves } from './candidates.js';
@@ -19,6 +19,12 @@ export interface SearchOptions {
   readonly branchLimit?: number;
   /** Completing a run loses rather than wins. */
   readonly misere?: boolean;
+  /**
+   * Marks fall to the lowest free square of their column, so the only moves are
+   * one per column - which replaces the neighbourhood rule outright. It is
+   * both narrower and exact: every legal move is searched, and nothing else.
+   */
+  readonly gravity?: boolean;
   /**
    * Checked alongside the deadline. The worker uses it to drop a search whose
    * position is no longer on screen, rather than finishing work nobody wants.
@@ -133,6 +139,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
   const table = zobristFor(board.length);
   const transpositions = new Map<number, Entry>();
   const radius = options.radius ?? 2;
+  const gravity = options.gravity === true;
   const branchLimit = options.branchLimit ?? Number.POSITIVE_INFINITY;
   const working = board.slice();
 
@@ -170,6 +177,9 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
     primary ^= (table.primary[key] ?? 0) ^ table.sidePrimary;
     secondary ^= (table.secondary[key] ?? 0) ^ table.sideSecondary;
   };
+
+  const candidates = (): number[] =>
+    gravity ? gravityMoves(working, size) : candidateMoves(working, size, radius);
 
   const order = (moves: number[], player: Player, preferred: number, killer: number): number[] => {
     for (const move of moves) {
@@ -229,7 +239,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
        */
       if (extensions >= MAX_EXTENSIONS || misere) return evalHere(player);
 
-      const here = candidateMoves(working, size, radius);
+      const here = candidates();
 
       // Side to move has a win on the board: the position is won, exactly.
       if (findImmediateWin(working, size, player, winLength, here) !== null) {
@@ -266,12 +276,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
       }
     }
 
-    const moves = order(
-      forced ?? candidateMoves(working, size, radius),
-      player,
-      preferred,
-      killers[ply] ?? -1,
-    );
+    const moves = order(forced ?? candidates(), player, preferred, killers[ply] ?? -1);
     let best = Number.NEGATIVE_INFINITY;
     let bestMove = moves[0] ?? -1;
 
@@ -319,7 +324,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
     return misere ? -score : score;
   }
 
-  const rootMoves = candidateMoves(working, size, radius);
+  const rootMoves = candidates();
   let bestMove = rootMoves[0] ?? -1;
   let bestScore = 0;
   let completedDepth = 0;

@@ -1,4 +1,4 @@
-import { modeById, type ModeId, O, X } from '@dooz/engine';
+import { type GameState, modeById, type ModeId, O, type Player, X } from '@dooz/engine';
 import type { Avatar, Clock } from '@dooz/protocol';
 import { ROOM_CODE_LENGTH } from '@dooz/protocol';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -27,10 +27,13 @@ import { StatTile } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
+import { useGameFeedback } from '@/features/game/useGameFeedback';
+import { useTurnTint } from '@/features/game/useTurnTint';
 import { seatsFor, useOnlineStore } from '@/features/online/store';
 import { cx } from '@/lib/cx';
 import { signed } from '@/lib/format';
 import { inviteUrl, shareOrCopy } from '@/lib/invite';
+import { sfx } from '@/lib/sound';
 
 export interface OnlineSearch {
   mode: ModeId;
@@ -76,10 +79,32 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
     else store.queue(config, ranked === true);
   }, [store, code, host, watch, ranked, mode]);
 
+  // The moment a search or a private room turns into a game gets its own
+  // chime - it is often heard from another tab, while waiting.
+  const previousPhase = useRef(store.phase);
+  useEffect(() => {
+    const before = previousPhase.current;
+    previousPhase.current = store.phase;
+    if ((before === 'searching' || before === 'hosting') && store.phase === 'playing') {
+      sfx.matched();
+    }
+  }, [store.phase]);
+
   if (store.phase === 'playing' || store.phase === 'watching' || store.phase === 'opponentLeft') {
     return <OnlineGame mode={mode} />;
   }
   return <OnlineLobby mode={mode} ranked={ranked === true} />;
+}
+
+/**
+ * Sound and the turn tint for an online game. A component of its own because
+ * the game screen returns early until a game exists, and hooks cannot follow
+ * an early return.
+ */
+function OnlineFeedback({ game, you }: { game: GameState; you: Player | null }) {
+  useGameFeedback(game, { you });
+  useTurnTint(game);
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +381,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
 
   return (
     <Screen>
+      <OnlineFeedback game={game} you={you} />
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}

@@ -10,9 +10,32 @@ import { cx } from '@/lib/cx';
  * one thing the preview is there to communicate. Ultimate gets its sub-board
  * grid instead of a run, because that is what makes it different.
  */
-function samplePosition(config: GameConfig): { cells: number[]; winLine: number[] } {
+function samplePosition(config: GameConfig): {
+  cells: number[];
+  winLine: number[];
+  faded: readonly number[];
+} {
   const { size, winLength } = config;
   const cells: number[] = Array.from({ length: size * size }, () => Empty);
+
+  // Gravity's sample has to obey gravity: a staircase built up from the floor,
+  // with O's marks holding up X's climbing diagonal.
+  if (config.variant === 'gravity') {
+    const at = (row: number, col: number) => row * size + col;
+    const floor = size - 1;
+    const x = [at(floor, 0), at(floor - 1, 1), at(floor - 2, 2), at(floor - 3, 3), at(floor, 3)];
+    const o = [at(floor, 1), at(floor, 2), at(floor - 1, 2), at(floor - 1, 3), at(floor - 2, 3)];
+    for (const index of x) cells[index] = X;
+    for (const index of o) cells[index] = O;
+    return { cells, winLine: x.slice(0, 4), faded: [] };
+  }
+
+  // Vanish: a finished row, with the loser's oldest mark already on its way out.
+  if (config.variant === 'vanish') {
+    for (const index of [0, 1, 2]) cells[index] = X;
+    for (const index of [4, 6, 8]) cells[index] = O;
+    return { cells, winLine: [0, 1, 2], faded: [6] };
+  }
 
   // A diagonal of X, centred so it reads as part of a board rather than an
   // edge case, with O replies below it to show both marks.
@@ -31,7 +54,7 @@ function samplePosition(config: GameConfig): { cells: number[]; winLine: number[
     if (row < size && col < size) cells[row * size + col] = O;
   }
 
-  return { cells, winLine };
+  return { cells, winLine, faded: [] };
 }
 
 interface MiniBoardProps {
@@ -47,7 +70,7 @@ interface MiniBoardProps {
 
 export function MiniBoard({ config, active = false, className }: MiniBoardProps) {
   const { size } = config;
-  const { cells, winLine } = samplePosition(config);
+  const { cells, winLine, faded } = samplePosition(config);
   const first = winLine[0] ?? 0;
   const last = winLine.at(-1) ?? 0;
 
@@ -108,6 +131,7 @@ export function MiniBoard({ config, active = false, className }: MiniBoardProps)
                 className={cx(
                   'w-[70%]',
                   animate && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                  faded.includes(index) && 'opacity-40',
                 )}
                 // The marks land in reading order rather than all together, so
                 // the eye is led along the run the preview is demonstrating.

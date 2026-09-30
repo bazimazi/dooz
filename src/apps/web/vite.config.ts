@@ -28,7 +28,7 @@ export default defineConfig({
               name: 'dooz - in-a-row strategy',
               short_name: 'dooz',
               description:
-                'Tic Tac Toe, Gomoku, Misère and Ultimate. Play a friend, a six-level bot, or a rated ladder.',
+                'Tic Tac Toe, Gomoku, Misère, Gravity, Vanish and Ultimate. Play a friend, a six-level bot, a daily puzzle, a journey of rivals, or a rated ladder.',
               theme_color: '#232599',
               background_color: '#232599',
               display: 'standalone',

@@ -1,9 +1,11 @@
 import { applyMove, createGame, type GameState, modeById, type ModeId } from '@dooz/engine';
 import { useMemo, useState } from 'react';
 import { Board } from '@/components/game/Board';
+import { useGameFeedback } from '@/features/game/useGameFeedback';
 import { Button } from '@/components/ui/Button';
 import { cx } from '@/lib/cx';
 import { useClosing } from '@/lib/useClosing';
+import { sfx } from '@/lib/sound';
 import { useDialog } from '@/lib/useDialog';
 
 /**
@@ -67,6 +69,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
   const [game, setGame] = useState<GameState>(() => positionFor(current));
 
   const modeRules = useMemo(() => modeById(mode), [mode]);
+  useGameFeedback(game);
   const last = step === STEPS.length - 1;
 
   function attempt(index: number) {
@@ -76,6 +79,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
       // A wrong answer is not punished, only named: the board stays as it was
       // and the hint gets more specific. Nothing is lost by guessing.
       setWrong(true);
+      sfx.wrong();
       return;
     }
 

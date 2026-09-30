@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { isGravityLanding } from './board.js';
 import { applyMove, createGame, legalMoves, replay, startingPlayerOf } from './game.js';
 import { GAME_MODES, type GameMode } from './modes.js';
 import { findAnyWinLine } from './rules.js';
 import { seeded } from './testing.js';
 import { Empty, type GameState, O, type Player, X } from './types.js';
+import { VANISH_KEEP, VANISH_MOVE_LIMIT, vanishedBy } from './variants/index.js';
 
 /**
  * Invariants every variant has to hold, checked against thousands of positions
@@ -48,17 +50,36 @@ describe.each(GAME_MODES.map((mode) => [mode.name, mode] as const))('%s invarian
 
       const finished = playRandomGame(mode, random, starting, (before, move, after) => {
         // A cell cannot contain two marks, and the only cell that changed is
-        // the one that was played.
+        // the one that was played - apart from the mark vanish lifts off.
+        const lifted = vanishedBy(after);
         expect(before.board[move]).toBe(Empty);
         expect(after.board[move]).toBe(before.currentPlayer);
+        let changed = 0;
         for (let cell = 0; cell < after.board.length; cell++) {
-          if (cell !== move) expect(after.board[cell]).toBe(before.board[cell]);
+          if (cell !== move && cell !== lifted && after.board[cell] !== before.board[cell]) {
+            changed++;
+          }
+        }
+        expect(changed).toBe(0);
+        if (lifted !== null) {
+          // Only ever the mover's own oldest mark, and only once they have a full set.
+          expect(before.board[lifted]).toBe(before.currentPlayer);
+          expect(after.board[lifted]).toBe(Empty);
+        }
+
+        // Under gravity nothing floats: the mark rests on the floor or on another.
+        if (mode.config.variant === 'gravity') {
+          expect(isGravityLanding(before.board, mode.config.size, move)).toBe(true);
         }
 
         // The move count is the length of the move list, and matches the number
-        // of marks on the board.
+        // of marks on the board - capped at a full set each under vanish.
         expect(after.moves.length).toBe(before.moves.length + 1);
-        expect(after.board.filter((cell) => cell !== Empty)).toHaveLength(after.moves.length);
+        const expectedMarks =
+          mode.config.variant === 'vanish'
+            ? Math.min(after.moves.length, VANISH_KEEP * 2)
+            : after.moves.length;
+        expect(after.board.filter((cell) => cell !== Empty)).toHaveLength(expectedMarks);
         expect(after.lastMove).toBe(move);
 
         // Only the current player ever moves, and the turn always passes while
@@ -97,6 +118,10 @@ describe.each(GAME_MODES.map((mode) => [mode.name, mode] as const))('%s invarian
           // the game to the other side.
           const expected = mode.config.variant === 'misere' ? (completed === X ? O : X) : completed;
           expect(finished.winner).toBe(expected);
+        } else if (mode.config.variant === 'vanish') {
+          // The board never fills under vanish; the move limit ends it instead.
+          expect(onBoard).toBeNull();
+          expect(finished.moves).toHaveLength(VANISH_MOVE_LIMIT);
         } else {
           expect(onBoard).toBeNull();
           expect(finished.board.every((cell) => cell !== Empty)).toBe(true);

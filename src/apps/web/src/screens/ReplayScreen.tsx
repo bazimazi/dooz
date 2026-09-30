@@ -1,4 +1,4 @@
-import { describeConfig, X } from '@dooz/engine';
+import { describeConfig, type GameState, X } from '@dooz/engine';
 import type { Avatar, MatchRecord } from '@dooz/protocol';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ import { Card, EmptyState, StatTile } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
+import { useGameFeedback } from '@/features/game/useGameFeedback';
 import { useReplay } from '@/features/replay/useReplay';
 import { api } from '@/lib/api';
 import { cx } from '@/lib/cx';
@@ -133,6 +134,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
           </p>
         </Card>
 
+        <ReplayFeedback game={replay.current} />
         <Board game={replay.current} onPlay={() => undefined} readOnly />
 
         {/* Transport. The scrubber is a real range input, so it is draggable,
@@ -286,4 +288,13 @@ function PlayerSide({
       </span>
     </div>
   );
+}
+
+/**
+ * Each step of a replay plays the mark it places, so watching a game back
+ * sounds like playing it did. The result chord is left out - it was heard once.
+ */
+function ReplayFeedback({ game }: { game: GameState }) {
+  useGameFeedback(game, { replay: true });
+  return null;
 }

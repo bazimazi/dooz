@@ -35,6 +35,47 @@ export function countEmpty(board: Board): number {
 }
 
 // ---------------------------------------------------------------------------
+// Gravity geometry
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a mark dropped into `col` comes to rest, or `-1` for a full column.
+ *
+ * Row 0 is the top of the board, so a mark falls towards the highest row
+ * number and stops on the first square with something under it.
+ */
+export function gravityLanding(board: Board, size: number, col: number): number {
+  if (col < 0 || col >= size) return -1;
+  for (let row = size - 1; row >= 0; row--) {
+    const index = row * size + col;
+    if (board[index] === Empty) return index;
+  }
+  return -1;
+}
+
+/**
+ * Every square a mark can land on right now, one per column that has room.
+ *
+ * Ascending, which on a row-major board is also top-to-bottom - the order the
+ * rest of the engine reports legal moves in.
+ */
+export function gravityMoves(board: Board, size: number): number[] {
+  const moves: number[] = [];
+  for (let col = 0; col < size; col++) {
+    const landing = gravityLanding(board, size, col);
+    if (landing >= 0) moves.push(landing);
+  }
+  return moves.toSorted((a, b) => a - b);
+}
+
+/** True when `index` is empty and resting on the floor or on another mark. */
+export function isGravityLanding(board: Board, size: number, index: number): boolean {
+  if (board[index] !== Empty) return false;
+  const below = index + size;
+  return below >= board.length || board[below] !== Empty;
+}
+
+// ---------------------------------------------------------------------------
 // Ultimate geometry
 // ---------------------------------------------------------------------------
 

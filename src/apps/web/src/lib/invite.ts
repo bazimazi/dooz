@@ -46,3 +46,18 @@ export async function shareOrCopy(
     return 'failed';
   }
 }
+
+/**
+ * A link to somewhere in the app, for sharing anything that is not a room.
+ *
+ * `null` when there is no public address to point at - a desktop build with no
+ * `VITE_PUBLIC_URL` - in which case the caller shares its text without one.
+ */
+export function appUrl(path: string): string | null {
+  const base =
+    import.meta.env.VITE_PUBLIC_URL ??
+    (typeof window !== 'undefined' && window.location.protocol.startsWith('http')
+      ? window.location.origin
+      : null);
+  return base ? new URL(path, base).toString() : null;
+}

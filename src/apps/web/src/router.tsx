@@ -8,15 +8,19 @@ import {
 } from '@dooz/engine';
 import { ROOM_CODE_LENGTH } from '@dooz/protocol';
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from '@tanstack/react-router';
+import { UnlockToast } from '@/components/game/UnlockToast';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { BotGameScreen } from '@/screens/BotGameScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { JourneyScreen } from '@/screens/JourneyScreen';
 import { LeaderboardScreen } from '@/screens/LeaderboardScreen';
 import { LearnScreen } from '@/screens/LearnScreen';
 import { LocalGameScreen } from '@/screens/LocalGameScreen';
 import { OnlineScreen } from '@/screens/OnlineScreen';
 import { ProfileScreen } from '@/screens/ProfileScreen';
+import { PuzzleScreen } from '@/screens/PuzzleScreen';
+import { PuzzlesScreen } from '@/screens/PuzzlesScreen';
 import { ReplayScreen } from '@/screens/ReplayScreen';
 
 /**
@@ -31,7 +35,12 @@ import { ReplayScreen } from '@/screens/ReplayScreen';
  * mode before it reaches a component, not after.
  */
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <Outlet />
+      <UnlockToast />
+    </>
+  ),
   notFoundComponent: NotFound,
   errorComponent: RouteError,
 });
@@ -75,17 +84,21 @@ const botRoute = createRoute({
   path: '/play/bot',
   validateSearch: (
     search: Record<string, unknown>,
-  ): { mode: ModeId; difficulty: BotDifficulty; practice?: true } => {
+  ): { mode: ModeId; difficulty: BotDifficulty; practice?: true; stage?: string } => {
     const difficulty = search['difficulty'];
+    const stage = search['stage'];
     return {
       mode: readMode(search),
       difficulty: isBotDifficulty(difficulty) ? difficulty : 'medium',
       ...(readFlag(search['practice']) ? { practice: true as const } : {}),
+      // Checked against the stage list by the screen; here it only has to be a
+      // short plain id rather than whatever the URL happened to carry.
+      ...(typeof stage === 'string' && /^[a-z]+-\d{1,2}$/.test(stage) ? { stage } : {}),
     };
   },
   component: function BotRoute() {
-    const { mode, difficulty, practice } = botRoute.useSearch();
-    return <BotGameScreen mode={mode} difficulty={difficulty} practice={practice} />;
+    const { mode, difficulty, practice, stage } = botRoute.useSearch();
+    return <BotGameScreen mode={mode} difficulty={difficulty} practice={practice} stage={stage} />;
   },
 });
 
@@ -148,6 +161,30 @@ const learnRoute = createRoute({
   component: function LearnRoute() {
     const { mode } = learnRoute.useSearch();
     return <LearnScreen mode={mode} />;
+  },
+});
+
+const journeyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/journey',
+  component: JourneyScreen,
+});
+
+const puzzlesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/puzzles',
+  component: PuzzlesScreen,
+});
+
+const puzzleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/puzzles/$id',
+  validateSearch: (search: Record<string, unknown>): { daily?: true } =>
+    readFlag(search['daily']) ? { daily: true as const } : {},
+  component: function PuzzleRoute() {
+    const { id } = puzzleRoute.useParams();
+    const { daily } = puzzleRoute.useSearch();
+    return <PuzzleScreen id={id} daily={daily} />;
   },
 });
 
@@ -214,6 +251,9 @@ const routeTree = rootRoute.addChildren([
   profileRoute,
   leaderboardRoute,
   learnRoute,
+  journeyRoute,
+  puzzlesRoute,
+  puzzleRoute,
   replayRoute,
 ]);
 

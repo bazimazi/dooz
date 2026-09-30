@@ -123,7 +123,14 @@ export function PlayerCard({
             />
           ) : null}
 
-          {kind === 'bot' ? (
+          {kind === 'bot' && avatar ? (
+            // A journey rival: a character, not a machine, but still thinking.
+            <AvatarBadge
+              avatar={avatar}
+              ring={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
+              className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
+            />
+          ) : kind === 'bot' ? (
             <BotAvatarIcon
               className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
               ring="var(--color-seat-idle)"
@@ -169,7 +176,7 @@ export function PlayerCard({
         </div>
 
         {timeMs !== null ? (
-          <MatchClock remainingMs={timeMs} ticking={ticking} compact />
+          <MatchClock remainingMs={timeMs} ticking={ticking} audible={isYou} compact />
         ) : kind === 'local' ? null : (
           <Mark
             player={player}

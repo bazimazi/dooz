@@ -12,7 +12,8 @@
     "test": "vitest run",
     "typecheck": "tsc --build",
     "bench": "tsx bench/ladder.ts",
-    "bench:speed": "tsx bench/speed.ts"
+    "bench:speed": "tsx bench/speed.ts",
+    "puzzles": "tsx bench/puzzles.ts"
   },
   "devDependencies": {
     "tsx": "^4.23.12"

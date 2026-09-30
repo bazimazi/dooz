@@ -1,8 +1,9 @@
 # dooz
 
-An in-a-row strategy game. Seven modes across four rule sets — classic Tic Tac
-Toe, larger boards, Gomoku, Misère and Ultimate — against a six-level AI, a
-friend on the same device, or a stranger on a rated ladder.
+An in-a-row strategy game. Nine modes across six rule sets — classic Tic Tac
+Toe, larger boards, Gomoku, Misère, Gravity, Vanish and Ultimate — against a
+six-level AI, a journey of rivals, a daily puzzle, a friend on the same device,
+or a stranger on a rated ladder.
 
 One codebase runs everywhere: as a web app, as an installable PWA, as a desktop
 app on Windows, macOS and Linux, and as a native app on iOS and Android.
@@ -13,8 +14,10 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 
 | | |
 | --- | --- |
-| **Modes** | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Ultimate |
-| **Play** | Pass-and-play · vs AI (6 levels) · practice with hints · ranked · casual · private rooms · spectating |
+| **Modes** | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Vanish · Gravity · Ultimate |
+| **Play** | Pass-and-play series with names and a running score · vs AI (6 levels) · practice with hints and engine suggestions · ranked · casual · private rooms · spectating |
+| **Solo** | A journey of six rivals and eighteen stages with star ratings · a pack of proven win-in-N puzzles with a daily puzzle and streaks |
+| **Feel** | Synthesised sound on every move, an optional generative score, haptics, four piece sets to unlock, gravity drops, vanishing marks, win ripples |
 | **Competitive** | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards |
 | **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics |
 
@@ -73,10 +76,15 @@ replay(game.config, X, next!.moves);      // the same position, rebuilt
 
 Variants live behind one interface (`create`, `canPlay`, `legalMoves`, `apply`)
 and are registered in a single map, so adding one touches two files and nothing
-else: the server, the client and the AI only ever see `GameState`. Three of the
-four share an implementation — `classic`, `gomoku` and `misere` differ only in
-the board they use and in who a completed line belongs to. `ultimate` is the one
-with state beyond the board, and it carries it in a field the others leave null.
+else: the server, the client and the AI only ever see `GameState`. Four of the
+six share an implementation — `classic`, `gomoku`, `misere` and `gravity` differ
+only in the board they use, in which empty squares are open (gravity allows the
+lowest free square of each column), and in who a completed line belongs to.
+`vanish` keeps each player's three newest marks and lifts the oldest when a
+fourth is placed; it needs no extra state, because the marks on the board are
+always the last three each player played, so the move list says which leaves
+next. `ultimate` is the one with state beyond the board, and it carries it in a
+field the others leave null.
 
 Because nothing in the rules reads a clock or a random number, a match is stored
 as its config, its opener and its move list. That is what makes replays exact
@@ -108,12 +116,66 @@ now and one that is already half dead.
 3×3 is solved outright from hard upwards. On the larger boards the search is
 bounded by wall clock, always has a complete answer in hand when time runs out,
 and can be cancelled mid-search when the position it was thinking about is no
-longer on screen.
+longer on screen. Under gravity the same search runs with one candidate per
+column instead of the neighbourhood rule, which is both narrower and exact, so
+the strong levels afford two extra plies.
+
+Vanish is solved completely. Its positions are two short queues of squares —
+73,450 of them reachable — and once both players have three marks down every
+position has exactly three moves, so a retrograde analysis labels every one of
+them won, lost or drawn, with the exact distance to the end, in about 200ms the
+first time the bot is asked. (The result: a first-player win in thirteen plies,
+but only from an edge opening; the corners and the centre let the second player
+hold.) Levels are weakened by how far down that distance they may see, the same
+principle as the search's depth limit. Because draws exist and neither side is
+forced to end one, a game with no line is drawn after fifty plies.
 
 ```bash
 npm run bench --workspace @dooz/engine    # the full strength ladder
 npm run bench:speed --workspace @dooz/engine
 ```
+
+## Playing alone
+
+- **The journey.** Six rivals — Pip, Mo, Sage, Bruno, Vex and Nyx, one per bot
+  level — with three stages each across every mode. The player always moves
+  first, so the stars measure the player rather than a coin toss: one for a
+  win, more for winning inside each stage's par. Every stage is winnable; none
+  of them puts the player against a level that plays 3×3 perfectly. The rivals
+  talk: a taunt when they make a threat, a worry when you do, read off the same
+  exact threat check the hints use.
+- **Puzzles.** A pack of win-in-N positions from real bot games, each one proved
+  by the generator in [`packages/engine/bench/puzzles.ts`](src/packages/engine/bench/puzzles.ts)
+  against every defence, with a unique solution and the most stubborn defence
+  recorded — so the client plays it back without searching. One of them is the
+  daily puzzle, the same for everyone on the same day, with a streak for solving
+  on consecutive days and a spoiler-free result to share.
+- **Progress.** Records against each bot level, streaks, stars and solved
+  puzzles are kept on the device (`features/progress`). They unlock three piece
+  sets — Neon, Chalk and Candy — alongside the original Classic set. Nothing
+  here is trusted by the server; it is cosmetics and a profile card.
+
+```bash
+npm run puzzles --workspace @dooz/engine  # regenerate the pack: ~5 minutes, byte-identical every run
+```
+
+## Sound
+
+Every sound is synthesised with the Web Audio API at the moment it plays
+([`apps/web/src/lib/sound.ts`](src/apps/web/src/lib/sound.ts)) — no audio files,
+for the same reasons the artwork is inline SVG: nothing to download, works
+offline, and it can follow the game. A mark's pitch comes from where it lands,
+higher up the board and further right being higher up a D major pentatonic
+scale, so a game played out is also a short tune; X is plucked and O is a round
+bloop, so the two players are told apart by ear. Gravity marks whistle as they
+fall, vanish marks leave with a breath of air, and a win climbs to a chord.
+
+The whole palette stays in one pentatonic key, so any two sounds — two marks,
+a win and the music — sit together. The optional ambient score
+([`lib/music.ts`](src/apps/web/src/lib/music.ts)) is generated the same way and
+never repeats. It is off by default, starts only after a gesture (browsers
+insist), and pauses in the background. Effects, music, volume and vibration are
+separate settings.
 
 ## Getting started
 

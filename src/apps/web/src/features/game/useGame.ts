@@ -3,6 +3,7 @@ import {
   createGame,
   type GameConfig,
   type GameState,
+  type Player,
   randomStartingPlayer,
   sameConfig,
 } from '@dooz/engine';
@@ -12,11 +13,21 @@ export interface UseGame {
   game: GameState;
   /** Plays for whoever is to move. Ignores illegal moves. */
   play: (index: number) => void;
-  /** Fresh board, new random opener. */
-  restart: () => void;
+  /**
+   * Fresh board. The opener is `opener` when given, the hook's fixed opener
+   * when it has one, and a coin toss otherwise.
+   */
+  restart: (opener?: Player) => void;
   /** Take back the last move. Local and practice games only. */
   undo: () => void;
   canUndo: boolean;
+  /** Counts games started in this hook, so a screen can tell one game from the next. */
+  round: number;
+}
+
+interface UseGameOptions {
+  /** Always open with this player instead of tossing for it. */
+  opener?: Player;
 }
 
 /**
@@ -32,27 +43,36 @@ export interface UseGame {
  * so picking a mode swaps the board alone instead of playing every screen's
  * entrance animation again.
  */
-export function useGame(config: GameConfig): UseGame {
-  const [game, setGame] = useState<GameState>(() => createGame(config, randomStartingPlayer()));
+export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGame {
+  const fixed = options.opener;
+  const [game, setGame] = useState<GameState>(() =>
+    createGame(config, fixed ?? randomStartingPlayer()),
+  );
   const [opener, setOpener] = useState(() => game.currentPlayer);
+  const [round, setRound] = useState(0);
 
   // Adjusted during render rather than in an effect: an effect would let one
   // frame of the previous board paint under the new rules first.
   if (!sameConfig(game.config, config)) {
-    const starting = randomStartingPlayer();
+    const starting = fixed ?? randomStartingPlayer();
     setOpener(starting);
     setGame(createGame(config, starting));
+    setRound((count) => count + 1);
   }
 
   const play = useCallback((index: number) => {
     setGame((current) => applyMove(current, index) ?? current);
   }, []);
 
-  const restart = useCallback(() => {
-    const starting = randomStartingPlayer();
-    setOpener(starting);
-    setGame(createGame(config, starting));
-  }, [config]);
+  const restart = useCallback(
+    (next?: Player) => {
+      const starting = next ?? fixed ?? randomStartingPlayer();
+      setOpener(starting);
+      setGame(createGame(config, starting));
+      setRound((count) => count + 1);
+    },
+    [config, fixed],
+  );
 
   /**
    * Replays the game one move short of where it is.
@@ -73,5 +93,5 @@ export function useGame(config: GameConfig): UseGame {
     });
   }, [opener]);
 
-  return { game, play, restart, undo, canUndo: game.moves.length > 0 };
+  return { game, play, restart, undo, canUndo: game.moves.length > 0, round };
 }

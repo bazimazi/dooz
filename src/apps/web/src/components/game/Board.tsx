@@ -3,21 +3,32 @@ import {
   colOf,
   Empty,
   type GameState,
+  gravityLanding,
   legalMoves,
   O,
+  type Player,
   rowOf,
   ultimateBoardOf,
   ultimateCells,
+  vanishedBy,
+  vanishingNext,
   X,
 } from '@dooz/engine';
-import { type KeyboardEvent, memo, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type KeyboardEvent, memo, useMemo, useRef, useState } from 'react';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { haptics, sfx } from '@/lib/sound';
 import { UltimateOverlay } from './UltimateOverlay';
 import { WinLine } from './WinLine';
 
 /** How the game ended, from the point of view of the person at this device. */
 export type FinishTone = 'win' | 'loss' | 'draw';
+
+export interface BoardHint {
+  index: number;
+  /** `best` is a suggested move rather than a forced one. */
+  kind: 'win' | 'threat' | 'best';
+}
 
 interface BoardProps {
   game: GameState;
@@ -30,7 +41,7 @@ interface BoardProps {
    */
   finishTone?: FinishTone | null;
   /** Mark the squares that win or must be blocked this move. Practice only. */
-  hints?: readonly { index: number; kind: 'win' | 'threat' }[];
+  hints?: readonly BoardHint[];
   /** Read-only: a replay, or a game being watched. */
   readOnly?: boolean;
 }
@@ -57,6 +68,11 @@ function radiiFor(size: number): { frame: string; inner: string } {
  */
 const ANIMATION_CELL_LIMIT = 100;
 
+/** Seconds a gravity mark takes to fall `rows` squares. Grows like real falling: with the root. */
+function dropTime(rows: number): number {
+  return 0.22 + Math.sqrt(rows) * 0.13;
+}
+
 export function Board({
   game,
   onPlay,
@@ -67,6 +83,7 @@ export function Board({
 }: BoardProps) {
   const { board, winLine, status, config } = game;
   const { size } = config;
+  const gravity = config.variant === 'gravity';
   const radii = radiiFor(size);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -79,19 +96,33 @@ export function Board({
   // reachable without discarding the anchor when the size comes back.
   const focus = focusIndex < board.length ? focusIndex : 0;
 
+  // Under gravity the pointer picks a column, not a square, so the whole column
+  // lights and the square the mark would land on previews it.
+  const [hoverCol, setHoverCol] = useState<number | null>(null);
+
   const interactive = !readOnly && !disabled && status === 'playing';
 
   /**
    * The moves the rules actually allow right now.
    *
-   * On the line variants this is "every empty cell", but Ultimate confines the
-   * mover to one sub-board, and a board that lets you click a square the rules
-   * will refuse is worse than one that looks slightly busier.
+   * On most variants this is "every empty cell", but Ultimate confines the
+   * mover to one sub-board and gravity to one square per column, and a board
+   * that lets you click a square the rules will refuse is worse than one that
+   * looks slightly busier.
    */
   const playable = useMemo(() => {
     if (status !== 'playing') return new Set<number>();
     return new Set(legalMoves(game));
   }, [game, status]);
+
+  // Where each column's next mark lands, for gravity's tap-a-column input.
+  const landing = useMemo(
+    () =>
+      gravity && status === 'playing'
+        ? Array.from({ length: size }, (_, col) => gravityLanding(board, size, col))
+        : null,
+    [gravity, status, board, size],
+  );
 
   // Position in the winning run, so the run can light up cell by cell along
   // its own direction rather than all at once.
@@ -100,11 +131,18 @@ export function Board({
     [winLine],
   );
 
+  // The wave that crosses the board from a win: each square's delay is its
+  // distance from the middle of the line (or of the three winning boards).
+  const ripple = useMemo(() => rippleDelays(game), [game]);
+
   const hintFor = useMemo(() => {
-    const map = new Map<number, 'win' | 'threat'>();
+    const map = new Map<number, BoardHint['kind']>();
     for (const hint of hints ?? []) map.set(hint.index, hint.kind);
     return map;
   }, [hints]);
+
+  const fading = useMemo(() => vanishingNext(game), [game]);
+  const lifted = useMemo(() => vanishedBy(game), [game]);
 
   const animate = board.length <= ANIMATION_CELL_LIMIT;
 
@@ -139,6 +177,9 @@ export function Board({
     gridRef.current?.querySelector<HTMLButtonElement>(`[data-cell="${next}"]`)?.focus();
   }
 
+  const winner = game.winner ?? X;
+  const glow = winner === X ? 'var(--color-glow-x)' : 'var(--color-glow-o)';
+
   return (
     <div
       className={cx(
@@ -160,6 +201,7 @@ export function Board({
       <div
         className="relative aspect-square w-full overflow-hidden bg-surface transition-[border-radius] duration-500 ease-soft"
         style={{ borderRadius: radii.inner }}
+        onPointerLeave={gravity ? () => setHoverCol(null) : undefined}
       >
         <div
           ref={gridRef}
@@ -187,6 +229,11 @@ export function Board({
             >
               {Array.from({ length: size }, (_col, col) => {
                 const index = row * size + col;
+                const drop = landing ? (landing[col] ?? -1) : -1;
+                // Under gravity every square of a column plays the column; the
+                // mark goes wherever it lands.
+                const target = gravity ? (drop >= 0 ? drop : null) : index;
+                const canPlay = interactive && target !== null && playable.has(target);
                 return (
                   <BoardCell
                     key={index}
@@ -196,14 +243,26 @@ export function Board({
                     size={size}
                     cell={board[index] ?? Empty}
                     currentPlayer={game.currentPlayer}
-                    playable={interactive && playable.has(index)}
+                    target={canPlay ? target : null}
+                    interactive={interactive}
                     isLastMove={game.lastMove === index}
                     tabStop={index === focus}
                     winOrder={winOrder.get(index)}
                     hint={hintFor.get(index)}
                     animate={animate}
-                    label={describeCell(game, index)}
+                    gravity={gravity}
+                    columnLit={gravity && interactive && hoverCol === col && drop >= 0}
+                    preview={gravity ? interactive && hoverCol === col && drop === index : true}
+                    fade={
+                      fading.mover === index ? 'mover' : fading.waiting === index ? 'waiting' : null
+                    }
+                    ghost={lifted === index ? ghostOf(game) : null}
+                    ghostKey={lifted === index ? game.moves.length : 0}
+                    ripple={ripple?.get(index)}
+                    rippleColour={glow}
+                    label={describeCell(game, index, drop)}
                     onFocus={setFocusIndex}
+                    onHover={gravity ? setHoverCol : undefined}
                     onPlay={onPlay}
                   />
                 );
@@ -213,10 +272,62 @@ export function Board({
         </div>
 
         {game.ultimate ? <UltimateOverlay game={game} /> : null}
-        {winLine ? <WinLine line={winLine} size={size} winner={game.winner ?? X} /> : null}
+        {winLine ? (
+          <WinLine
+            line={winLine}
+            size={size}
+            winner={winner}
+            delay={gravity ? dropTime(Math.floor((game.lastMove ?? 0) / size) + 1) * 0.66 : 0}
+          />
+        ) : null}
+        {game.ultimate?.winBoards ? (
+          <WinLine line={game.ultimate.winBoards} size={3} winner={winner} delay={0.15} />
+        ) : null}
       </div>
     </div>
   );
+}
+
+/** The mark that just left a vanish board: the one the last mover owned. */
+function ghostOf(game: GameState): Player | null {
+  const mover = game.lastMove === null ? Empty : game.board[game.lastMove];
+  return mover === X || mover === O ? mover : null;
+}
+
+/**
+ * Milliseconds each square waits before the win ripple reaches it.
+ *
+ * Measured from the middle of the winning line - or, on Ultimate, the middle of
+ * the winning boards - in squares, so the wave spreads out from the win itself
+ * rather than sweeping across the board in reading order.
+ */
+function rippleDelays(game: GameState): Map<number, number> | null {
+  if (game.status !== 'won') return null;
+  const { size } = game.config;
+
+  let centre: { row: number; col: number } | null = null;
+  if (game.winLine && game.winLine.length > 0) {
+    const first = game.winLine[0]!;
+    const last = game.winLine.at(-1)!;
+    centre = {
+      row: (rowOf(size, first) + rowOf(size, last)) / 2,
+      col: (colOf(size, first) + colOf(size, last)) / 2,
+    };
+  } else if (game.ultimate?.winBoards) {
+    const middle = game.ultimate.winBoards[1]!;
+    centre = { row: Math.floor(middle / 3) * 3 + 1, col: (middle % 3) * 3 + 1 };
+  }
+  if (!centre) return null;
+
+  // Big boards ripple faster per square, so the wave takes the same time to
+  // cross a 15x15 board as a 3x3 one takes to cross it.
+  const step = Math.max(18, 110 / size);
+  const delays = new Map<number, number>();
+  for (let index = 0; index < game.board.length; index++) {
+    const distance = Math.hypot(rowOf(size, index) - centre.row, colOf(size, index) - centre.col);
+    delays.set(index, 380 + distance * step);
+  }
+  return delays;
 }
 
 interface BoardCellProps {
@@ -226,16 +337,44 @@ interface BoardCellProps {
   size: number;
   cell: Cell;
   currentPlayer: GameState['currentPlayer'];
-  playable: boolean;
+  /** The square a tap here plays, or `null` when a tap here plays nothing. */
+  target: number | null;
+  /** The board as a whole is taking input, whether or not this square is. */
+  interactive: boolean;
   isLastMove: boolean;
   tabStop: boolean;
   winOrder: number | undefined;
-  hint: 'win' | 'threat' | undefined;
+  hint: BoardHint['kind'] | undefined;
   animate: boolean;
+  gravity: boolean;
+  /** Gravity: this square's column is under the pointer. */
+  columnLit: boolean;
+  /** Whether this square shows the hover preview of the mark to come. */
+  preview: boolean;
+  /** Vanish: this mark leaves on its owner's next move. */
+  fade: 'mover' | 'waiting' | null;
+  /** Vanish: the mark that just left this square, to see it off. */
+  ghost: Player | null;
+  ghostKey: number;
+  /** Milliseconds until the win ripple reaches this square. */
+  ripple: number | undefined;
+  rippleColour: string;
   label: string;
   onFocus: (index: number) => void;
+  onHover: ((col: number | null) => void) | undefined;
   onPlay: (index: number) => void;
 }
+
+/** Directions the sparks fly off a landing mark: eight, evenly, slightly turned. */
+const SPARKS = Array.from({ length: 8 }, (_, spark) => {
+  const angle = (spark / 8) * Math.PI * 2 + 0.3;
+  const reach = spark % 2 === 0 ? 62 : 46;
+  return {
+    dx: `${Math.cos(angle) * reach}%`,
+    dy: `${Math.sin(angle) * reach}%`,
+    big: spark % 2 === 0,
+  };
+});
 
 /**
  * One square.
@@ -248,6 +387,10 @@ interface BoardCellProps {
  *
  * Memoised because a 15x15 board is 225 of these and a move changes one: React
  * would otherwise re-render every cell on every mark.
+ *
+ * The mark's wrappers are always rendered, whatever state the square is in,
+ * and only their classes change. Swapping the element tree when a square stops
+ * being the last move would remount the mark and replay its entrance.
  */
 const BoardCell = memo(function BoardCell({
   index,
@@ -256,17 +399,32 @@ const BoardCell = memo(function BoardCell({
   size,
   cell,
   currentPlayer,
-  playable,
+  target,
+  interactive,
   isLastMove,
   tabStop,
   winOrder,
   hint,
   animate,
+  gravity,
+  columnLit,
+  preview,
+  fade,
+  ghost,
+  ghostKey,
+  ripple,
+  rippleColour,
   label,
   onFocus,
+  onHover,
   onPlay,
 }: BoardCellProps) {
   const big = size > 9;
+  const playable = target !== null;
+  const soft = cell === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)';
+  const falling = gravity && isLastMove && animate;
+  const fall = row + 1;
+  const landedAt = falling ? dropTime(fall) * 0.66 : 0;
 
   return (
     <button
@@ -275,9 +433,27 @@ const BoardCell = memo(function BoardCell({
       role="gridcell"
       tabIndex={tabStop ? 0 : -1}
       aria-disabled={!playable}
-      onFocus={() => onFocus(index)}
+      onFocus={(event) => {
+        onFocus(index);
+        // Keyboard focus previews the column; the focus a tap brings with it
+        // does not, or a phone would be left with a ghost mark where it tapped.
+        if (isKeyboardFocus(event.currentTarget)) onHover?.(col);
+      }}
+      onPointerEnter={
+        onHover
+          ? (event) => {
+              if (event.pointerType !== 'touch') onHover(col);
+            }
+          : undefined
+      }
       onClick={() => {
-        if (playable) onPlay(index);
+        if (target !== null) onPlay(target);
+        else if (interactive) {
+          // Refused, but heard: a tap that does nothing silently reads as a
+          // tap the game missed.
+          sfx.invalid();
+          haptics.buzz([10, 30, 10]);
+        }
       }}
       aria-label={label}
       className={cx(
@@ -292,7 +468,14 @@ const BoardCell = memo(function BoardCell({
         playable
           ? 'cursor-pointer transition-colors duration-150 hover:bg-b8/12 active:bg-b8/25'
           : 'cursor-default',
+        columnLit && 'bg-b8/10',
+        ripple !== undefined && 'animate-ripple',
       )}
+      style={
+        ripple !== undefined
+          ? ({ animationDelay: `${ripple}ms`, '--ripple': rippleColour } as CSSProperties)
+          : undefined
+      }
     >
       {cell !== Empty ? (
         <>
@@ -303,30 +486,78 @@ const BoardCell = memo(function BoardCell({
             <span
               aria-hidden="true"
               className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
-              style={{
-                boxShadow: `0 0 0 2px ${cell === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)'}`,
-              }}
+              style={{ boxShadow: `0 0 0 2px ${soft}`, animationDelay: `${landedAt}s` }}
             />
           ) : null}
+
+          {/* Falls into place under gravity. A full square tall, so the drop
+              keyframes can move it in whole squares. */}
           <span
             className={cx(
-              'relative flex w-[68%] items-center justify-center',
-              // The throb lives on the wrapper, the entrance on the mark
-              // itself: two animations, two `transform`s, no fight over which
-              // one owns the element.
-              winOrder !== undefined && 'animate-win-throb',
+              'absolute inset-0 flex origin-bottom items-center justify-center',
+              falling && 'animate-drop',
             )}
-            style={winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : undefined}
+            style={
+              falling
+                ? ({ '--fall': fall, '--drop-time': `${dropTime(fall)}s` } as CSSProperties)
+                : undefined
+            }
           >
-            <Mark
-              player={cell}
-              hole="var(--color-surface)"
+            <span
               className={cx(
-                'w-full',
-                animate && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                'relative flex w-[68%] items-center justify-center transition-opacity duration-300',
+                // The throb lives on the wrapper, the entrance on the mark
+                // itself: two animations, two `transform`s, no fight over which
+                // one owns the element.
+                winOrder !== undefined && 'animate-win-throb',
+                fade === 'mover' && 'animate-fading',
+                fade === 'waiting' && 'opacity-70',
               )}
-            />
+              style={winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : undefined}
+            >
+              <Mark
+                player={cell}
+                hole="var(--color-surface)"
+                className={cx(
+                  'w-full',
+                  animate && !gravity && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                )}
+              />
+            </span>
           </span>
+
+          {/* The mark that leaves next on a vanish board is ringed in a broken
+              line - it is still in play, but not for long. */}
+          {fade === 'mover' ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-[9%] animate-fade-in rounded-full border-2 border-dashed"
+              style={{ borderColor: soft }}
+            />
+          ) : null}
+
+          {/* Sparks thrown off the mark that just landed. */}
+          {isLastMove && animate ? (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+              {SPARKS.map((spark, at) => (
+                <span
+                  key={at}
+                  className={cx(
+                    'absolute top-1/2 left-1/2 -mt-0.5 -ml-0.5 animate-spark rounded-full',
+                    spark.big ? 'size-1.5' : 'size-1',
+                  )}
+                  style={
+                    {
+                      '--dx': spark.dx,
+                      '--dy': spark.dy,
+                      background: soft,
+                      animationDelay: `${landedAt + 0.04}s`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
+            </span>
+          ) : null}
 
           {/* The last move played, ringed so a glance finds it. On a large
               board this is the difference between reading a position and
@@ -338,33 +569,57 @@ const BoardCell = memo(function BoardCell({
                 'pointer-events-none absolute rounded-full ring-2 ring-g10/70',
                 big ? 'inset-[6%]' : 'inset-[10%]',
               )}
+              style={falling ? { animation: `fade-in 0.2s ${landedAt}s both` } : undefined}
             />
           ) : null}
         </>
       ) : null}
 
-      {/* Practice hints: where the game is won, and where it must be saved. */}
+      {/* A vanish mark leaving: it dissolves where it stood. Keyed on the move
+          count so it plays for each mark that leaves, not just the first. */}
+      {ghost !== null && cell === Empty ? (
+        <span
+          key={ghostKey}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <span className="flex w-[68%] animate-vanish-out">
+            <Mark player={ghost} hole="var(--color-surface)" className="w-full" />
+          </span>
+        </span>
+      ) : null}
+
+      {/* Practice hints: where the game is won, where it must be saved, and
+          - when asked - the move the engine would play. */}
       {hint && cell === Empty ? (
         <span
           aria-hidden="true"
           className={cx(
             'pointer-events-none absolute inset-[18%] rounded-full border-2 animate-pulse-soft',
-            hint === 'win' ? 'border-ok' : 'border-warn',
+            hint === 'win' && 'border-ok',
+            hint === 'threat' && 'border-warn',
+            hint === 'best' && 'border-dashed border-ink',
           )}
         />
       ) : null}
 
       {/* Faint hint of the mark that would land here. Suppressed on a big
-          board, where 225 hover previews is a lot of DOM for one pointer. */}
-      {playable && !big ? (
+          board, where 225 hover previews is a lot of DOM for one pointer.
+          Under gravity it shows only on the square the column would fill. */}
+      {playable && !big && preview && cell === Empty ? (
         <Mark
           player={currentPlayer}
           hole="var(--color-surface)"
           className={cx(
-            'pointer-events-none absolute w-[68%] scale-75 opacity-0',
+            'pointer-events-none absolute w-[68%]',
             'transition-[opacity,transform] duration-200 ease-spring',
-            'group-hover:scale-100 group-hover:opacity-25',
-            'group-focus-visible:scale-100 group-focus-visible:opacity-25',
+            gravity
+              ? 'scale-100 opacity-30'
+              : cx(
+                  'scale-75 opacity-0',
+                  'group-hover:scale-100 group-hover:opacity-25',
+                  'group-focus-visible:scale-100 group-focus-visible:opacity-25',
+                ),
           )}
         />
       ) : null}
@@ -373,9 +628,15 @@ const BoardCell = memo(function BoardCell({
 });
 
 function boardLabel(game: GameState): string {
-  const { size, variant } = game.config;
+  const { size, variant, winLength } = game.config;
+  if (variant === 'gravity') {
+    return `${size} by ${size} gravity board, ${winLength} in a row to win. Choose a column; your mark drops to its lowest empty square`;
+  }
+  if (variant === 'vanish') {
+    return `Vanish board, three in a row to win. Each player keeps only their three newest marks`;
+  }
   if (variant !== 'ultimate') {
-    return `${size} by ${size} board, ${game.config.winLength} in a row to win`;
+    return `${size} by ${size} board, ${winLength} in a row to win`;
   }
 
   const active = game.ultimate?.activeBoard;
@@ -389,15 +650,30 @@ function boardLabel(game: GameState): string {
 /**
  * What a screen reader says about a square.
  *
- * Position, contents, and - on an Ultimate board - which small board it belongs
- * to and whether that board has been won, because without it the grid is
- * eighty-one indistinguishable squares.
+ * Position, contents, and whatever the variant adds: on an Ultimate board which
+ * small board it belongs to and whether that board has been won, because
+ * without it the grid is eighty-one indistinguishable squares; under gravity
+ * where a mark played in its column would land; under vanish which mark is the
+ * next to go.
  */
-function describeCell(game: GameState, index: number): string {
+function describeCell(game: GameState, index: number, landing: number): string {
   const { size } = game.config;
   const cell = game.board[index] ?? Empty;
   const position = `row ${rowOf(size, index) + 1}, column ${colOf(size, index) + 1}`;
   const contents = cell === X ? 'X' : cell === O ? 'O' : 'empty';
+
+  if (game.config.variant === 'gravity') {
+    if (cell !== Empty || game.status !== 'playing') return `${position}, ${contents}`;
+    return landing >= 0
+      ? `${position}, empty, plays column ${colOf(size, index) + 1} at row ${rowOf(size, landing) + 1}`
+      : `${position}, empty, column full`;
+  }
+
+  if (game.config.variant === 'vanish') {
+    const next = vanishingNext(game);
+    const leaving = next.mover === index || next.waiting === index ? ', vanishes next' : '';
+    return `${position}, ${contents}${leaving}`;
+  }
 
   if (!game.ultimate) return `${position}, ${contents}`;
 
@@ -416,3 +692,14 @@ function describeCell(game: GameState, index: number): string {
 
 /** The cells of a sub-board, for callers that need to highlight one. */
 export { ultimateCells };
+
+/** Whether an element's focus came from the keyboard rather than a tap or click. */
+function isKeyboardFocus(element: Element): boolean {
+  try {
+    return element.matches(':focus-visible');
+  } catch {
+    // An engine that cannot answer - an old webview, a test DOM - errs towards
+    // showing the preview, which is harmless.
+    return true;
+  }
+}

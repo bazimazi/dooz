@@ -60,13 +60,22 @@ export function buttonClasses(
     !ghost && 'sheen tile-edge shadow-[0_4px_14px_-8px_var(--color-shadow)]',
     ghost && 'border border-stroke-soft',
     size === 'small' ? 'h-11 px-5 text-base font-semibold' : 'h-14 px-6 text-2xl font-semibold',
-    block ? 'w-full' : 'w-full max-w-68',
+    // A caller that sizes the button itself gets exactly that. Two width
+    // utilities on one element are decided by stylesheet order, not by which
+    // was written last, so a `w-auto` passed in used to lose to this `w-full`
+    // - stretching a "Join" button across the field beside it.
+    setsWidth(className) ? null : block ? 'w-full' : 'w-full max-w-68',
     'transition-[transform,box-shadow,filter] duration-200 ease-soft',
     'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_var(--color-shadow)]',
     'active:translate-y-0 active:scale-[0.965] active:duration-75',
     'disabled:pointer-events-none disabled:opacity-50',
     className,
   );
+}
+
+/** Whether `className` carries its own width - `w-auto`, `w-24`, `sm:w-auto` - not a `max-w-`. */
+function setsWidth(className: string | undefined): boolean {
+  return className !== undefined && /(?:^|\s)(?:[\w-]+:)*!?w-\S+/.test(className);
 }
 
 /** The fill and label colour for a link using {@link buttonClasses}. */
@@ -97,22 +106,10 @@ export function Button<T extends ElementType = 'button'>({
   ...rest
 }: ButtonProps<T>) {
   const Component: ElementType = as ?? 'button';
-  const ghost = variant === 'ghost';
 
   return (
     <Component
-      className={cx(
-        'group flex items-center justify-center rounded-3xl no-underline',
-        !ghost && 'sheen tile-edge shadow-[0_4px_14px_-8px_var(--color-shadow)]',
-        ghost && 'border border-stroke-soft',
-        size === 'small' ? 'h-11 px-5 text-base font-semibold' : 'h-14 px-6 text-2xl font-semibold',
-        block ? 'w-full' : 'w-full max-w-68',
-        'transition-[transform,box-shadow,filter] duration-200 ease-soft',
-        'hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_12px_26px_-10px_var(--color-shadow)]',
-        'active:translate-y-0 active:scale-[0.965] active:duration-75',
-        'disabled:pointer-events-none disabled:opacity-50',
-        className,
-      )}
+      className={buttonClasses({ variant, size, block, className })}
       style={
         {
           '--tile-fill': VARIANT[variant].fill,

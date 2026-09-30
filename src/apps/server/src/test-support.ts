@@ -1,5 +1,5 @@
 import { modeById } from '@dooz/engine';
-import type { ClientMessage, ServerMessage } from '@dooz/protocol';
+import { type ClientMessage, PROTOCOL_VERSION, type ServerMessage } from '@dooz/protocol';
 import { Accounts } from './db/accounts.js';
 import { type Db, openDatabase } from './db/database.js';
 import { Matches } from './db/matches.js';
@@ -96,7 +96,7 @@ export function createHarness(options: LobbyOptions = {}): Harness {
     (client as { accountId: string }).accountId = account.id;
     (client as { token: string }).token = token;
 
-    client.send({ type: 'hello', version: 3, accountId: account.id, token });
+    client.send({ type: 'hello', version: PROTOCOL_VERSION, accountId: account.id, token });
     return client;
   }
 
@@ -122,6 +122,8 @@ export const CONFIGS = {
   grid6: modeById('grid-6').config,
   ultimate: modeById('ultimate').config,
   misere: modeById('misere').config,
+  gravity: modeById('gravity').config,
+  vanish: modeById('vanish').config,
 };
 
 /**

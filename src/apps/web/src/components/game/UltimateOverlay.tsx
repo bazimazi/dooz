@@ -55,7 +55,21 @@ export function UltimateOverlay({ game }: { game: GameState }) {
               {/* The live board is ringed, inset so the ring sits inside the
                   rule rather than on top of it. */}
               {open ? (
-                <span className="absolute inset-[3%] rounded-lg ring-2 ring-b8/80 animate-pulse-soft" />
+                // Eases in each time the target board changes, so the eye is
+                // pulled to where the next move has to go.
+                <span className="absolute inset-[3%] animate-toast-in">
+                  <span className="absolute inset-0 animate-pulse-soft rounded-lg ring-2 ring-b8/80" />
+                </span>
+              ) : null}
+
+              {/* A small board taken: a ring stamps out from under the mark. */}
+              {owner !== Empty ? (
+                <span
+                  className="absolute inset-[20%] animate-stamp rounded-full"
+                  style={{
+                    boxShadow: `0 0 0 3px ${owner === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)'}`,
+                  }}
+                />
               ) : null}
 
               {owner !== Empty ? (

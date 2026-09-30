@@ -159,3 +159,47 @@ describe('Board: Ultimate', () => {
     expect(onPlay).not.toHaveBeenCalled();
   });
 });
+
+describe('Board under gravity', () => {
+  const gravity = modeById('gravity').config;
+
+  it('plays the landing square of whichever column is tapped', async () => {
+    const onPlay = vi.fn();
+    render(<Board game={createGame(gravity)} onPlay={onPlay} />);
+
+    // The top of column 4 on an empty 7x7 board drops to the floor, row 7.
+    await userEvent.click(
+      screen.getByRole('gridcell', { name: 'row 1, column 4, empty, plays column 4 at row 7' }),
+    );
+    expect(onPlay).toHaveBeenCalledWith(6 * 7 + 3);
+  });
+
+  it('stacks on whatever is already in the column', async () => {
+    const onPlay = vi.fn();
+    const game = applyMove(createGame(gravity), 6 * 7 + 3)!;
+    render(<Board game={game} onPlay={onPlay} />);
+
+    await userEvent.click(
+      screen.getByRole('gridcell', { name: 'row 2, column 4, empty, plays column 4 at row 6' }),
+    );
+    expect(onPlay).toHaveBeenCalledWith(5 * 7 + 3);
+  });
+});
+
+describe('Board under vanish', () => {
+  it('says which marks leave next', () => {
+    const vanish = modeById('vanish').config;
+    let game = createGame(vanish);
+    for (const move of [0, 4, 8, 2, 6, 7]) game = applyMove(game, move)!;
+    render(<Board game={game} onPlay={vi.fn()} />);
+
+    // X moves next and loses its oldest mark, 0; O's oldest, 4, goes after.
+    expect(
+      screen.getByRole('gridcell', { name: 'row 1, column 1, X, vanishes next' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: 'row 2, column 2, O, vanishes next' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: 'row 3, column 3, X' })).toBeInTheDocument();
+  });
+});

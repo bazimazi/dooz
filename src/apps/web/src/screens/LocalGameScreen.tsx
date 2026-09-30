@@ -1,42 +1,116 @@
-import { modeById, type ModeId, X } from '@dooz/engine';
+import {
+  modeById,
+  type ModeId,
+  O,
+  opponentOf,
+  type Player,
+  startingPlayerOf,
+  X,
+} from '@dooz/engine';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useMemo, useState } from 'react';
-import { BulbIcon } from '@/components/art/ui-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Mark } from '@/components/art/marks';
+import { BulbIcon, UsersIcon } from '@/components/art/ui-icons';
 import { Board } from '@/components/game/Board';
 import { GameControls } from '@/components/game/GameControls';
 import { GameHeader } from '@/components/game/GameHeader';
 import { ModeChip } from '@/components/game/ModePicker';
+import { OpenerBanner } from '@/components/game/OpenerBanner';
 import { outcomeMark, ResultModal, revealDelayFor } from '@/components/game/ResultModal';
+import { VariantStatus } from '@/components/game/VariantStatus';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useGame } from '@/features/game/useGame';
+import { useGameFeedback } from '@/features/game/useGameFeedback';
+import { useTurnTint } from '@/features/game/useTurnTint';
+import { useProgressStore } from '@/features/progress/store';
+import { cx } from '@/lib/cx';
 import { hintsFor } from '@/lib/hints';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
+import { useClosing } from '@/lib/useClosing';
+import { useDialog } from '@/lib/useDialog';
 
 interface LocalGameScreenProps {
   mode: ModeId;
 }
 
-/** Two people, one device. */
+interface Score {
+  x: number;
+  o: number;
+  draws: number;
+}
+
+const NO_SCORE: Score = { x: 0, o: 0, draws: 0 };
+
+/**
+ * Two people, one device - and a running score between them.
+ *
+ * A single game of tic-tac-toe between two people is over in twenty seconds;
+ * what they actually play is a series. So the screen keeps the tally, lets
+ * them put their names on the seats, and hands the first move of the next game
+ * to whoever lost the last one, which is both the house rule most people
+ * already use and the one that keeps a series close. Draws alternate.
+ */
 export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const navigate = useNavigate();
   const config = useMemo(() => modeById(mode).config, [mode]);
-  const { game, play, restart, undo, canUndo } = useGame(config);
+  const { game, play, restart, undo, canUndo, round } = useGame(config);
   const [hintsOn, setHintsOn] = useState(() => loadPreferences().hints);
+  const [names, setNames] = useState(() => loadPreferences().localNames);
+  const [renaming, setRenaming] = useState(false);
+  const [score, setScore] = useState<Score>(NO_SCORE);
+  const recordLocalGame = useProgressStore((state) => state.recordLocalGame);
 
   const hints = useMemo(() => (hintsOn ? hintsFor(game) : []), [hintsOn, game]);
+  useGameFeedback(game, { threats: hints.filter((hint) => hint.kind === 'threat').length });
+  useTurnTint(game);
 
   const finished = game.status !== 'playing';
-  const title = game.status === 'draw' ? 'Draw' : `Player ${game.winner === X ? 1 : 2} wins!`;
+  const nameOf = (player: Player) => (player === X ? names[0] : names[1]);
+  const title = game.status === 'draw' ? 'Draw' : `${nameOf(game.winner ?? X)} wins!`;
   // Somebody at this device won either way, so a win is always worth marking.
   const finishTone = finished ? (game.winner ? 'win' : 'draw') : null;
+
+  // Count each finished game once. A take-back that reopens it and finishes it
+  // differently replaces its result rather than adding a second one.
+  const counted = useRef<{ round: number; result: 'x' | 'o' | 'draws' } | null>(null);
+  useEffect(() => {
+    if (!finished) {
+      if (counted.current?.round === round) {
+        const { result } = counted.current;
+        setScore((current) => ({ ...current, [result]: current[result] - 1 }));
+        counted.current = null;
+      }
+      return;
+    }
+    if (counted.current?.round === round) return;
+    const result = game.winner === X ? 'x' : game.winner === O ? 'o' : 'draws';
+    counted.current = { round, result };
+    setScore((current) => ({ ...current, [result]: current[result] + 1 }));
+    recordLocalGame();
+  }, [finished, round, game.winner, recordLocalGame]);
+
+  // A new mode is a new series.
+  const [scoredMode, setScoredMode] = useState(mode);
+  if (scoredMode !== mode) {
+    setScoredMode(mode);
+    setScore(NO_SCORE);
+  }
+
+  function nextGame() {
+    // Loser opens; after a draw, whoever did not open this one.
+    restart(opponentOf(game.winner ?? startingPlayerOf(game)));
+  }
 
   function toggleHints() {
     const next = !hintsOn;
     setHintsOn(next);
     savePreferences({ hints: next });
   }
+
+  const played = score.x + score.o + score.draws;
 
   return (
     <Screen>
@@ -48,37 +122,53 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={{ name: 'Player 1', kind: 'local' }}
-          right={{ name: 'Player 2', kind: 'local' }}
+          left={{ name: names[0], kind: 'local' }}
+          right={{ name: names[1], kind: 'local' }}
           centre={
-            <ModeChip mode={mode} onClick={() => void navigate({ to: '/', search: undefined })} />
+            <div className="flex flex-col items-center gap-1">
+              <ModeChip mode={mode} onClick={() => void navigate({ to: '/', search: undefined })} />
+              <ScoreLine score={score} />
+            </div>
           }
-          badge="Local"
+          badge={played > 0 ? `Game ${played + (finished ? 0 : 1)}` : 'Local'}
         />
       </div>
 
       <main
-        className="flex w-full flex-1 animate-board-in items-center justify-center py-6"
+        className="flex w-full flex-1 animate-board-in flex-col items-center justify-center gap-3 py-6"
         style={{ animationDelay: '0.12s' }}
       >
-        <Board game={game} onPlay={play} finishTone={finishTone} hints={hints} />
+        <div className="relative w-full max-w-board">
+          <Board game={game} onPlay={play} finishTone={finishTone} hints={hints} />
+          <OpenerBanner
+            round={round}
+            player={game.currentPlayer}
+            label={`${nameOf(game.currentPlayer)} starts`}
+          />
+        </div>
+        <VariantStatus game={game} />
       </main>
 
       <footer className="animate-rise pb-4" style={{ animationDelay: '0.22s' }}>
         <GameControls
-          onRestart={restart}
+          onRestart={() => restart()}
           restartLabel="New game"
           onUndo={undo}
           canUndo={canUndo}
           extra={
-            <IconButton
-              label={hintsOn ? 'Turn hints off' : 'Turn hints on'}
-              aria-pressed={hintsOn}
-              onClick={toggleHints}
-              className={hintsOn ? 'text-ok' : undefined}
-            >
-              <BulbIcon />
-            </IconButton>
+            <>
+              <IconButton label="Name the players" onClick={() => setRenaming(true)}>
+                <UsersIcon />
+              </IconButton>
+              <IconButton
+                label={hintsOn ? 'Turn hints off' : 'Turn hints on'}
+                aria-pressed={hintsOn}
+                onClick={toggleHints}
+                className={hintsOn ? 'text-ok' : undefined}
+              >
+                <BulbIcon />
+              </IconButton>
+            </>
           }
         />
       </footer>
@@ -87,12 +177,25 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
         <ResultModal
           title={title}
           art={outcomeMark(game.winner)}
+          detail={<SeriesDetail score={score} names={names} winner={game.winner} />}
           celebrate={game.winner !== null}
           revealDelay={revealDelayFor(game)}
           actions={
             <>
-              <Button variant="primary" size="small" block onClick={restart}>
-                Play again
+              <Button variant="primary" size="small" block onClick={nextGame}>
+                Next game
+              </Button>
+              <Button
+                variant="ghost"
+                size="small"
+                block
+                onClick={() => {
+                  setScore(NO_SCORE);
+                  counted.current = null;
+                  restart();
+                }}
+              >
+                New series
               </Button>
               <Button as={Link} to="/" variant="ghost" size="small" block>
                 Back to home
@@ -101,6 +204,162 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           }
         />
       ) : null}
+
+      {renaming ? (
+        <NamesSheet
+          names={names}
+          onSave={(next) => {
+            setNames(next);
+            savePreferences({ localNames: next });
+          }}
+          onClose={() => setRenaming(false)}
+        />
+      ) : null}
     </Screen>
+  );
+}
+
+/** The series so far, as the two marks either side of a score. */
+function ScoreLine({ score }: { score: Score }) {
+  return (
+    <span
+      className="tnum flex items-center gap-1.5 text-base font-semibold"
+      aria-label={`Score ${score.x} to ${score.o}`}
+    >
+      <span key={`x${score.x}`} className="animate-pop">
+        {score.x}
+      </span>
+      <span className="text-xs font-normal text-ink-faint">–</span>
+      <span key={`o${score.o}`} className="animate-pop">
+        {score.o}
+      </span>
+    </span>
+  );
+}
+
+function SeriesDetail({
+  score,
+  names,
+  winner,
+}: {
+  score: Score;
+  names: readonly [string, string];
+  winner: Player | null;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-3 rounded-tile border border-stroke-soft px-3 py-2">
+      <SeriesSide name={names[0]} player={X} points={score.x} lit={winner === X} />
+      <span className="text-xs text-ink-faint">
+        {score.draws > 0 ? `${score.draws} drawn` : 'vs'}
+      </span>
+      <SeriesSide name={names[1]} player={O} points={score.o} lit={winner === O} />
+    </div>
+  );
+}
+
+function SeriesSide({
+  name,
+  player,
+  points,
+  lit,
+}: {
+  name: string;
+  player: Player;
+  points: number;
+  lit: boolean;
+}) {
+  return (
+    <span className="flex min-w-0 flex-col items-center gap-0.5">
+      <span className="flex items-center gap-1.5">
+        <Mark player={player} hole="var(--color-surface)" className="size-4" />
+        <span
+          key={points}
+          className={cx('tnum text-2xl font-semibold', lit && 'animate-pop')}
+          style={lit ? { animationDelay: '0.6s' } : undefined}
+        >
+          {points}
+        </span>
+      </span>
+      <span className="max-w-24 truncate text-xs text-ink-muted">{name}</span>
+    </span>
+  );
+}
+
+function NamesSheet({
+  names,
+  onSave,
+  onClose,
+}: {
+  names: readonly [string, string];
+  onSave: (names: [string, string]) => void;
+  onClose: () => void;
+}) {
+  const { closing, close } = useClosing(onClose);
+  const panelRef = useDialog<HTMLDivElement>(close);
+  const [first, setFirst] = useState(names[0]);
+  const [second, setSecond] = useState(names[1]);
+
+  return (
+    <div
+      className={cx(
+        'fixed inset-0 z-50 flex items-center justify-center bg-scrim p-5 backdrop-blur-[2px]',
+        closing ? 'animate-fade-out' : 'animate-fade-in',
+      )}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Name the players"
+        tabIndex={-1}
+        className={cx(
+          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
+          'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
+          closing ? 'animate-panel-out' : 'animate-panel-in',
+        )}
+      >
+        <form
+          className="flex flex-col gap-4 rounded-[1.5rem] bg-surface px-5 py-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave([first.trim() || 'Player 1', second.trim() || 'Player 2']);
+            close();
+          }}
+        >
+          <h2 className="text-center font-display text-xl">Who’s playing?</h2>
+          <Field
+            label="Plays X"
+            value={first}
+            maxLength={14}
+            autoComplete="off"
+            onChange={(event) => setFirst(event.target.value)}
+            trailing={<Mark player={X} className="size-7 shrink-0" />}
+          />
+          <Field
+            label="Plays O"
+            value={second}
+            maxLength={14}
+            autoComplete="off"
+            onChange={(event) => setSecond(event.target.value)}
+            trailing={<Mark player={O} hole="var(--color-surface)" className="size-7 shrink-0" />}
+          />
+          <Button type="submit" variant="primary" size="small" block>
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="small"
+            onClick={close}
+            className="self-center"
+          >
+            Cancel
+          </Button>
+        </form>
+      </div>
+    </div>
   );
 }

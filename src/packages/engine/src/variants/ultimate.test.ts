@@ -123,17 +123,26 @@ describe('ultimate rules', () => {
   });
 
   it('never offers a move into a settled board or an occupied cell', () => {
+    // Millions of individual assertions made this the slowest test in the
+    // suite, so offending moves are collected and asserted on once.
+    const offending: number[] = [];
     for (const frames of randomGames(3)) {
       for (const game of frames) {
+        const meta = game.ultimate!;
         for (const move of legalMoves(game)) {
-          const meta = game.ultimate!;
-          expect(game.board[move]).toBe(Empty);
-          expect(meta.boards[ultimateBoardOf(move)]).toBe(Empty);
-          expect(meta.drawn[ultimateBoardOf(move)]).toBe(false);
-          if (meta.activeBoard !== null) expect(ultimateBoardOf(move)).toBe(meta.activeBoard);
+          const board = ultimateBoardOf(move);
+          if (
+            game.board[move] !== Empty ||
+            meta.boards[board] !== Empty ||
+            meta.drawn[board] ||
+            (meta.activeBoard !== null && board !== meta.activeBoard)
+          ) {
+            offending.push(move);
+          }
         }
       }
     }
+    expect(offending).toEqual([]);
   });
 
   it('replays deterministically', () => {

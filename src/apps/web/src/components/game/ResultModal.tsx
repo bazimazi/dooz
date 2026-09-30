@@ -74,13 +74,15 @@ function useRevealed(delay: number): boolean {
  * screen a beat longer. A draw has no line to watch, only the board settling,
  * so its pause is just long enough that the panel does not feel like a cut.
  * A game that ended without a final move - a resignation, a flag - has nothing
- * to watch at all.
+ * to watch at all. Under gravity the last mark has to fall before any of it
+ * starts, and the shockwave off a finished line is worth its half second.
  */
 export function revealDelayFor(game: GameState, reason?: EndReason): number {
   if (reason && reason !== 'line' && reason !== 'draw') return 0;
-  if (game.winLine) return 1250;
-  if (game.ultimate?.winBoards) return 1100;
-  return 700;
+  const falling = game.config.variant === 'gravity' ? 450 : 0;
+  if (game.winLine) return 1450 + falling;
+  if (game.ultimate?.winBoards) return 1400;
+  return 700 + falling;
 }
 
 /**

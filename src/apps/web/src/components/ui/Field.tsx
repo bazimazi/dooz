@@ -171,3 +171,51 @@ export function Toggle({
     </button>
   );
 }
+
+/**
+ * A labelled slider, for the one setting that is a quantity rather than a
+ * choice. A native range input underneath, so the keyboard, the screen reader
+ * and a phone's drag all work without being rebuilt; only its colour is ours.
+ */
+export function Slider({
+  label,
+  value,
+  onChange,
+  min = 0,
+  max = 1,
+  step = 0.05,
+  describe,
+  disabled = false,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  /** What a screen reader hears for a value - "70 percent" rather than "0.7". */
+  describe?: (value: number) => string;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className={cx('flex w-full items-center gap-3 px-1', disabled && 'opacity-50')}>
+      <label htmlFor={id} className="shrink-0 text-sm text-ink-muted">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        aria-valuetext={describe?.(value)}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-6 w-full cursor-pointer disabled:cursor-default"
+        style={{ accentColor: 'var(--color-stroke)' }}
+      />
+    </div>
+  );
+}

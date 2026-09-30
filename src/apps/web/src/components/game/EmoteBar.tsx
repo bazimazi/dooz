@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { MuteIcon, SpeakIcon } from '@/components/art/ui-icons';
 import { IconButton } from '@/components/ui/IconButton';
 import { cx } from '@/lib/cx';
+import { sfx } from '@/lib/sound';
 import type { IncomingEmote } from '@/features/online/store';
 
 /**
@@ -91,6 +92,12 @@ export function EmoteToast({
     const timer = setTimeout(() => onDone(emote.id), 3200);
     return () => clearTimeout(timer);
   }, [emote.id, onDone]);
+
+  // Heard as well as seen: a reaction scrolled past under the board is easy to
+  // miss. Each toast is its own element, so mounting is arriving.
+  useEffect(() => {
+    sfx.emote();
+  }, []);
 
   const fromYou = you !== null && emote.from === you;
   const label = LABELS[emote.emote];

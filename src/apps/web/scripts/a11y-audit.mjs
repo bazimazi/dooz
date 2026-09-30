@@ -225,6 +225,11 @@ async function audit(path, theme = 'dark') {
 for (const path of [
   '/',
   '/play/local?mode=classic',
+  '/play/local?mode=gravity',
+  '/play/bot?mode=vanish&difficulty=easy',
+  '/play/bot?mode=classic&difficulty=beginner&stage=pip-1',
+  '/journey',
+  '/puzzles',
   '/learn?mode=classic',
   '/leaderboard',
   '/profile',

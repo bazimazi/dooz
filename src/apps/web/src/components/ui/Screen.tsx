@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Backdrop } from '@/components/art/Backdrop';
+import { MarkDefs } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 
 interface ScreenProps {
@@ -37,6 +38,7 @@ export function Screen({
   return (
     <>
       <Backdrop variant={backdrop} />
+      <MarkDefs />
       <div
         className={cx(
           'relative mx-auto flex w-full flex-col items-center px-5',

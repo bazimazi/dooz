@@ -66,6 +66,28 @@ describe('hintsFor', () => {
     expect(hintsFor(ultimate)).toEqual([]);
   });
 
+  it('ignores a vanish line that leans on a mark about to leave', () => {
+    // X holds 0 (oldest), 1 and 8 and is to move: 2 looks like it finishes the
+    // top row, but 0 lifts first. O's 2-4-6 and 3-4-5 both lean on O's own
+    // oldest mark, 4, so neither is a threat either.
+    const game = fromMoves(modeById('vanish').config, [0, 4, 1, 3, 8, 6]);
+    expect(hintsFor(game)).toEqual([]);
+  });
+
+  it('names a real vanish threat', () => {
+    // O to move. X threatens 0-1-2 with marks that are staying.
+    const game = fromMoves(modeById('vanish').config, [0, 4, 1]);
+    expect(hintsFor(game)).toEqual([{ index: 2, kind: 'threat' }]);
+  });
+
+  it('points at the landing square under gravity', () => {
+    // X on the floor in columns 0-2, O stacked above: X wins by dropping into
+    // column 3, which lands on the floor at row 7.
+    const config = modeById('gravity').config;
+    const game = fromMoves(config, [42, 35, 43, 36, 44, 37]);
+    expect(hintsFor(game)).toContainEqual({ index: 45, kind: 'win' });
+  });
+
   it('only ever names an empty square', () => {
     const game = fromMoves(3, [0, 3, 1, 4]);
     for (const hint of hintsFor(game)) {

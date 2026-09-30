@@ -4,6 +4,11 @@ import type { BotMessage, BotRequest, BotResponse } from './bot.worker';
 
 /** Never answer faster than this - an instant reply reads as a glitch. */
 const MINIMUM_THINK_MS = 450;
+/**
+ * An opening move waits longer, so the coin toss that says who opens can be
+ * read before the first mark lands on top of it.
+ */
+const OPENING_THINK_MS = 1100;
 
 interface UseBotOpponentOptions {
   game: GameState;
@@ -82,7 +87,8 @@ export function useBotOpponent({
 
       // Hold the move back until the minimum has elapsed, so the bot appears to
       // consider even the positions it solves instantly.
-      const wait = Math.max(0, MINIMUM_THINK_MS - (Date.now() - startedAt));
+      const minimum = game.moves.length === 0 ? OPENING_THINK_MS : MINIMUM_THINK_MS;
+      const wait = Math.max(0, minimum - (Date.now() - startedAt));
       delayTimer = setTimeout(() => {
         if (cancelled) return;
         if (diagnostics) setLastSearch(diagnostics);
