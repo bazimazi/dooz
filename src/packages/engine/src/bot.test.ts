@@ -24,6 +24,17 @@ const ULTIMATE = modeById('ultimate').config;
  */
 const SLOW = 120_000;
 
+/**
+ * A clock that advances one millisecond each time it is read. The search reads
+ * it every thousand-odd nodes, so a budget measured on it is a fixed amount of
+ * work rather than wall time - and a test that compares two searches does not
+ * depend on how fast the machine running it happens to be.
+ */
+function tickingClock(): () => number {
+  let time = 0;
+  return () => time++;
+}
+
 /** A game whose board is drawn as a picture, with `toMove` to play. */
 function position(config: GameConfig, toMove: Player, ...rows: string[]): GameState {
   return {
@@ -142,8 +153,9 @@ describe('difficulty', () => {
         '...O..',
         ...Array<string>(3).fill(blank(6)),
       );
-      const first = findBestMove(game, { difficulty, random: seeded(12), timeBudgetMs: 120 });
-      const second = findBestMove(game, { difficulty, random: seeded(12), timeBudgetMs: 120 });
+      const options = { difficulty, timeBudgetMs: 20 };
+      const first = findBestMove(game, { ...options, random: seeded(12), now: tickingClock() });
+      const second = findBestMove(game, { ...options, random: seeded(12), now: tickingClock() });
       expect(second).toBe(first);
     }
   });
@@ -160,7 +172,14 @@ describe('difficulty', () => {
     const spread = (difficulty: BotDifficulty) => {
       const moves = new Set<number>();
       for (let seed = 0; seed < 24; seed++) {
-        moves.add(findBestMove(game, { difficulty, random: seeded(seed), timeBudgetMs: 60 })!);
+        moves.add(
+          findBestMove(game, {
+            difficulty,
+            random: seeded(seed),
+            timeBudgetMs: 10,
+            now: tickingClock(),
+          })!,
+        );
       }
       return moves.size;
     };
