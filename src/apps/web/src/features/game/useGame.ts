@@ -3,11 +3,13 @@ import {
   createGame,
   type GameConfig,
   type GameState,
+  isGameConfig,
+  startingPlayerOf,
   type Player,
   randomStartingPlayer,
   sameConfig,
 } from '@dooz/engine';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface UseGame {
   game: GameState;
@@ -28,6 +30,34 @@ export interface UseGame {
 interface UseGameOptions {
   /** Always open with this player instead of tossing for it. */
   opener?: Player;
+  /** Independent on-device position for this game mode or journey stage. */
+  storageKey?: string;
+}
+
+function restoreGame(config: GameConfig, storageKey?: string): GameState | null {
+  if (!storageKey) return null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(`dooz.game:${storageKey}`) ?? 'null');
+    if (
+      !saved ||
+      !isGameConfig(saved.config) ||
+      !sameConfig(saved.config, config) ||
+      (saved.opener !== 1 && saved.opener !== 2) ||
+      !Array.isArray(saved.moves) ||
+      saved.moves.length > 1000
+    )
+      return null;
+    let game = createGame(config, saved.opener);
+    for (const move of saved.moves) {
+      if (!Number.isInteger(move)) return null;
+      const next = applyMove(game, move);
+      if (!next) return null;
+      game = next;
+    }
+    return game.status === 'playing' ? game : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -45,20 +75,44 @@ interface UseGameOptions {
  */
 export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGame {
   const fixed = options.opener;
-  const [game, setGame] = useState<GameState>(() =>
-    createGame(config, fixed ?? randomStartingPlayer()),
+  const storageKey = options.storageKey;
+  const [loadedKey, setLoadedKey] = useState(storageKey);
+  const [game, setGame] = useState<GameState>(
+    () => restoreGame(config, storageKey) ?? createGame(config, fixed ?? randomStartingPlayer()),
   );
-  const [opener, setOpener] = useState(() => game.currentPlayer);
+  const [opener, setOpener] = useState(() => startingPlayerOf(game));
   const [round, setRound] = useState(0);
 
   // Adjusted during render rather than in an effect: an effect would let one
   // frame of the previous board paint under the new rules first.
-  if (!sameConfig(game.config, config)) {
-    const starting = fixed ?? randomStartingPlayer();
-    setOpener(starting);
-    setGame(createGame(config, starting));
+  if (!sameConfig(game.config, config) || loadedKey !== storageKey) {
+    const restored =
+      restoreGame(config, storageKey) ?? createGame(config, fixed ?? randomStartingPlayer());
+    setLoadedKey(storageKey);
+    setOpener(startingPlayerOf(restored));
+    setGame(restored);
     setRound((count) => count + 1);
   }
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const key = `dooz.game:${storageKey}`;
+      // Results are recorded separately. Restoring a finished board would award them twice.
+      if (game.status !== 'playing') localStorage.removeItem(key);
+      else
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            config: game.config,
+            opener: startingPlayerOf(game),
+            moves: game.moves,
+          }),
+        );
+    } catch {
+      /* Local play remains available when storage is full. */
+    }
+  }, [game, storageKey]);
 
   const play = useCallback((index: number) => {
     setGame((current) => applyMove(current, index) ?? current);

@@ -49,8 +49,8 @@ export interface OnlineSearch {
 export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) {
   const store = useOnlineStore();
   const { connect, disconnect } = store;
-  const accountStatus = useAccountStore((state) => state.status);
-  const initialise = useAccountStore((state) => state.initialise);
+  const accountStatus = useAccountStore((state) => state.onlineStatus);
+  const initialise = useAccountStore((state) => state.ensureOnline);
 
   // The intent behind this visit is acted on once, as soon as the socket is
   // ready; re-running it on every render would spam the server.
@@ -112,6 +112,8 @@ function OnlineFeedback({ game, you }: { game: GameState; you: Player | null }) 
 // ---------------------------------------------------------------------------
 
 function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
+  const accountError = useAccountStore((state) => state.syncError);
+  const retryAccount = useAccountStore((state) => state.ensureOnline);
   const { phase, reconnecting, error, roomCode, queued, queue, leave } = useOnlineStore();
   const navigate = useNavigate();
   const detail = modeById(mode);
@@ -175,9 +177,14 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
               </p>
             ) : null}
 
-            {error ? (
+            {accountError ? (
+              <Button size="small" onClick={() => void retryAccount()}>
+                Retry connection
+              </Button>
+            ) : null}
+            {error || accountError ? (
               <p role="alert" className="animate-toast-in text-sm text-danger">
-                {error}
+                {error ?? accountError}
               </p>
             ) : null}
 

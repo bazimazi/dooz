@@ -57,8 +57,13 @@ export function UltimateOverlay({ game }: { game: GameState }) {
               {open ? (
                 // Eases in each time the target board changes, so the eye is
                 // pulled to where the next move has to go.
-                <span className="absolute inset-[3%] animate-toast-in">
-                  <span className="absolute inset-0 animate-pulse-soft rounded-lg ring-2 ring-b8/80" />
+                <span className="absolute inset-[3%] animate-subboard-in">
+                  <span
+                    className={cx(
+                      'absolute inset-0 rounded-lg ring-2 ring-b8/80',
+                      meta.activeBoard !== null && 'animate-pulse-soft',
+                    )}
+                  />
                 </span>
               ) : null}
 
@@ -73,16 +78,18 @@ export function UltimateOverlay({ game }: { game: GameState }) {
               ) : null}
 
               {owner !== Empty ? (
-                <Mark
-                  player={owner === X ? X : O}
-                  hole="var(--color-surface)"
-                  className={cx(
-                    'w-[62%] animate-pop drop-shadow-[0_2px_10px_rgb(0_0_0/0.45)]',
-                    // A board that is part of the winning three keeps moving,
-                    // so the three that ended the game read as a set.
-                    inWin ? 'opacity-95 animate-win-throb' : 'opacity-70',
-                  )}
-                />
+                <span className={cx('flex w-[62%]', inWin && 'animate-win-throb')}>
+                  <Mark
+                    player={owner === X ? X : O}
+                    hole="var(--color-surface)"
+                    className={cx(
+                      'w-full animate-pop drop-shadow-[0_2px_10px_rgb(0_0_0/0.45)]',
+                      // A board that is part of the winning three keeps moving,
+                      // so the three that ended the game read as a set.
+                      inWin ? 'opacity-95' : 'opacity-70',
+                    )}
+                  />
+                </span>
               ) : null}
 
               {drawn ? (

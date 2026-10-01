@@ -22,7 +22,7 @@ export function GameHeader({ game, left, right, centre, badge }: GameHeaderProps
     <header className="flex w-full items-start justify-center gap-2.5 pt-4">
       <PlayerCard {...left} player={X} active={playing && game.currentPlayer === X} />
 
-      <div className="flex w-[5.5rem] shrink-0 flex-col items-center gap-1 self-start pt-3">
+      <div className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1 self-start pt-3 min-[360px]:w-[5.5rem]">
         {centre ?? (
           <span className="text-center text-sm leading-tight text-ink-muted">
             {describeConfig(game.config)}

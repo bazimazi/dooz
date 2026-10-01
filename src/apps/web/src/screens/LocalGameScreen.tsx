@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
+import { useAccountStore } from '@/features/account/store';
 import { useGame } from '@/features/game/useGame';
 import { useGameFeedback } from '@/features/game/useGameFeedback';
 import { useTurnTint } from '@/features/game/useTurnTint';
@@ -43,6 +44,17 @@ interface Score {
 }
 
 const NO_SCORE: Score = { x: 0, o: 0, draws: 0 };
+function loadScore(mode: ModeId): Score {
+  try {
+    const score = JSON.parse(localStorage.getItem(`dooz.local-series:${mode}`) ?? 'null');
+    return score &&
+      ['x', 'o', 'draws'].every((key) => Number.isInteger(score[key]) && score[key] >= 0)
+      ? score
+      : NO_SCORE;
+  } catch {
+    return NO_SCORE;
+  }
+}
 
 /**
  * Two people, one device - and a running score between them.
@@ -55,12 +67,15 @@ const NO_SCORE: Score = { x: 0, o: 0, draws: 0 };
  */
 export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const navigate = useNavigate();
+  const avatar = useAccountStore((state) => state.profile?.avatar);
   const config = useMemo(() => modeById(mode).config, [mode]);
-  const { game, play, restart, undo, canUndo, round } = useGame(config);
+  const { game, play, restart, undo, canUndo, round } = useGame(config, {
+    storageKey: `local:${mode}`,
+  });
   const [hintsOn, setHintsOn] = useState(() => loadPreferences().hints);
   const [names, setNames] = useState(() => loadPreferences().localNames);
   const [renaming, setRenaming] = useState(false);
-  const [score, setScore] = useState<Score>(NO_SCORE);
+  const [score, setScore] = useState<Score>(() => loadScore(mode));
   const recordLocalGame = useProgressStore((state) => state.recordLocalGame);
 
   const hints = useMemo(() => (hintsOn ? hintsFor(game) : []), [hintsOn, game]);
@@ -96,8 +111,16 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const [scoredMode, setScoredMode] = useState(mode);
   if (scoredMode !== mode) {
     setScoredMode(mode);
-    setScore(NO_SCORE);
+    setScore(loadScore(mode));
   }
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`dooz.local-series:${mode}`, JSON.stringify(score));
+    } catch {
+      /* The current series still works without storage. */
+    }
+  }, [mode, score]);
 
   function nextGame() {
     // Loser opens; after a draw, whoever did not open this one.
@@ -122,7 +145,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={{ name: names[0], kind: 'local' }}
+          left={{ name: names[0], kind: 'local', ...(avatar ? { avatar } : {}) }}
           right={{ name: names[1], kind: 'local' }}
           centre={
             <div className="flex flex-col items-center gap-1">

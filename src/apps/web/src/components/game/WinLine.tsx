@@ -1,5 +1,5 @@
 import { type Player, type WinLine as WinLineCells, X } from '@dooz/engine';
-import { useId } from 'react';
+import { type CSSProperties, useId } from 'react';
 
 interface WinLineProps {
   line: WinLineCells;
@@ -68,6 +68,21 @@ export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
           }}
         />
       ))}
+
+      <circle
+        cx={from.x}
+        cy={from.y}
+        r={0.11 * Math.max(1, size / 8)}
+        fill={colour}
+        style={
+          {
+            '--travel-x': `${to.x - from.x}px`,
+            '--travel-y': `${to.y - from.y}px`,
+            transformOrigin: `${from.x}px ${from.y}px`,
+            animation: `win-tip 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) both`,
+          } as CSSProperties
+        }
+      />
 
       <line
         x1={from.x}

@@ -128,8 +128,9 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
             </ol>
 
             <p className="px-2 py-3 text-center text-xs text-ink-faint">
-              Ranked matches only. {data.placementGames} games are needed to qualify, so a single
-              lucky win cannot put anyone at the top.
+              Saved rankings are available offline. Connect to refresh them. Ranked matches only.{' '}
+              {data.placementGames} games are needed to qualify, so a single lucky win cannot put
+              anyone at the top.
             </p>
           </>
         )}

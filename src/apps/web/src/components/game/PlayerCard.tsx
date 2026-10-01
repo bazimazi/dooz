@@ -1,8 +1,9 @@
 import { type Player, X } from '@dooz/engine';
 import type { Avatar } from '@dooz/protocol';
 import { AvatarBadge } from '@/components/art/avatars';
-import { BotAvatarIcon, TurnCaret, WifiOffIcon } from '@/components/art/icons';
+import { TurnCaret, WifiOffIcon } from '@/components/art/icons';
 import { Mark } from '@/components/art/marks';
+import { useAccountStore } from '@/features/account/store';
 import { cx } from '@/lib/cx';
 import { MatchClock } from './MatchClock';
 
@@ -34,9 +35,8 @@ interface PlayerCardProps extends SeatInfo {
  * One of the two cards flanking the board header.
  *
  * Whose turn it is has to be readable at a glance from across a table, so the
- * two cards are pushed apart rather than the active one being decorated: the
- * card to move lifts, brightens, takes the player's colour and pings; the one
- * waiting sinks, dims and goes flat. Reading either card alone is enough,
+ * cards share fixed dimensions, an avatar and a mark. The card to move takes
+ * the player's colour and pings while the other keeps a quieter border. Reading either card alone is enough,
  * because it is being compared with the other one right beside it.
  *
  * Every part of that is a transition or a loop rather than a swap, so the turn
@@ -56,13 +56,13 @@ export function PlayerCard({
   ticking = false,
 }: PlayerCardProps) {
   const accent = player === X ? 'var(--color-mark-x)' : 'var(--color-mark-o)';
-  // X sits left of the centre column and O sits right of it. Scaling from the
-  // centre would grow the active card into that gap, leaving the column 2px
-  // nearer one card than the other. Pinning the edge that faces the centre
-  // sends the growth outwards instead, so both gaps stay equal.
-  const growAwayFromCentre = player === X ? 'origin-right' : 'origin-left';
   const glow = player === X ? 'var(--color-glow-x)' : 'var(--color-glow-o)';
   const offline = connected === false;
+  const ownAvatar = useAccountStore((state) => state.profile?.avatar);
+  const portrait =
+    avatar ??
+    (isYou ? ownAvatar : undefined) ??
+    (kind === 'bot' ? 'robot' : player === X ? 'fox' : 'owl');
 
   return (
     <div
@@ -71,13 +71,9 @@ export function PlayerCard({
       // and movement, which is to say they do not say it at all.
       aria-current={active ? 'true' : undefined}
       className={cx(
-        'relative w-[6.5rem] rounded-panel border p-1',
+        'relative h-36 w-[5.75rem] shrink-0 rounded-panel border p-1 min-[360px]:w-[6.5rem]',
         'transition-[transform,border-color,background-color,opacity] duration-300 ease-spring',
-        growAwayFromCentre,
-        // The gap between the two states carries the meaning, so it is a wide
-        // one: six per cent up against five per cent down is a difference of
-        // size you can see without having to look for it.
-        active ? 'scale-[1.06] border-transparent' : 'scale-[0.95] border-stroke-soft',
+        active ? 'border-transparent' : 'border-stroke-soft',
         active && 'animate-glow-ring',
         offline && 'opacity-50',
       )}
@@ -102,7 +98,7 @@ export function PlayerCard({
     >
       <div
         className={cx(
-          'flex flex-col items-center justify-between gap-1 rounded-[1.25rem] px-1 py-2.5',
+          'grid h-full grid-rows-[2.75rem_2rem_1.75rem] items-center justify-items-center gap-1 rounded-[1.25rem] px-1 py-2',
           'transition-colors duration-300 ease-soft',
           active ? 'bg-raised' : 'bg-seat-idle',
         )}
@@ -110,7 +106,7 @@ export function PlayerCard({
         <span
           className={cx(
             'relative flex size-11 items-center justify-center',
-            active && !busy && 'animate-bob',
+            active && !busy && 'animate-pop',
           )}
         >
           {/* The ping, behind the avatar and pinned to it, so the card's own
@@ -123,35 +119,11 @@ export function PlayerCard({
             />
           ) : null}
 
-          {kind === 'bot' && avatar ? (
-            // A journey rival: a character, not a machine, but still thinking.
-            <AvatarBadge
-              avatar={avatar}
-              ring={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
-              className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
-            />
-          ) : kind === 'bot' ? (
-            <BotAvatarIcon
-              className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
-              ring="var(--color-seat-idle)"
-            />
-          ) : kind === 'local' ? (
-            // Two people at one device have no accounts and so no avatars. A
-            // pair of identical default faces told them apart less well than
-            // the marks they are actually playing with.
-            <Mark
-              player={player}
-              hole={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
-              className="size-10"
-              style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
-            />
-          ) : (
-            <AvatarBadge
-              avatar={avatar ?? 'fox'}
-              ring={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
-              className="size-11"
-            />
-          )}
+          <AvatarBadge
+            avatar={portrait}
+            ring={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
+            className={cx('size-11 origin-bottom', busy && 'animate-sweep')}
+          />
         </span>
 
         <div className="flex w-full flex-col items-center gap-0.5">
@@ -175,19 +147,16 @@ export function PlayerCard({
           ) : null}
         </div>
 
-        {timeMs !== null ? (
-          <MatchClock remainingMs={timeMs} ticking={ticking} audible={isYou} compact />
-        ) : kind === 'local' ? null : (
+        <div className="flex h-7 items-center justify-center gap-1.5">
           <Mark
             player={player}
             hole={active ? 'var(--color-raised)' : 'var(--color-seat-idle)'}
-            className={cx(
-              'size-7 transition-[transform,filter] duration-300 ease-spring',
-              active ? 'scale-115' : 'scale-90',
-            )}
-            style={active ? { filter: `drop-shadow(0 0 10px ${glow})` } : undefined}
+            className="size-6 shrink-0"
           />
-        )}
+          {timeMs !== null ? (
+            <MatchClock remainingMs={timeMs} ticking={ticking} audible={isYou} compact />
+          ) : null}
+        </div>
       </div>
 
       {isYou ? (

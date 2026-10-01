@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { initMusic } from './lib/music';
 import { applyTheme, loadPreferences } from './lib/preferences';
 import { installUiSounds } from './lib/ui-sounds';
+import { useAccountStore } from './features/account/store';
 import { router } from './router';
 import './styles/fonts.css';
 import './styles/theme.css';
@@ -12,6 +13,7 @@ import './styles/theme.css';
 // one frame late is a white flash on a dark-themed device, which is the single
 // most noticeable thing an app can get wrong on launch.
 applyTheme(loadPreferences().theme);
+window.addEventListener('online', () => void useAccountStore.getState().refresh());
 
 // Nothing plays until the first gesture - browsers insist - but both need to
 // be listening for it before it happens.

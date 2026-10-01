@@ -61,10 +61,8 @@ function radiiFor(size: number): { frame: string; inner: string } {
 }
 
 /**
- * Below this many cells a board gets the full landing animation per mark; above
- * it, marks appear without one. A 15x15 board can take 60 marks in a game and
- * animating every one of them on a mid-range phone drops frames exactly when
- * the player is trying to read the position.
+ * Small boards retain each piece's entrance. Above this limit only the latest
+ * move animates, keeping large positions quiet and limiting active effects.
  */
 const ANIMATION_CELL_LIMIT = 100;
 
@@ -193,7 +191,7 @@ export function Board({
         // becoming harder to read.
         disabled && status === 'playing' && 'opacity-90',
         finishTone === 'win' && 'animate-board-settle shadow-[0_0_36px_-6px_var(--color-glow-win)]',
-        finishTone === 'draw' && 'animate-board-settle',
+        finishTone === 'draw' && 'animate-board-draw',
         finishTone === 'loss' && 'animate-shake',
       )}
       style={{ borderRadius: radii.frame }}
@@ -249,7 +247,7 @@ export function Board({
                     tabStop={index === focus}
                     winOrder={winOrder.get(index)}
                     hint={hintFor.get(index)}
-                    animate={animate}
+                    animate={animate || game.lastMove === index}
                     gravity={gravity}
                     columnLit={gravity && interactive && hoverCol === col && drop >= 0}
                     preview={gravity ? interactive && hoverCol === col && drop === index : true}
@@ -271,6 +269,13 @@ export function Board({
           ))}
         </div>
 
+        {status === 'won' ? (
+          <span
+            aria-hidden="true"
+            className="victory-burst pointer-events-none absolute inset-0"
+            style={{ '--burst-color': glow } as CSSProperties}
+          />
+        ) : null}
         {game.ultimate ? <UltimateOverlay game={game} /> : null}
         {winLine ? (
           <WinLine
@@ -370,8 +375,8 @@ const SPARKS = Array.from({ length: 8 }, (_, spark) => {
   const angle = (spark / 8) * Math.PI * 2 + 0.3;
   const reach = spark % 2 === 0 ? 62 : 46;
   return {
-    dx: `${Math.cos(angle) * reach}%`,
-    dy: `${Math.sin(angle) * reach}%`,
+    dx: Math.cos(angle) * reach,
+    dy: Math.sin(angle) * reach,
     big: spark % 2 === 0,
   };
 });
@@ -419,6 +424,7 @@ const BoardCell = memo(function BoardCell({
   onHover,
   onPlay,
 }: BoardCellProps) {
+  const [rejected, setRejected] = useState(false);
   const big = size > 9;
   const playable = target !== null;
   const soft = cell === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)';
@@ -451,9 +457,13 @@ const BoardCell = memo(function BoardCell({
         else if (interactive) {
           // Refused, but heard: a tap that does nothing silently reads as a
           // tap the game missed.
+          setRejected(true);
           sfx.invalid();
           haptics.buzz([10, 30, 10]);
         }
+      }}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) setRejected(false);
       }}
       aria-label={label}
       className={cx(
@@ -470,6 +480,7 @@ const BoardCell = memo(function BoardCell({
           : 'cursor-default',
         columnLit && 'bg-b8/10',
         ripple !== undefined && 'animate-ripple',
+        rejected && 'animate-cell-reject',
       )}
       style={
         ripple !== undefined
@@ -487,6 +498,14 @@ const BoardCell = memo(function BoardCell({
               aria-hidden="true"
               className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
               style={{ boxShadow: `0 0 0 2px ${soft}`, animationDelay: `${landedAt}s` }}
+            />
+          ) : null}
+
+          {isLastMove && animate ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 animate-cell-impact"
+              style={{ '--impact': soft, animationDelay: `${landedAt}s` } as CSSProperties}
             />
           ) : null}
 
@@ -515,11 +534,31 @@ const BoardCell = memo(function BoardCell({
               )}
               style={winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : undefined}
             >
+              {animate && !gravity ? (
+                <svg
+                  viewBox="0 0 100 100"
+                  aria-hidden="true"
+                  className="piece-trace pointer-events-none absolute inset-0 h-full w-full"
+                  fill="none"
+                  stroke={soft}
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                >
+                  {cell === X ? (
+                    <>
+                      <path pathLength="1" d="M18 18 82 82" />
+                      <path pathLength="1" d="M82 18 18 82" style={{ animationDelay: '65ms' }} />
+                    </>
+                  ) : (
+                    <circle pathLength="1" cx="50" cy="50" r="40" />
+                  )}
+                </svg>
+              ) : null}
               <Mark
                 player={cell}
                 hole="var(--color-surface)"
                 className={cx(
-                  'w-full',
+                  'w-full origin-center',
                   animate && !gravity && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
                 )}
               />
@@ -548,8 +587,8 @@ const BoardCell = memo(function BoardCell({
                   )}
                   style={
                     {
-                      '--dx': spark.dx,
-                      '--dy': spark.dy,
+                      '--dx': `${(spark.dx * 2.5) / size}px`,
+                      '--dy': `${(spark.dy * 2.5) / size}px`,
                       background: soft,
                       animationDelay: `${landedAt + 0.04}s`,
                     } as CSSProperties

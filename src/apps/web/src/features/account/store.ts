@@ -1,57 +1,87 @@
-import type { AccountProfile, Avatar } from '@dooz/protocol';
+import {
+  accountProfileSchema,
+  displayNameSchema,
+  type AccountProfile,
+  type Avatar,
+  updateProfileRequestSchema,
+} from '@dooz/protocol';
 import { create } from 'zustand';
 import { api, ApiError, type Credentials } from '@/lib/api';
 
 const STORAGE_KEY = 'dooz.account';
+const PROFILE_KEY = 'dooz.local-profile';
+type Changes = { displayName?: string; avatar?: Avatar };
 
-/**
- * Who this device is.
- *
- * The credentials live in `localStorage`, not `sessionStorage`: unlike the old
- * per-tab resume token this is a durable identity that owns a rating and a
- * match history, and it has to survive a relaunch or none of that is worth
- * keeping. A second tab sharing them is fine - the server hands the account to
- * the newest connection and tells the older one so.
- *
- * An account is created silently the first time the app runs. Nothing is asked
- * of the player up front: they get a name they can change, and can attach a
- * password later if they want the account on another device.
- */
 function loadCredentials(): Credentials | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== 'object' || parsed === null) return null;
-
-    const { accountId, token } = parsed as Partial<Credentials>;
-    if (typeof accountId !== 'string' || typeof token !== 'string') return null;
-    return { accountId, token };
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    return parsed && typeof parsed.accountId === 'string' && typeof parsed.token === 'string'
+      ? { accountId: parsed.accountId, token: parsed.token }
+      : null;
   } catch {
     return null;
   }
 }
-
 function saveCredentials(credentials: Credentials | null): void {
   try {
     if (credentials) localStorage.setItem(STORAGE_KEY, JSON.stringify(credentials));
     else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // Without storage the account lasts as long as the tab does, which still
-    // plays - it just starts again next launch.
+    /* The in-memory identity still works without storage. */
   }
 }
+function newProfile(): AccountProfile {
+  return {
+    accountId:
+      globalThis.crypto?.randomUUID?.() ??
+      `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    displayName: 'Player',
+    avatar: 'fox',
+    rating: null,
+    createdAt: Date.now(),
+    claimed: false,
+    stats: [],
+    achievements: [],
+  };
+}
+function loadLocal(): { profile: AccountProfile; changes: Changes } {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null');
+    const profile = accountProfileSchema.safeParse(stored?.profile);
+    const changes = updateProfileRequestSchema.safeParse(stored?.changes ?? {});
+    const credentials = loadCredentials();
+    if (profile.success && (!credentials || profile.data.accountId === credentials.accountId)) {
+      return { profile: profile.data, changes: changes.success ? changes.data : {} };
+    }
+  } catch {
+    /* An old or corrupt cache must not block local play. */
+  }
+  return { profile: newProfile(), changes: {} };
+}
+const initial = loadLocal();
+function saveLocal(profile: AccountProfile, changes: Changes): void {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ profile, changes }));
+  } catch {
+    /* Storage may be unavailable or full. */
+  }
+}
+saveLocal(initial.profile, initial.changes);
 
 export type AccountStatus = 'idle' | 'loading' | 'ready' | 'error';
-
 interface AccountState {
   status: AccountStatus;
+  onlineStatus: AccountStatus;
   credentials: Credentials | null;
   profile: AccountProfile | null;
+  changes: Changes;
+  revision: number;
   error: string | null;
-
-  /** Load the stored account, or create one. Safe to call repeatedly. */
+  syncError: string | null;
+  /** Local identity is always available; no server request is needed. */
   initialise: () => Promise<void>;
+  /** Called only for features that require a server account. */
+  ensureOnline: () => Promise<boolean>;
   refresh: () => Promise<void>;
   rename: (displayName: string) => Promise<boolean>;
   setAvatar: (avatar: Avatar) => Promise<void>;
@@ -60,127 +90,165 @@ interface AccountState {
   signOut: () => void;
   clearError: () => void;
 }
+let pending: Promise<boolean> | null = null;
+let generation = 0;
 
-/** In flight, so two screens mounting at once do not create two accounts. */
-let pending: Promise<void> | null = null;
-
-export const useAccountStore = create<AccountState>((set, get) => ({
-  status: 'idle',
-  credentials: loadCredentials(),
-  profile: null,
-  error: null,
-
-  initialise: async () => {
-    if (get().status === 'ready' || get().status === 'loading') return;
-    if (pending) return pending;
-
-    pending = (async () => {
-      set({ status: 'loading', error: null });
-      const existing = get().credentials;
-
-      if (existing) {
+export const useAccountStore = create<AccountState>((set, get) => {
+  function acceptRemote(profile: AccountProfile, revision: number) {
+    const changes = get().revision === revision ? {} : get().changes;
+    const merged = { ...profile, ...changes };
+    saveLocal(merged, changes);
+    set({ profile: merged, changes, status: 'ready' });
+  }
+  function edit(changes: Changes) {
+    const profile = { ...(get().profile ?? newProfile()), ...changes };
+    const queued = { ...get().changes, ...changes };
+    saveLocal(profile, queued);
+    set({ profile, changes: queued, revision: get().revision + 1, error: null });
+    // Local changes succeed immediately. Synchronization is optional and retryable.
+    if (get().credentials && navigator.onLine) void get().refresh();
+  }
+  return {
+    status: 'ready',
+    onlineStatus: 'idle',
+    credentials: loadCredentials(),
+    profile: initial.profile,
+    changes: initial.changes,
+    revision: 0,
+    error: null,
+    syncError: null,
+    initialise: async () => {
+      if (!get().profile) {
+        const profile = newProfile();
+        saveLocal(profile, {});
+        set({ profile, changes: {}, status: 'ready' });
+      }
+    },
+    ensureOnline: async () => {
+      if (pending) return pending;
+      const ownGeneration = generation;
+      const active = () => ownGeneration === generation;
+      const operation = (async () => {
+        const alreadyReady = get().onlineStatus === 'ready';
+        set({ onlineStatus: alreadyReady ? 'ready' : 'loading', syncError: null });
         try {
-          const { profile } = await api.profile(existing);
-          set({ status: 'ready', profile });
-          return;
-        } catch (error) {
-          // A token the server no longer honours - a sign-in elsewhere, or a
-          // reset database - is worth replacing rather than reporting. A
-          // network failure is not: it would throw away a good account.
-          if (!(error instanceof ApiError) || error.status !== 401) {
-            set({ status: 'error', error: messageFor(error) });
-            return;
+          let credentials = get().credentials;
+          let revision = get().revision;
+          let profile: AccountProfile;
+          if (!credentials) {
+            const local = get().profile!;
+            const created = await api.createAccount(local.displayName, local.avatar);
+            if (!active()) return false;
+            credentials = { accountId: created.accountId, token: created.token };
+            saveCredentials(credentials);
+            set({ credentials });
+            profile = created.profile;
+            acceptRemote(profile, revision);
+          } else {
+            profile = (await api.profile(credentials, undefined, true)).profile;
+            if (!active()) return false;
+            // A read never acknowledges queued changes.
+            acceptRemote(profile, -1);
           }
-          saveCredentials(null);
-          set({ credentials: null });
+          while (Object.keys(get().changes).length > 0) {
+            revision = get().revision;
+            profile = (await api.updateProfile(credentials, get().changes)).profile;
+            if (!active()) return false;
+            acceptRemote(profile, revision);
+          }
+          set({ onlineStatus: 'ready', syncError: null });
+          return true;
+        } catch (error) {
+          if (active())
+            set({ onlineStatus: alreadyReady ? 'ready' : 'error', syncError: messageFor(error) });
+          return false;
         }
+      })();
+      pending = operation;
+      void operation.finally(() => {
+        if (pending === operation) pending = null;
+      });
+      return operation;
+    },
+    refresh: async () => {
+      if (!get().credentials) return;
+      await get().ensureOnline();
+    },
+    rename: async (name) => {
+      const parsed = displayNameSchema.safeParse(name);
+      if (!parsed.success) {
+        set({ error: parsed.error.issues[0]?.message ?? 'Invalid name' });
+        return false;
       }
-
+      edit({ displayName: parsed.data });
+      return true;
+    },
+    setAvatar: async (avatar) => {
+      const parsed = updateProfileRequestSchema.safeParse({ avatar });
+      if (parsed.success) edit(parsed.data);
+    },
+    claim: async (password) => {
+      if (!(await get().ensureOnline())) {
+        set({ error: get().syncError });
+        return false;
+      }
+      const ownGeneration = generation;
       try {
-        const created = await api.createAccount();
-        const credentials = { accountId: created.accountId, token: created.token };
-        saveCredentials(credentials);
-        set({ status: 'ready', credentials, profile: created.profile });
+        const revision = get().revision;
+        const { profile } = await api.claim(get().credentials!, password);
+        if (ownGeneration !== generation) return false;
+        acceptRemote(profile, revision);
+        set({ error: null });
+        return true;
       } catch (error) {
-        set({ status: 'error', error: messageFor(error) });
+        if (ownGeneration === generation) set({ error: messageFor(error) });
+        return false;
       }
-    })().finally(() => {
+    },
+    signIn: async (displayName, password) => {
+      const ownGeneration = ++generation;
       pending = null;
-    });
-
-    return pending;
-  },
-
-  refresh: async () => {
-    const credentials = get().credentials;
-    if (!credentials) return;
-    try {
-      const { profile } = await api.profile(credentials);
-      set({ profile });
-    } catch (error) {
-      set({ error: messageFor(error) });
-    }
-  },
-
-  rename: async (displayName) => {
-    const credentials = get().credentials;
-    if (!credentials) return false;
-    try {
-      const { profile } = await api.updateProfile(credentials, { displayName });
-      set({ profile, error: null });
-      return true;
-    } catch (error) {
-      set({ error: messageFor(error) });
-      return false;
-    }
-  },
-
-  setAvatar: async (avatar) => {
-    const credentials = get().credentials;
-    if (!credentials) return;
-    try {
-      const { profile } = await api.updateProfile(credentials, { avatar });
-      set({ profile, error: null });
-    } catch (error) {
-      set({ error: messageFor(error) });
-    }
-  },
-
-  claim: async (password) => {
-    const credentials = get().credentials;
-    if (!credentials) return false;
-    try {
-      const { profile } = await api.claim(credentials, password);
-      set({ profile, error: null });
-      return true;
-    } catch (error) {
-      set({ error: messageFor(error) });
-      return false;
-    }
-  },
-
-  signIn: async (displayName, password) => {
-    try {
-      const result = await api.login(displayName, password);
-      const credentials = { accountId: result.accountId, token: result.token };
-      saveCredentials(credentials);
-      set({ status: 'ready', credentials, profile: result.profile, error: null });
-      return true;
-    } catch (error) {
-      set({ error: messageFor(error) });
-      return false;
-    }
-  },
-
-  signOut: () => {
-    saveCredentials(null);
-    set({ status: 'idle', credentials: null, profile: null, error: null });
-  },
-
-  clearError: () => set({ error: null }),
-}));
-
+      try {
+        const result = await api.login(displayName, password);
+        if (ownGeneration !== generation) return false;
+        const credentials = { accountId: result.accountId, token: result.token };
+        saveCredentials(credentials);
+        saveLocal(result.profile, {});
+        set({
+          status: 'ready',
+          onlineStatus: 'ready',
+          credentials,
+          profile: result.profile,
+          changes: {},
+          error: null,
+          syncError: null,
+        });
+        return true;
+      } catch (error) {
+        if (ownGeneration === generation) set({ error: messageFor(error), onlineStatus: 'error' });
+        return false;
+      }
+    },
+    signOut: () => {
+      ++generation;
+      pending = null;
+      const profile = newProfile();
+      saveCredentials(null);
+      saveLocal(profile, {});
+      set({
+        status: 'ready',
+        onlineStatus: 'idle',
+        credentials: null,
+        profile,
+        changes: {},
+        revision: 0,
+        error: null,
+        syncError: null,
+      });
+    },
+    clearError: () => set({ error: null }),
+  };
+});
 function messageFor(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return 'Something went wrong';
+  return error instanceof ApiError ? error.message : 'Could not reach the server';
 }

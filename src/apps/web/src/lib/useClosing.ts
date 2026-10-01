@@ -9,9 +9,7 @@ import { sfx } from './sound';
  * unmount in the parent but delay it: `close()` flips `closing`, the overlay
  * plays its exit, and the real `onClose` fires when the animation is over.
  *
- * `duration` must match the exit animation in the stylesheet. A user who has
- * asked for reduced motion gets no wait at all - their exit animation is
- * collapsed to nothing, so a delay would just be an unexplained pause.
+ * `duration` must match the exit animation in the stylesheet.
  */
 export function useClosing(onClose: () => void, duration = 180) {
   const [closing, setClosing] = useState(false);
@@ -24,11 +22,7 @@ export function useClosing(onClose: () => void, duration = 180) {
     setClosing(true);
     sfx.whoosh(false);
 
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-    timer.current = setTimeout(onClose, reduced ? 0 : duration);
+    timer.current = setTimeout(onClose, duration);
   }, [closing, duration, onClose]);
 
   return { closing, close };

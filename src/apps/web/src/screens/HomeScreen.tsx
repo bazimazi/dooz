@@ -2,13 +2,7 @@ import { modeById, type ModeId } from '@dooz/engine';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
-import {
-  BotIcon,
-  CheckIcon,
-  FriendsIcon,
-  LinkIcon,
-  SearchPlayerIcon,
-} from '@/components/art/icons';
+import { BotIcon, CheckIcon, FriendsIcon } from '@/components/art/icons';
 import { Logo } from '@/components/art/Logo';
 import {
   BulbIcon,
@@ -17,8 +11,8 @@ import {
   SparkIcon,
   TargetIcon,
   TrophyIcon,
-  UsersIcon,
 } from '@/components/art/ui-icons';
+import { MiniBoard } from '@/components/game/MiniBoard';
 import { ModePicker } from '@/components/game/ModePicker';
 import { StarIcon } from '@/components/game/Stars';
 import { MAX_STARS, nextStage } from '@/features/journey/stages';
@@ -39,20 +33,21 @@ import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
 import { OnboardingSheet } from './OnboardingSheet';
 import { SettingsSheet } from './SettingsSheet';
+import { OnlineSheet } from './OnlineSheet';
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const initialise = useAccountStore((state) => state.initialise);
 
   const [mode, setMode] = useState<ModeId>(() => loadPreferences().mode);
+  const [modeOpen, setModeOpen] = useState(false);
   const [onlineOpen, setOnlineOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Shown once, on the very first launch. After that it lives behind the
   // "How to play" link rather than in the way.
   const [tutorialOpen, setTutorialOpen] = useState(() => !loadPreferences().onboarded);
 
-  // The account is created silently on first launch so that by the time anyone
-  // presses an online button there is an identity to play with.
+  // Ensure the device profile exists without requiring a server account.
   useEffect(() => {
     void initialise();
   }, [initialise]);
@@ -83,7 +78,7 @@ export function HomeScreen() {
 
           {/* The wordmark animates its own parts, so it is left out of the
               stagger below and only the block it sits in is timed. */}
-          <Logo className="h-20 w-auto shrink-0" />
+          <Logo className="h-16 w-auto shrink-0" />
 
           <IconButton
             tone="bare"
@@ -95,78 +90,92 @@ export function HomeScreen() {
           </IconButton>
         </div>
 
-        {/* The three ways to start, above the mode list: whatever the player
-            came here to do, the button that does it is on screen without a
-            scroll. The chosen mode is named on it so the pairing is obvious. */}
-        <nav className="flex w-full flex-col items-center gap-2.5">
-          <Button
-            className="animate-rise"
-            style={{ animationDelay: '0.2s' }}
-            variant="primary"
-            block
-            onClick={() => void navigate({ to: '/play/local', search: { mode } })}
-          >
-            Play Now!
-          </Button>
-
-          <div className="grid w-full grid-cols-2 gap-2.5">
-            <Button
-              className="animate-rise"
-              style={{ animationDelay: '0.26s' }}
-              size="small"
-              block
-              icon={<BotIcon />}
-              onClick={() =>
-                void navigate({
-                  to: '/play/bot',
-                  search: { mode, difficulty: loadPreferences().difficulty },
-                })
-              }
+        <div className="flex w-full flex-1 flex-col justify-center gap-4 py-3">
+          <section aria-label="Play" className="flex w-full flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => setModeOpen(true)}
+              aria-haspopup="dialog"
+              className="home-mode-card rounded-3xl border border-stroke-soft bg-surface/70 p-4 text-left"
             >
-              Bot
-            </Button>
-            <Button
-              className="animate-rise"
-              style={{ animationDelay: '0.32s' }}
-              size="small"
-              block
-              icon={<FriendsIcon />}
-              onClick={() => setOnlineOpen(true)}
-            >
-              Online
-            </Button>
-          </div>
+              <span aria-hidden="true" className="home-mode-preview shrink-0">
+                <MiniBoard key={mode} config={modeById(mode).config} active className="w-full" />
+              </span>
+              <span className="flex w-full min-w-0 items-center justify-between gap-3">
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-xs text-ink-faint">Game mode</span>
+                  <span className="font-display text-xl" aria-live="polite">
+                    {modeById(mode).name}
+                  </span>
+                  <span className="home-mode-tagline text-xs text-ink-muted">
+                    {modeById(mode).tagline}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full border border-stroke-soft px-3 py-2 text-xs text-ink-muted">
+                  Change
+                </span>
+              </span>
+            </button>
 
-          <p className="text-xs text-ink-faint" aria-live="polite">
-            Playing <span className="text-ink-muted">{modeById(mode).name}</span> ·{' '}
-            {modeById(mode).tagline.toLowerCase()}
-          </p>
-        </nav>
+            <nav aria-label="Start a game" className="flex flex-col gap-3">
+              <Button
+                variant="primary"
+                block
+                icon={<BotIcon />}
+                onClick={() =>
+                  void navigate({
+                    to: '/play/bot',
+                    search: { mode, difficulty: loadPreferences().difficulty },
+                  })
+                }
+              >
+                Play vs bot
+              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  size="small"
+                  block
+                  className="whitespace-nowrap max-[359px]:text-sm"
+                  onClick={() => void navigate({ to: '/play/local', search: { mode } })}
+                >
+                  Two players
+                </Button>
+                <Button
+                  size="small"
+                  block
+                  icon={<FriendsIcon />}
+                  onClick={() => setOnlineOpen(true)}
+                >
+                  Online
+                </Button>
+              </div>
+            </nav>
+          </section>
 
-        {/* The two reasons to come back when nobody else is around: the next
+          {/* The two reasons to come back when nobody else is around: the next
             rival on the journey, and today's puzzle. */}
-        <div
-          className="grid w-full animate-rise grid-cols-2 gap-2.5"
-          style={{ animationDelay: '0.36s' }}
-        >
-          <JourneyCard />
-          <DailyCard />
+          <div
+            className="grid w-full animate-rise grid-cols-2 gap-2.5"
+            style={{ animationDelay: '0.36s' }}
+          >
+            <JourneyCard />
+            <DailyCard />
+          </div>
         </div>
-
-        <div className="w-full animate-rise" style={{ animationDelay: '0.42s' }}>
-          <ModePicker value={mode} onChange={chooseMode} />
-        </div>
-
-        <div
-          className="flex w-full animate-rise items-center justify-center gap-2"
+        <nav
+          aria-label="Explore"
+          className="flex w-full items-center justify-center gap-2 pt-2"
           style={{ animationDelay: '0.48s' }}
         >
           <FooterLink to="/leaderboard" icon={<TrophyIcon />} label="Ranks" />
           <FooterLink to="/profile" icon={<ChartIcon />} label="Profile" />
           <FooterLink to="/puzzles" icon={<TargetIcon />} label="Puzzles" />
-          <FooterLink to="/learn" icon={<BulbIcon />} label="Learn" search={{ mode }} />
-        </div>
+        </nav>
       </div>
+
+      {modeOpen ? (
+        <ModeSheet mode={mode} onChange={chooseMode} onClose={() => setModeOpen(false)} />
+      ) : null}
 
       {onlineOpen ? (
         <OnlineSheet
@@ -189,7 +198,7 @@ export function HomeScreen() {
 }
 
 const featureCard = cx(
-  'group relative flex min-h-[4.75rem] items-center gap-2.5 overflow-hidden rounded-2xl border px-3 py-2.5 text-left no-underline',
+  'group relative flex min-h-[4.75rem] items-center gap-2.5 overflow-hidden rounded-2xl border px-3 py-2.5 text-left no-underline max-[359px]:gap-2 max-[359px]:px-2',
   'border-stroke-soft bg-surface/80',
   'transition-[transform,border-color,box-shadow] duration-200 ease-spring',
   'hover:-translate-y-0.5 hover:border-stroke hover:shadow-[0_12px_26px_-16px_var(--color-shadow)]',
@@ -209,7 +218,11 @@ function JourneyCard() {
       aria-label={`Journey: ${stars} of ${MAX_STARS} stars. Next, ${upNext.rival.name}.`}
     >
       <span className="transition-transform duration-300 ease-spring group-hover:scale-110 group-hover:-rotate-6">
-        <AvatarBadge avatar={upNext.rival.avatar} ring="var(--color-sunken)" className="size-11" />
+        <AvatarBadge
+          avatar={upNext.rival.avatar}
+          ring="var(--color-sunken)"
+          className="size-11 max-[359px]:size-8"
+        />
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-sm font-semibold">Journey</span>
@@ -234,7 +247,7 @@ function DailyCard() {
     <>
       <span
         className={cx(
-          'flex size-11 shrink-0 items-center justify-center rounded-full text-2xl',
+          'flex size-11 shrink-0 items-center justify-center rounded-full text-2xl max-[359px]:size-8',
           'transition-transform duration-300 ease-spring group-hover:scale-110 group-hover:rotate-12',
           solved ? 'bg-ok/15 text-ok' : 'bg-sunken text-ink',
         )}
@@ -250,7 +263,7 @@ function DailyCard() {
           <SparkIcon
             className={cx('size-3.5 shrink-0', streak > 0 ? 'text-warn' : 'text-ink-faint')}
           />
-          {streak > 0 ? `${streak}-day streak` : 'Start a streak'}
+          <span className="truncate">{streak > 0 ? `${streak}-day streak` : 'Start a streak'}</span>
         </span>
       </span>
       {!solved && puzzle ? (
@@ -294,7 +307,7 @@ function FooterLink({
       to={to}
       search={search}
       className={cx(
-        'flex flex-1 flex-col items-center gap-1 rounded-tile border border-stroke-soft py-2',
+        'flex min-h-12 flex-1 flex-col items-center gap-1 rounded-tile py-2',
         'text-xs text-ink-muted no-underline',
         'transition-[transform,border-color,color] duration-200 ease-spring',
         'hover:-translate-y-0.5 hover:border-stroke hover:text-ink',
@@ -306,42 +319,22 @@ function FooterLink({
   );
 }
 
-interface OnlineSheetProps {
-  onClose: () => void;
-  onQuick: (ranked: boolean) => void;
-  onHost: () => void;
-  onJoin: (code: string) => void;
-  onWatch: (code: string) => void;
-  rankedAvailable: boolean;
-  modeName: string;
-}
-
-/**
- * The five ways into an online game.
- *
- * Ranked and casual are separated at the point of choice rather than behind a
- * toggle somewhere, because they are different games socially: one costs you
- * something if you walk away from it and the other does not, and a player
- * should know which they are starting.
- */
-function OnlineSheet({
+function ModeSheet({
+  mode,
+  onChange,
   onClose,
-  onQuick,
-  onHost,
-  onJoin,
-  onWatch,
-  rankedAvailable,
-  modeName,
-}: OnlineSheetProps) {
+}: {
+  mode: ModeId;
+  onChange: (mode: ModeId) => void;
+  onClose: () => void;
+}) {
   const { closing, close } = useClosing(onClose);
   const panelRef = useDialog<HTMLDivElement>(close);
-  const [code, setCode] = useState('');
-  const ready = code.trim().length === 6;
 
   return (
     <div
       className={cx(
-        'fixed inset-0 z-50 flex items-center justify-center bg-scrim p-5 backdrop-blur-[2px]',
+        'fixed inset-0 z-50 flex items-end justify-center bg-scrim backdrop-blur-[2px] sm:items-center sm:p-5',
         closing ? 'animate-fade-out' : 'animate-fade-in',
       )}
       onClick={(event) => {
@@ -352,128 +345,24 @@ function OnlineSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Play ${modeName} online`}
+        aria-labelledby="mode-sheet-title"
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
-          'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
+          'flex max-h-[85dvh] w-full max-w-screen flex-col gap-4 overflow-y-auto rounded-t-[2rem] border border-stroke bg-surface p-5 outline-none sm:rounded-[2rem]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
+        style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex flex-col gap-3 rounded-[1.5rem] bg-surface px-5 py-6">
-          <p className="text-center text-sm text-ink-faint">{modeName}</p>
-
-          <SheetAction
-            icon={<TrophyIcon />}
-            title="Ranked match"
-            body={
-              rankedAvailable
-                ? 'Counts towards your rating. Matched by skill.'
-                : 'This mode has no ladder — try a standard board.'
-            }
-            disabled={!rankedAvailable}
-            onClick={() => onQuick(true)}
-          />
-
-          <SheetAction
-            icon={<SearchPlayerIcon />}
-            title="Casual match"
-            body="Play a stranger. Nothing at stake."
-            onClick={() => onQuick(false)}
-          />
-
-          <SheetAction
-            icon={<LinkIcon />}
-            title="Invite a friend"
-            body="Open a private room and share the link."
-            onClick={onHost}
-          />
-
-          {/* The code gets a row of its own: six spaced-out characters need
-              the width, and squeezed beside two buttons it showed four. */}
-          <form
-            className="grid grid-cols-2 gap-2 pt-1"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (ready) onJoin(code.trim().toUpperCase());
-            }}
-          >
-            <label className="col-span-2 flex flex-col gap-1 text-xs text-ink-faint">
-              <span className="px-1">Have a code?</span>
-              <input
-                value={code}
-                onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 6))}
-                placeholder="ABC123"
-                aria-label="Room code"
-                autoComplete="off"
-                autoCapitalize="characters"
-                spellCheck={false}
-                className={cx(
-                  'h-11 w-full min-w-0 rounded-tile border border-stroke bg-surface/60 px-3',
-                  'text-center font-mono tracking-[0.25em] text-ink',
-                  'placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-faint',
-                  'focus:outline-none focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-stroke)_35%,transparent)]',
-                  ready && 'border-mark-x-soft',
-                )}
-              />
-            </label>
-            <Button type="submit" size="small" disabled={!ready} block>
-              Join
-            </Button>
-            <Button
-              type="button"
-              size="small"
-              variant="ghost"
-              disabled={!ready}
-              block
-              icon={<UsersIcon />}
-              onClick={() => onWatch(code.trim().toUpperCase())}
-            >
-              Watch
-            </Button>
-          </form>
-
-          <Button variant="ghost" size="small" onClick={close} className="mt-1 self-center">
-            Back
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="mode-sheet-title" className="font-display text-xl">
+            Choose a mode
+          </h2>
+          <Button variant="ghost" size="small" className="w-auto" onClick={close}>
+            Done
           </Button>
         </div>
+        <ModePicker value={mode} onChange={onChange} />
       </div>
     </div>
-  );
-}
-
-function SheetAction({
-  icon,
-  title,
-  body,
-  onClick,
-  disabled = false,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cx(
-        'group flex items-center gap-3 rounded-2xl border border-stroke-soft px-3 py-3 text-left',
-        'transition-[transform,border-color,background-color] duration-200 ease-spring',
-        'hover:-translate-y-0.5 hover:border-stroke hover:bg-surface/60 active:scale-[0.98]',
-        'disabled:pointer-events-none disabled:opacity-45',
-      )}
-    >
-      <span className="text-xl transition-transform duration-200 ease-spring group-hover:scale-110">
-        {icon}
-      </span>
-      <span className="flex flex-col">
-        <span className="text-base font-semibold">{title}</span>
-        <span className="text-xs text-ink-faint">{body}</span>
-      </span>
-    </button>
   );
 }

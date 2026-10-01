@@ -117,7 +117,7 @@ function ResultPanel({
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          'relative w-full max-w-80 animate-panel-in rounded-[2.5rem] border border-stroke p-2 outline-none',
+          'relative w-full max-w-80 animate-result-in rounded-[2.5rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
         )}
         style={{ animationDelay: '0.06s' }}
@@ -134,7 +134,7 @@ function ResultPanel({
 
           <h2
             className="animate-rise text-center font-display text-2xl"
-            style={{ animationDelay: '0.34s' }}
+            style={{ animationDelay: '0.24s' }}
           >
             {title}
           </h2>
@@ -142,21 +142,21 @@ function ResultPanel({
           {note ? (
             <p
               className="-mt-2 animate-rise text-center text-sm text-ink-muted"
-              style={{ animationDelay: '0.4s' }}
+              style={{ animationDelay: '0.3s' }}
             >
               {note}
             </p>
           ) : null}
 
           {detail ? (
-            <div className="w-full animate-rise" style={{ animationDelay: '0.44s' }}>
+            <div className="w-full animate-rise" style={{ animationDelay: '0.34s' }}>
               {detail}
             </div>
           ) : null}
 
           <div
             className="flex w-full animate-rise flex-col items-center gap-3 pt-1"
-            style={{ animationDelay: '0.48s' }}
+            style={{ animationDelay: '0.38s' }}
           >
             {actions}
           </div>

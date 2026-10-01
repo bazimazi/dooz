@@ -96,7 +96,10 @@ function BotGame({
 }) {
   const navigate = useNavigate();
   const config = useMemo(() => modeById(mode).config, [mode]);
-  const { game, play, restart, undo, canUndo, round } = useGame(config, stage ? { opener: X } : {});
+  const { game, play, restart, undo, canUndo, round } = useGame(config, {
+    ...(stage ? { opener: X } : {}),
+    storageKey: stage ? `journey:${stage.id}` : `bot:${mode}:${difficulty}:${practice}`,
+  });
   const [hintsOn, setHintsOn] = useState(() => !stage && (practice || loadPreferences().hints));
   const recordBotGame = useProgressStore((state) => state.recordBotGame);
   const recordStage = useProgressStore((state) => state.recordStage);

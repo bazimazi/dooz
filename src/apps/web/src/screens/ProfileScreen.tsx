@@ -28,8 +28,10 @@ export function ProfileScreen() {
   const { status, profile, credentials, initialise, rename, setAvatar, claim, error, clearError } =
     useAccountStore();
 
+  const pendingChanges = useAccountStore((state) => Object.keys(state.changes).length > 0);
+
   const [ranks, setRanks] = useState<ProfileResponse['ranks']>([]);
-  const [matches, setMatches] = useState<MatchSummary[] | null>(null);
+  const [matches, setMatches] = useState<MatchSummary[] | null>([]);
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -37,7 +39,14 @@ export function ProfileScreen() {
   }, [initialise]);
 
   useEffect(() => {
-    if (!credentials) return;
+    if (!credentials) {
+      setRanks([]);
+      setMatches([]);
+      return;
+    }
+    setRanks(api.cachedProfile(credentials)?.ranks ?? []);
+    setMatches(api.cachedMatches(credentials)?.matches ?? []);
+    void useAccountStore.getState().refresh();
     const controller = new AbortController();
 
     void api
@@ -48,7 +57,7 @@ export function ProfileScreen() {
     void api
       .matches(credentials, 20, controller.signal)
       .then((response) => setMatches(response.matches))
-      .catch(() => setMatches([]));
+      .catch(() => undefined);
 
     return () => controller.abort();
   }, [credentials]);
@@ -107,7 +116,14 @@ export function ProfileScreen() {
         {/* Identity */}
         <Card className="w-full">
           <div className="flex items-center gap-4">
-            <AvatarBadge avatar={profile.avatar} className="size-16 shrink-0" />
+            <button
+              type="button"
+              aria-label="Change avatar"
+              className="shrink-0 rounded-full"
+              onClick={() => setEditing(true)}
+            >
+              <AvatarBadge avatar={profile.avatar} className="size-16" />
+            </button>
             <div className="flex min-w-0 flex-1 flex-col">
               <h1 className="truncate font-display text-2xl">{profile.displayName}</h1>
               <p className="text-xs text-ink-faint">
@@ -141,6 +157,15 @@ export function ProfileScreen() {
           ) : null}
         </Card>
 
+        <p className="px-1 text-xs text-ink-faint">
+          Your name, avatar and solo progress are saved on this device. Online records refresh when
+          connected.
+        </p>
+        {credentials && pendingChanges ? (
+          <p className="px-1 text-xs text-ink-muted">
+            Profile changes saved locally. They will sync when connected.
+          </p>
+        ) : null}
         {/* Totals across every mode */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <StatTile label="Played" value={totals.played} />
@@ -412,7 +437,7 @@ function IdentityEditor({
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            hint="At least 8 characters. Lets you use this account on another device."
+            hint="At least 8 characters. Requires internet to use this account on another device."
           />
           <Button
             type="submit"

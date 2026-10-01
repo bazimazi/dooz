@@ -156,9 +156,3 @@ export function applyTheme(theme: ThemeChoice): void {
   // Keep the browser's own chrome - the address bar, the scrollbars - in step.
   root.style.colorScheme = theme === 'system' ? 'light dark' : theme;
 }
-
-/** True when the platform has been asked to keep movement to a minimum. */
-export function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-}

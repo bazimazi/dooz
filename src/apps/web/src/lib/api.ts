@@ -37,16 +37,55 @@ export class ApiError extends Error {
   }
 }
 
+function cacheKey(path: string, credentials?: Credentials | null): string {
+  return `dooz.api-cache:${JSON.stringify([httpBaseUrl(), credentials?.accountId ?? 'public', path])}`;
+}
+function readCached<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  credentials?: Credentials | null,
+): T | null {
+  try {
+    const parsed = schema.safeParse(
+      JSON.parse(localStorage.getItem(cacheKey(path, credentials)) ?? 'null'),
+    );
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+function saveCached(path: string, payload: unknown, credentials?: Credentials | null): void {
+  try {
+    const key = cacheKey(path, credentials);
+    const index: string[] = JSON.parse(localStorage.getItem('dooz.api-cache-index') ?? '[]');
+    const ordered = [...index.filter((entry) => entry !== key), key];
+    while (ordered.length > 50) localStorage.removeItem(ordered.shift()!);
+    localStorage.setItem(key, JSON.stringify(payload));
+    localStorage.setItem('dooz.api-cache-index', JSON.stringify(ordered));
+  } catch {
+    /* A cache is optional, including when device storage is full. */
+  }
+}
+
 async function request<T>(
   path: string,
   schema: z.ZodType<T>,
   options: {
     method?: string;
+    cache?: boolean;
     body?: unknown;
     credentials?: Credentials | null;
     signal?: AbortSignal;
   } = {},
 ): Promise<T> {
+  if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  const cacheable = (options.method ?? 'GET') === 'GET' && options.cache !== false;
+  const cached = () => (cacheable ? readCached(path, schema, options.credentials) : null);
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const snapshot = cached();
+    if (snapshot !== null) return snapshot;
+    throw new ApiError('Connect to the internet to download this data', 0);
+  }
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (options.credentials) {
     headers['authorization'] = authHeader(options.credentials.accountId, options.credentials.token);
@@ -61,12 +100,25 @@ async function request<T>(
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch {
+    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const snapshot = cached();
+    if (snapshot !== null) return snapshot;
     // A failed fetch is a network problem, not a server answer, and the two
     // want different words in front of the player.
     throw new ApiError('Could not reach the server', 0);
   }
 
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    if (response.ok || response.status >= 500) {
+      const snapshot = cached();
+      if (snapshot !== null) return snapshot;
+    }
+    throw new ApiError('Could not finish downloading this data', response.ok ? 0 : response.status);
+  }
   let payload: unknown = null;
   try {
     payload = text ? JSON.parse(text) : null;
@@ -75,6 +127,10 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    if (response.status >= 500) {
+      const snapshot = cached();
+      if (snapshot !== null) return snapshot;
+    }
     const message =
       typeof payload === 'object' && payload !== null && 'error' in payload
         ? String(payload.error)
@@ -84,6 +140,7 @@ async function request<T>(
 
   const parsed = schema.safeParse(payload);
   if (!parsed.success) throw new ApiError('The server sent something unexpected', response.status);
+  if (cacheable) saveCached(path, parsed.data, options.credentials);
   return parsed.data;
 }
 
@@ -139,8 +196,16 @@ export const api = {
       body: { password },
     }),
 
-  profile: (credentials: Credentials, signal?: AbortSignal) =>
-    request('/api/profile', profileResponse, { credentials, ...(signal ? { signal } : {}) }),
+  cachedProfile: (credentials: Credentials) =>
+    readCached('/api/profile', profileResponse, credentials),
+  cachedMatches: (credentials: Credentials, limit = 20) =>
+    readCached(`/api/matches?limit=${limit}`, matchesResponse, credentials),
+  profile: (credentials: Credentials, signal?: AbortSignal, fresh = false) =>
+    request('/api/profile', profileResponse, {
+      credentials,
+      cache: !fresh,
+      ...(signal ? { signal } : {}),
+    }),
 
   updateProfile: (
     credentials: Credentials,

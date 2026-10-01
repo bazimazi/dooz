@@ -81,7 +81,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
             />
             <Toggle
               label="Music"
-              description="A slow ambient score. Never the same twice."
+              description="Warm mallets, mellow chords and a gentle beat."
               checked={preferences.music}
               onChange={(music) => update({ music })}
             />
@@ -112,10 +112,6 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               checked={preferences.hints}
               onChange={(hints) => update({ hints })}
             />
-            <p className="px-1 text-xs text-ink-faint">
-              Motion follows your system setting. With “reduce motion” on, animations are skipped
-              and the board settles instantly.
-            </p>
           </Group>
 
           <Button variant="ghost" size="small" onClick={close} className="self-center">

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 /**
  * The burst fired over the result panel when the game was won.
  *
- * Twenty-eight pieces of DOM with CSS animations, rather than a canvas: the
+ * Fifty-six pieces of DOM with CSS animations, rather than a canvas: the
  * whole thing is under a kilobyte, needs no animation frame loop competing with
  * the router, and stops dead on its own when the last piece fades.
  *
@@ -21,7 +21,7 @@ const COLOURS = [
   'var(--color-stroke)',
 ];
 
-const PIECE_COUNT = 28;
+const PIECE_COUNT = 56;
 
 /**
  * A hash, not a random number: the same piece must land the same way on every
@@ -39,11 +39,11 @@ const PIECES = Array.from({ length: PIECE_COUNT }, (_, index) => {
     colour: COLOURS[index % COLOURS.length]!,
     // Pieces thrown further sideways are also thrown harder upward, which is
     // what stops the burst reading as a flat fan.
-    dx: `${spread * 165}px`,
-    lift: `${-70 - noise(index, 2) * 90}px`,
-    drop: `${200 + noise(index, 3) * 160}px`,
+    dx: `${spread * 240}px`,
+    lift: `${-100 - noise(index, 2) * 140}px`,
+    drop: `${420 + noise(index, 3) * 260}px`,
     rot: `${(noise(index, 4) * 2 - 1) * 720}deg`,
-    delay: `${noise(index, 5) * 0.28}s`,
+    delay: `${noise(index, 5) * 0.45}s`,
     width: 5 + Math.round(noise(index, 6) * 4),
     height: 8 + Math.round(noise(index, 7) * 8),
     round: noise(index, 8) > 0.65,
@@ -59,9 +59,10 @@ export function Confetti({ className }: { className?: string }) {
       {PIECES.map((piece, index) => (
         <span
           key={index}
-          className="absolute left-1/2 block animate-confetti-y"
+          className="absolute block animate-confetti-y"
           style={
             {
+              left: index % 2 === 0 ? '30%' : '70%',
               '--lift': piece.lift,
               '--drop': piece.drop,
               animationDelay: piece.delay,

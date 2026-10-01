@@ -94,21 +94,26 @@
   --animate-emote-in: emote-in 0.35s cubic-bezier(0.22, 1.4, 0.36, 1) both;
 
   /* The pieces landing on the board */
-  --animate-mark-x: mark-x 0.4s cubic-bezier(0.22, 1.5, 0.36, 1) both;
-  --animate-mark-o: mark-o 0.4s cubic-bezier(0.22, 1.5, 0.36, 1) both;
+  --animate-mark-x: mark-x 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-mark-o: mark-o 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-subboard-in: subboard-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-cell-impact: cell-impact 0.48s ease-out both;
+  --animate-cell-reject: cell-reject 0.28s ease-out;
+  --animate-board-draw: board-draw 0.65s ease-in-out both;
+  --animate-result-in: result-in 0.48s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-stamp: stamp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 
   /* End of game */
   --animate-draw-line: draw-line 0.45s 0.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  --animate-win-throb: win-throb 1.2s ease-in-out infinite;
+  --animate-win-throb: win-throb 0.85s ease-in-out 2;
   --animate-board-settle: board-settle 0.55s cubic-bezier(0.22, 1.4, 0.36, 1) both;
   --animate-shake: shake 0.5s ease-in-out both;
   /* One piece of confetti is three nested spans, because a burst is three
      transforms - a throw, a drift and a tumble - and one element can only
      usefully animate `transform` once. */
-  --animate-confetti-y: confetti-y 1.7s cubic-bezier(0.3, 0, 0.6, 1) forwards;
-  --animate-confetti-x: confetti-x 1.7s linear forwards;
-  --animate-confetti-spin: confetti-spin 1.7s linear forwards;
+  --animate-confetti-y: confetti-y 2.8s cubic-bezier(0.3, 0, 0.6, 1) forwards;
+  --animate-confetti-x: confetti-x 2.8s linear forwards;
+  --animate-confetti-spin: confetti-spin 2.8s linear forwards;
 
   /* Ambient - decorative loops, all suppressed under reduced motion */
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
@@ -450,28 +455,149 @@
 /* X is dropped in with a twist; O is pressed down flat. Two different gestures
    so the two players' moves do not read as the same event. */
 @keyframes mark-x {
-  from {
+  0% {
     opacity: 0;
-    transform: scale(0.3) rotate(-70deg);
+    transform: perspective(350px) translateY(-32%) rotateY(-110deg) rotate(-45deg) scale(1.7);
   }
-  to {
+  28% {
     opacity: 1;
-    transform: scale(1) rotate(0deg);
+    transform: perspective(350px) translateY(5%) rotateY(12deg) rotate(8deg) scale(0.8, 0.7);
+  }
+  48% {
+    transform: perspective(350px) translateY(-8%) rotateY(-8deg) rotate(-5deg) scale(1.18);
+  }
+  72% {
+    transform: perspective(350px) translateY(2%) rotateY(3deg) rotate(2deg) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(350px) translateY(0) rotateY(0) rotate(0) scale(1);
   }
 }
 
 @keyframes mark-o {
   0% {
     opacity: 0;
-    transform: scale(0.2);
+    transform: perspective(350px) translateY(-45%) rotateX(105deg) scale(0.5);
   }
-  55% {
+  30% {
     opacity: 1;
-    transform: scale(1.12);
+    transform: perspective(350px) translateY(8%) rotateX(-15deg) scale(1.35, 0.65);
+  }
+  50% {
+    transform: perspective(350px) translateY(-15%) rotateX(12deg) scale(0.85, 1.2);
+  }
+  72% {
+    transform: perspective(350px) translateY(3%) rotateX(-4deg) scale(1.08, 0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(350px) translateY(0) rotateX(0) scale(1);
+  }
+}
+
+@keyframes victory-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.25) rotate(-20deg);
+  }
+  20% {
+    opacity: 0.4;
+  }
+  60% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5) rotate(25deg);
+  }
+}
+
+@keyframes piece-trace {
+  0% {
+    opacity: 0.9;
+    stroke-dashoffset: 1;
+  }
+  65% {
+    opacity: 0.75;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes subboard-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.02);
   }
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes cell-impact {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  22% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes cell-reject {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  55% {
+    transform: translateX(3px);
+  }
+  80% {
+    transform: translateX(-1px);
+  }
+}
+
+@keyframes board-draw {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.985);
+  }
+  70% {
+    transform: scale(1.005);
+  }
+}
+
+@keyframes result-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.94);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -522,7 +648,7 @@
     transform: scale(1);
   }
   35% {
-    transform: scale(1.035);
+    transform: scale(1.075) rotate(-1deg);
   }
   100% {
     transform: scale(1);
@@ -762,22 +888,38 @@
  */
 @keyframes drop {
   0% {
-    transform: translateY(calc(var(--fall, 1) * -100%));
+    transform: translateY(calc(var(--fall, 1) * -100%)) scale(0.92, 1.08);
     animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55);
   }
   66% {
-    transform: translateY(0) scale(1, 1);
+    transform: translateY(0) scale(1.18, 0.82);
     animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1);
   }
-  74% {
-    transform: translateY(0) scale(1.1, 0.86);
+  82% {
+    transform: translateY(-12%) scale(0.94, 1.07);
   }
-  86% {
-    transform: translateY(-10%) scale(0.97, 1.04);
-    animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.4);
+  94% {
+    transform: translateY(0) scale(1.03, 0.97);
   }
   100% {
-    transform: translateY(0) scale(1, 1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes win-tip {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--travel-x), var(--travel-y)) scale(1.3);
   }
 }
 
@@ -785,13 +927,15 @@
 @keyframes vanish-out {
   0% {
     opacity: 0.85;
-    transform: scale(1) rotate(0deg);
-    filter: blur(0);
+    transform: scale(1) rotate(0);
+  }
+  25% {
+    opacity: 0.65;
+    transform: scale(1.08) rotate(-8deg);
   }
   100% {
     opacity: 0;
-    transform: scale(1.4) rotate(var(--spin, 14deg));
-    filter: blur(5px);
+    transform: translateY(-22%) scale(0.25) rotate(32deg);
   }
 }
 
@@ -953,6 +1097,64 @@
    * pill buttons reading as flat rectangles. The gradient sits in an `::after`
    * so it never disturbs the button's own two-gradient background.
    */
+  .home-mode-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition:
+      border-color 0.2s,
+      background-color 0.2s;
+  }
+  .home-mode-card:hover {
+    border-color: var(--color-stroke);
+  }
+  .home-mode-preview {
+    width: 4.5rem;
+  }
+  @media (max-height: 739px) {
+    .home-mode-card {
+      padding: 0.75rem;
+      gap: 0.75rem;
+    }
+    .home-mode-preview {
+      width: 3.5rem;
+    }
+    .home-mode-tagline {
+      display: none;
+    }
+  }
+  @media (min-height: 740px) {
+    .home-mode-card {
+      flex-direction: column;
+      gap: 1.25rem;
+      padding: 1.25rem;
+    }
+    .home-mode-preview {
+      width: clamp(7rem, 18svh, 10rem);
+    }
+  }
+
+  .victory-burst {
+    background: repeating-conic-gradient(
+      from 0deg,
+      var(--burst-color) 0deg 7deg,
+      transparent 7deg 30deg
+    );
+    mask-image: radial-gradient(circle, transparent 16%, black 35%, transparent 72%);
+    animation: victory-burst 1.2s 0.25s ease-out both;
+  }
+
+  .piece-trace path,
+  .piece-trace circle {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: piece-trace 0.38s ease-out both;
+  }
+
+  .animate-cell-impact {
+    background: radial-gradient(circle, var(--impact) 0%, transparent 72%);
+  }
+
   .sheen {
     position: relative;
     overflow: hidden;
@@ -1112,14 +1314,12 @@
    * backdrop is given its own transition name and held still, so only the
    * content on top of it changes - the rings and crosses never flicker.
    */
-  @media (prefers-reduced-motion: no-preference) {
-    ::view-transition-old(root) {
-      animation: vt-exit 0.2s cubic-bezier(0.4, 0, 1, 1) both;
-    }
+  ::view-transition-old(root) {
+    animation: vt-exit 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+  }
 
-    ::view-transition-new(root) {
-      animation: vt-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
-    }
+  ::view-transition-new(root) {
+    animation: vt-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   ::view-transition-old(dooz-backdrop),
@@ -1139,30 +1339,6 @@
     from {
       opacity: 0;
       transform: scale(1.03) translateY(10px);
-    }
-  }
-
-  /**
-   * Respect a system-level request for less movement.
-   *
-   * Everything collapses to its end state, so the interface still lands where
-   * it should - just instantly, with the decorative loops stopped after one
-   * pass rather than running forever.
-   */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
-
-    ::view-transition-group(*),
-    ::view-transition-old(*),
-    ::view-transition-new(*) {
-      animation: none !important;
     }
   }
 }

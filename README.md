@@ -21,6 +21,24 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 | **Competitive** | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards |
 | **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics |
 
+## Offline use
+
+The profile name and avatar, preferences, solo progress, local series score,
+and unfinished local/bot games are stored on the device. They work without a
+server account. Profile edits for an existing online account are queued and
+synced when the connection returns. A server account is created when online
+play or password setup needs one.
+
+Previously downloaded online history, replays, and leaderboard snapshots are
+cached locally. Current rankings, multiplayer, password setup, sign-in, and
+reports require the server. Online ratings and match results remain authoritative
+on the server.
+
+The web app must be loaded online once so its service worker can download the
+game bundle; native builds include that bundle. To verify the production PWA,
+run `npm run build:web`, start `npm run preview --workspace @dooz/web -- --port 4173`,
+then run `npm run audit:offline --workspace @dooz/web` from `src`.
+
 ## The stack, and why
 
 | Layer      | Choice                     | Why this one                                                                                                                                                                     |

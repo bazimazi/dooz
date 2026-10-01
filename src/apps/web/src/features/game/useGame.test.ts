@@ -105,3 +105,30 @@ describe('useGame', () => {
     expect(result.current.game.currentPlayer).toBe(opener);
   });
 });
+
+describe('saved games', () => {
+  it('restores a legal position and can undo after reopening', () => {
+    localStorage.removeItem('dooz.game:test-resume');
+    const first = renderHook(() => useGame(CLASSIC, { storageKey: 'test-resume', opener: 1 }));
+    act(() => first.result.current.play(0));
+    act(() => first.result.current.play(4));
+    first.unmount();
+    const reopened = renderHook(() => useGame(CLASSIC, { storageKey: 'test-resume' }));
+    expect(reopened.result.current.game.moves).toEqual([0, 4]);
+    act(() => reopened.result.current.undo());
+    expect(reopened.result.current.game.moves).toEqual([0]);
+    expect(reopened.result.current.game.currentPlayer).toBe(2);
+    reopened.unmount();
+    localStorage.removeItem('dooz.game:test-resume');
+  });
+  it('ignores corrupt or illegal saved moves', () => {
+    localStorage.setItem(
+      'dooz.game:test-corrupt',
+      JSON.stringify({ config: CLASSIC, opener: 1, moves: [0, 0] }),
+    );
+    const { result, unmount } = renderHook(() => useGame(CLASSIC, { storageKey: 'test-corrupt' }));
+    expect(result.current.game.moves).toEqual([]);
+    unmount();
+    localStorage.removeItem('dooz.game:test-corrupt');
+  });
+});
