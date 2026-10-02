@@ -49,14 +49,17 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         aria-label="Settings"
         tabIndex={-1}
         className={cx(
-          'w-full max-w-88 rounded-t-[2rem] border border-stroke p-2 outline-none sm:rounded-[2rem]',
+          'w-full max-w-88 panel-shell rounded-t-[2rem] border border-stroke p-2 outline-none sm:rounded-[2rem]',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
-          closing ? 'animate-panel-out' : 'animate-panel-in',
+          closing
+            ? 'animate-sheet-out sm:animate-panel-out'
+            : 'animate-sheet-in sm:animate-panel-in',
         )}
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex max-h-[85vh] flex-col gap-5 overflow-y-auto rounded-t-[1.5rem] bg-surface px-5 py-6 sm:rounded-[1.5rem]">
-          <h2 className="text-center font-display text-xl">Settings</h2>
+        <div className="flex max-h-[85vh] flex-col gap-5 overflow-y-auto panel-face rounded-t-[1.5rem] bg-surface px-5 py-6 sm:rounded-[1.5rem]">
+          <span aria-hidden="true" className="mx-auto h-1 w-10 shrink-0 rounded-full bg-ink/25" />
+          <h2 className="text-center font-display text-2xl">Settings</h2>
 
           <Group title="Appearance">
             <Segmented<ThemeChoice>
@@ -125,8 +128,10 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="px-1 text-xs tracking-wide text-ink-faint uppercase">{title}</h3>
+    <section className="flex flex-col gap-2 rounded-2xl border border-stroke-soft bg-sunken/35 p-3">
+      <h3 className="mb-1 border-b border-stroke-soft px-1 pb-2 text-xs font-semibold tracking-widest text-ink-muted uppercase">
+        {title}
+      </h3>
       {children}
     </section>
   );

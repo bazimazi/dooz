@@ -63,7 +63,7 @@ try {
     target.bus.disconnect(analyser);
     return { rms, state: target.context.state };
   });
-  assert(live.rms > 0.001, 'music is silent');
+  assert(live.rms > 0.005, 'music is too quiet');
   await toggle.click();
   await p.waitForTimeout(1300);
   const stopped = await p.evaluate(async () => {
@@ -86,7 +86,8 @@ try {
     const sr = 22050;
     const c = new OfflineAudioContext(1, Math.ceil(sr * (MUSIC_BAR * 8 + 2)), sr);
     const g = c.createGain();
-    g.gain.value = 0.75;
+    // Music gain × music bus, with the master volume at its maximum.
+    g.gain.value = 4 * 0.55;
     g.connect(c.destination);
     const score = createMusicScore(c, g);
     for (let bar = 0; bar < 8; bar++) score(bar, 0.05 + bar * MUSIC_BAR);

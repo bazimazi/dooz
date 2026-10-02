@@ -1,5 +1,6 @@
 import { GAME_MODES, type GameMode, type ModeGroup, type ModeId, modeById } from '@dooz/engine';
 import { useRef } from 'react';
+import { CheckIcon } from '@/components/art/icons';
 import { TrophyIcon } from '@/components/art/ui-icons';
 import { cx } from '@/lib/cx';
 import { MiniBoard } from './MiniBoard';
@@ -75,8 +76,9 @@ export function ModePicker({
 
         return (
           <section key={group} className="flex flex-col gap-2">
-            <h2 className="px-1 text-xs tracking-wide text-ink-faint uppercase">
+            <h2 className="flex items-center gap-3 px-1 text-xs font-semibold tracking-widest text-ink-muted uppercase">
               {GROUP_LABELS[group]}
+              <span aria-hidden="true" className="h-px flex-1 bg-stroke-soft" />
             </h2>
             {/* One column on the narrowest phones: at 320px two columns leave
                 61px for the label, which is less than "Gomoku 13" needs and
@@ -117,22 +119,33 @@ function ModeTile({
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       className={cx(
-        // A row rather than a stacked card: seven stacked tiles pushed the
-        // "Play" button two screens down, and the preview was carrying far more
-        // height than it was worth once the name said the same thing.
-        'group flex items-center gap-2.5 rounded-2xl border p-2 text-left',
+        // Narrow phones use rows; wider phones leave enough room for a board
+        // preview above the complete mode name and description.
+        'group relative flex items-center gap-3 rounded-2xl border p-3 text-left min-[360px]:flex-col min-[360px]:items-start',
         'transition-[transform,border-color,background-color] duration-200 ease-spring',
         'hover:-translate-y-0.5 active:scale-[0.98]',
         selected
-          ? 'border-stroke bg-surface shadow-[0_12px_28px_-18px_var(--color-shadow)]'
-          : 'border-stroke-soft bg-surface/70 hover:border-stroke',
+          ? 'mode-tile-selected border-mark-o/75'
+          : 'panel-face border-stroke-soft hover:border-stroke',
       )}
     >
-      <MiniBoard config={mode.config} active={selected} className="w-12 shrink-0" />
+      <MiniBoard
+        config={mode.config}
+        active={selected}
+        className="w-14 shrink-0 min-[360px]:w-16"
+      />
+      {selected ? (
+        <span
+          aria-hidden="true"
+          className="absolute top-3 right-3 flex size-5 items-center justify-center rounded-full bg-mark-o text-sunken"
+        >
+          <CheckIcon className="size-3.5" />
+        </span>
+      ) : null}
 
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold">{mode.name}</span>
+          <span className="text-sm font-semibold">{mode.name}</span>
           {mode.ranked ? (
             <TrophyIcon
               className="size-3 shrink-0 text-ink-faint"
@@ -140,7 +153,7 @@ function ModeTile({
             />
           ) : null}
         </span>
-        <span className="line-clamp-2 text-xs leading-snug text-ink-faint">{mode.tagline}</span>
+        <span className="text-xs leading-relaxed text-ink-muted">{mode.tagline}</span>
       </span>
     </button>
   );

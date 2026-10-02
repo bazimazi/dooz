@@ -86,6 +86,8 @@
   --animate-fade-out: fade-out 0.18s ease-in both;
   --animate-panel-in: panel-in 0.42s cubic-bezier(0.18, 1.35, 0.35, 1) both;
   --animate-panel-out: panel-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-sheet-in: sheet-in 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+  --animate-sheet-out: sheet-out 0.18s cubic-bezier(0.4, 0, 1, 1) both;
   --animate-badge-in: badge-in 0.35s cubic-bezier(0.22, 1.4, 0.36, 1) both;
   --animate-caret-in: caret-in 0.3s cubic-bezier(0.22, 1.4, 0.36, 1) both;
   --animate-option-in: option-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -375,6 +377,25 @@
   to {
     opacity: 0;
     transform: translateY(10px) scale(0.94);
+  }
+}
+
+/* A bottom sheet slides up from the screen edge it is anchored to. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
   }
 }
 
@@ -1069,6 +1090,43 @@
  * Both use the `padding-box` / `border-box` two-gradient trick, which is the
  * only way to get a gradient border with a rounded corner and a solid fill.
  */
+@utility panel-shell {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--color-raised) 70%, var(--color-surface)),
+    var(--color-sunken)
+  );
+  border-color: color-mix(in srgb, var(--color-stroke) 75%, var(--color-ink) 25%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-ink) 18%, transparent),
+    0 24px 64px -24px var(--color-shadow);
+}
+
+@utility panel-face {
+  background:
+    radial-gradient(
+      ellipse at 0% 0%,
+      color-mix(in srgb, var(--color-raised) 38%, transparent),
+      transparent 65%
+    ),
+    var(--color-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-ink) 8%, transparent);
+}
+
+@utility sheet-surface {
+  background:
+    radial-gradient(
+      ellipse at 0% 0%,
+      color-mix(in srgb, var(--color-raised) 45%, transparent),
+      transparent 60%
+    ),
+    var(--color-surface);
+  border-color: color-mix(in srgb, var(--color-stroke) 75%, var(--color-ink) 25%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-ink) 18%, transparent),
+    0 -16px 64px -20px var(--color-shadow);
+}
+
 @utility tile-edge {
   border: 1px solid transparent;
   background:
@@ -1092,6 +1150,18 @@
 }
 
 @layer components {
+  .mode-tile-selected {
+    background:
+      radial-gradient(
+        ellipse at top right,
+        color-mix(in srgb, var(--color-mark-o) 16%, transparent),
+        transparent 75%
+      ),
+      var(--color-surface);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--color-mark-o) 30%, transparent),
+      0 6px 20px -12px var(--color-shadow);
+  }
   /**
    * A light sweeping across a raised surface on hover, which is what stops the
    * pill buttons reading as flat rectangles. The gradient sits in an `::after`

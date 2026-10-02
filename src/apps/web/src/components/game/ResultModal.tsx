@@ -117,12 +117,12 @@ function ResultPanel({
         aria-label={title}
         tabIndex={-1}
         className={cx(
-          'relative w-full max-w-80 animate-result-in rounded-[2.5rem] border border-stroke p-2 outline-none',
+          'relative w-full max-w-80 animate-result-in panel-shell rounded-[2.5rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
         )}
         style={{ animationDelay: '0.06s' }}
       >
-        <div className="flex max-h-[85vh] flex-col items-center gap-4 overflow-y-auto rounded-[2rem] bg-surface px-6 py-8">
+        <div className="flex max-h-[85vh] flex-col items-center gap-4 overflow-y-auto panel-face rounded-[2rem] bg-surface px-6 py-8">
           <div
             className="animate-pop text-[4.5rem] leading-none"
             style={{ animationDelay: '0.22s' }}

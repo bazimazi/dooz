@@ -88,7 +88,7 @@ export function SettingsIcon(props: IconProps) {
   return (
     <Stroke {...props}>
       <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1" />
+      <path d="M9.5 3h5l.5 2.5 1.5.9 2.4-.8 2.5 4.3-1.9 1.7v1.8l1.9 1.7-2.5 4.3-2.4-.8-1.5.9-.5 2.5h-5L9 19.5l-1.5-.9-2.4.8-2.5-4.3 1.9-1.7v-1.8L2.6 9.9l2.5-4.3 2.4.8L9 5.5 9.5 3Z" />
     </Stroke>
   );
 }

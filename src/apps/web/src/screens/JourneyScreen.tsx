@@ -239,12 +239,12 @@ function StageSheet({
         aria-label={`Stage ${number}: ${mode.name}`}
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
+          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <div className="flex flex-col items-center gap-3 rounded-[1.5rem] bg-surface px-5 py-6 text-center">
+        <div className="flex flex-col items-center gap-3 panel-face rounded-[1.5rem] bg-surface px-5 py-6 text-center">
           <span className="animate-pop" style={{ animationDelay: '0.12s' }}>
             <span className="block animate-bob">
               <AvatarBadge
@@ -296,6 +296,7 @@ function StageSheet({
             block
             onClick={() =>
               void navigate({
+                replace: true,
                 to: '/play/bot',
                 search: { mode: stage.mode, difficulty: stage.rival.difficulty, stage: stage.id },
               })

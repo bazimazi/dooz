@@ -114,12 +114,12 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
         aria-label="How to play"
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
+          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <div className="flex max-h-[90vh] flex-col gap-3 overflow-y-auto rounded-[1.5rem] bg-surface px-5 py-5">
+        <div className="flex max-h-[90vh] flex-col gap-3 overflow-y-auto panel-face rounded-[1.5rem] bg-surface px-5 py-5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs tracking-wide text-ink-faint uppercase">
               Step {step + 1} of {STEPS.length}

@@ -1,5 +1,15 @@
 import { type RefObject, useEffect, useRef } from 'react';
+import { useRouter } from '@tanstack/react-router';
 import { sfx } from './sound';
+
+declare module '@tanstack/history' {
+  interface HistoryState {
+    __doozSheet?: string;
+  }
+}
+
+const SHEET_STATE = '__doozSheet';
+const sheets: symbol[] = [];
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -22,6 +32,7 @@ const FOCUSABLE =
  * panel deliberately has no way out but its own two buttons.
  */
 export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObject<T | null> {
+  const history = useRouter({ warn: false })?.history;
   const ref = useRef<T>(null);
   // Held in a ref, and refreshed after every render, so a caller passing an
   // inline arrow does not tear the trap down and rebuild it each time. The
@@ -31,6 +42,52 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
   useEffect(() => {
     escapeRef.current = onEscape;
   });
+
+  useEffect(() => {
+    if (!history || !escapeRef.current) return;
+    let disposed = false;
+    let release: (() => void) | undefined;
+    // StrictMode mounts effects twice. Wait until its first cleanup has run
+    // before adding a browser entry, so one sheet always owns one entry.
+    queueMicrotask(() => {
+      if (disposed) return;
+      const token = crypto.randomUUID();
+      const layer = Symbol('sheet');
+      sheets.push(layer);
+      const { href, state } = history.location;
+      history.push(href, { ...state, [SHEET_STATE]: token }, { ignoreBlocker: true });
+      history.flush();
+      const unblock = history.block({
+        enableBeforeUnload: false,
+        blockerFn: ({ action, currentLocation, nextLocation }) => {
+          if (sheets.at(-1) !== layer) return false;
+          const backwards =
+            action === 'BACK' ||
+            (action === 'GO' && nextLocation.state.__TSR_index < currentLocation.state.__TSR_index);
+          if (!backwards) return false;
+          escapeRef.current?.();
+          // The first Back consumes the sheet entry while staying on this
+          // page. Keep rapid or multi-page Back attempts on the page until
+          // the sheet's closing animation finishes.
+          return currentLocation.state[SHEET_STATE] !== token || nextLocation.href !== href;
+        },
+      });
+      release = () => {
+        unblock();
+        sheets.splice(sheets.indexOf(layer), 1);
+        if (history.location.state[SHEET_STATE] === token && history.location.href === href) {
+          // Done, Escape and backdrop dismissal also consume their entry.
+          // Navigation chosen inside the sheet already has a different
+          // entry and must be allowed to continue to its destination.
+          history.back({ ignoreBlocker: true });
+        }
+      };
+    });
+    return () => {
+      disposed = true;
+      release?.();
+    };
+  }, [history]);
 
   useEffect(() => {
     const panel = ref.current;

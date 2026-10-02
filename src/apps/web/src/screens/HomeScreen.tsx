@@ -181,11 +181,21 @@ export function HomeScreen() {
         <OnlineSheet
           onClose={() => setOnlineOpen(false)}
           onQuick={(ranked) =>
-            void navigate({ to: '/play/online', search: { mode, ranked: ranked || undefined } })
+            void navigate({
+              to: '/play/online',
+              replace: true,
+              search: { mode, ranked: ranked || undefined },
+            })
           }
-          onHost={() => void navigate({ to: '/play/online', search: { mode, host: true } })}
-          onJoin={(code) => void navigate({ to: '/play/online', search: { mode, code } })}
-          onWatch={(code) => void navigate({ to: '/play/online', search: { mode, watch: code } })}
+          onHost={() =>
+            void navigate({ to: '/play/online', replace: true, search: { mode, host: true } })
+          }
+          onJoin={(code) =>
+            void navigate({ to: '/play/online', replace: true, search: { mode, code } })
+          }
+          onWatch={(code) =>
+            void navigate({ to: '/play/online', replace: true, search: { mode, watch: code } })
+          }
           rankedAvailable={modeById(mode).ranked}
           modeName={modeById(mode).name}
         />
@@ -348,12 +358,15 @@ function ModeSheet({
         aria-labelledby="mode-sheet-title"
         tabIndex={-1}
         className={cx(
-          'flex max-h-[85dvh] w-full max-w-screen flex-col gap-4 overflow-y-auto rounded-t-[2rem] border border-stroke bg-surface p-5 outline-none sm:rounded-[2rem]',
-          closing ? 'animate-panel-out' : 'animate-panel-in',
+          'sheet-surface flex max-h-[90dvh] w-full max-w-screen flex-col gap-4 rounded-t-[2rem] border px-5 pt-3 outline-none sm:rounded-[2rem]',
+          closing
+            ? 'animate-sheet-out sm:animate-panel-out'
+            : 'animate-sheet-in sm:animate-panel-in',
         )}
         style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex items-center justify-between gap-3">
+        <span aria-hidden="true" className="mx-auto h-1 w-10 shrink-0 rounded-full bg-ink/25" />
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stroke-soft pb-4">
           <h2 id="mode-sheet-title" className="font-display text-xl">
             Choose a mode
           </h2>
@@ -361,7 +374,9 @@ function ModeSheet({
             Done
           </Button>
         </div>
-        <ModePicker value={mode} onChange={onChange} />
+        <div className="min-h-0 overflow-y-auto pb-1">
+          <ModePicker value={mode} onChange={onChange} />
+        </div>
       </div>
     </div>
   );

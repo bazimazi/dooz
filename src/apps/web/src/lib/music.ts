@@ -41,7 +41,9 @@ class Music {
     filter.Q.value = 0.5;
     const output = context.createGain();
     output.gain.setValueAtTime(0.0001, context.currentTime);
-    output.gain.exponentialRampToValueAtTime(1, context.currentTime + 1.2);
+    // Bring the gentle score up by 12 dB; the shared master limiter keeps
+    // overlapping music and game effects controlled at maximum volume.
+    output.gain.exponentialRampToValueAtTime(4, context.currentTime + 1.2);
     input.connect(filter);
     filter.connect(output);
     output.connect(bus);

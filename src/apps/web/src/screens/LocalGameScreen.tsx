@@ -339,13 +339,13 @@ function NamesSheet({
         aria-label="Name the players"
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
+          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
         <form
-          className="flex flex-col gap-4 rounded-[1.5rem] bg-surface px-5 py-6"
+          className="flex flex-col gap-4 panel-face rounded-[1.5rem] bg-surface px-5 py-6"
           onSubmit={(event) => {
             event.preventDefault();
             onSave([first.trim() || 'Player 1', second.trim() || 'Player 2']);

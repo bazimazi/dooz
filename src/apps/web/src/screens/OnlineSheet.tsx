@@ -55,12 +55,12 @@ export function OnlineSheet({
         aria-label={`Play ${modeName} online`}
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 rounded-[2rem] border border-stroke p-2 outline-none',
+          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <div className="flex flex-col gap-3 rounded-[1.5rem] bg-surface px-5 py-6">
+        <div className="flex flex-col gap-3 panel-face rounded-[1.5rem] bg-surface px-5 py-6">
           <p className="text-center text-sm text-ink-faint">{modeName}</p>
 
           <SheetAction

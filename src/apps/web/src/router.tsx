@@ -270,6 +270,13 @@ export const router = createRouter({
   defaultViewTransition: true,
 });
 
+// A sheet gives itself a history entry so Back can close it. That entry has
+// the same URL as the screen under it, so opening or closing the sheet must
+// not play the screen-change transition.
+router.subscribe('onBeforeNavigate', ({ hrefChanged }) => {
+  if (!hrefChanged) router.shouldViewTransition = false;
+});
+
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;

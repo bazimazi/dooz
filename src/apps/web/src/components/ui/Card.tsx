@@ -37,7 +37,7 @@ export function Card({
     return (
       <div
         className={cx(
-          'rounded-panel border border-stroke-soft bg-surface/85',
+          'panel-face rounded-panel border border-stroke-soft bg-surface/85',
           PADDING[padding],
           className,
         )}
@@ -50,12 +50,14 @@ export function Card({
   return (
     <div
       className={cx(
-        'rounded-[2rem] border border-stroke p-2',
+        'panel-shell rounded-[2rem] border border-stroke p-2',
         'shadow-[0_30px_70px_-34px_var(--color-shadow)]',
         className,
       )}
     >
-      <div className={cx('rounded-[1.5rem] bg-surface', PADDING[padding], innerClassName)}>
+      <div
+        className={cx('panel-face rounded-[1.5rem] bg-surface', PADDING[padding], innerClassName)}
+      >
         {children}
       </div>
     </div>
