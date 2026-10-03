@@ -1,6 +1,6 @@
 {
   "name": "@dooz/native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Tauri shell that ships the dooz web client as a desktop and mobile app",

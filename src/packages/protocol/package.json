@@ -1,6 +1,6 @@
 {
   "name": "@dooz/protocol",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Wire format shared by the dooz multiplayer server and its clients",
