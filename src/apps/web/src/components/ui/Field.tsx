@@ -113,6 +113,7 @@ export function Segmented<T extends string>({
           type="button"
           role="radio"
           aria-checked={option.value === value}
+          aria-label={option.title}
           title={option.title ?? undefined}
           onClick={() => onChange(option.value)}
           className={cx(
@@ -141,17 +142,24 @@ export function Toggle({
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
+  const descriptionId = useId();
   return (
     <button
       type="button"
       role="switch"
+      aria-label={label}
+      aria-describedby={description ? descriptionId : undefined}
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className="flex w-full items-center justify-between gap-4 rounded-tile px-1 py-2 text-left"
     >
       <span className="flex flex-col">
         <span className="text-base">{label}</span>
-        {description ? <span className="text-xs text-ink-faint">{description}</span> : null}
+        {description ? (
+          <span id={descriptionId} className="text-xs text-ink-faint">
+            {description}
+          </span>
+        ) : null}
       </span>
 
       <span

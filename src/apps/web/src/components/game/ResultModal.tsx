@@ -2,10 +2,13 @@ import { type GameState, type Player, X } from '@dooz/engine';
 import type { EndReason } from '@dooz/protocol';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Confetti } from '@/components/art/Confetti';
+import { Button } from '@/components/ui/Button';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 import { useDialog } from '@/lib/useDialog';
+import { useClosing } from '@/lib/useClosing';
+import { prefersReducedMotion } from '@/lib/preferences';
 
 interface ResultModalProps {
   title: string;
@@ -23,6 +26,8 @@ interface ResultModalProps {
    * `revealDelayFor` works it out from the game; zero arrives immediately.
    */
   revealDelay?: number;
+  /** Local games can uncover the final position and reopen these results. */
+  onDismiss?: () => void;
 }
 
 /**
@@ -78,6 +83,7 @@ function useRevealed(delay: number): boolean {
  * starts, and the shockwave off a finished line is worth its half second.
  */
 export function revealDelayFor(game: GameState, reason?: EndReason): number {
+  if (prefersReducedMotion()) return 0;
   if (reason && reason !== 'line' && reason !== 'draw') return 0;
   const falling = game.config.variant === 'gravity' ? 450 : 0;
   if (game.winLine) return 1450 + falling;
@@ -86,9 +92,8 @@ export function revealDelayFor(game: GameState, reason?: EndReason): number {
 }
 
 /**
- * There is deliberately no dismiss affordance: the ways out of a finished game
- * are in the panel. That is also why `useDialog` is given no escape handler -
- * there is nothing for Escape to do that the buttons do not.
+ * Local games may provide a dismiss action to review the board. Screens that
+ * require a choice, such as an online rematch, keep their existing actions.
  *
  * It arrives in pieces - dim, then panel, then the face, the verdict and the
  * buttons - because the result is the one moment in the game worth pausing on.
@@ -101,13 +106,20 @@ function ResultPanel({
   detail,
   actions,
   celebrate = false,
+  onDismiss,
 }: Omit<ResultModalProps, 'revealDelay'>) {
   // Moves focus in, traps Tab, and makes the board behind it inert - without
   // which `aria-modal` below would be a claim the page does not honour.
-  const panelRef = useDialog<HTMLDivElement>();
+  const { closing, close } = useClosing(onDismiss ?? (() => undefined));
+  const panelRef = useDialog<HTMLDivElement>(onDismiss ? close : undefined);
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-scrim p-5 backdrop-blur-[2px]">
+    <div
+      className={cx(
+        'fixed inset-0 z-50 flex items-center justify-center bg-scrim p-5 backdrop-blur-[2px]',
+        closing ? 'animate-fade-out' : 'animate-fade-in',
+      )}
+    >
       {celebrate ? <Confetti /> : null}
 
       <div
@@ -159,6 +171,11 @@ function ResultPanel({
             style={{ animationDelay: '0.38s' }}
           >
             {actions}
+            {onDismiss ? (
+              <Button size="small" variant="ghost" block onClick={close}>
+                Review board
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>

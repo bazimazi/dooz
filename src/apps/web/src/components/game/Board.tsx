@@ -14,7 +14,15 @@ import {
   vanishingNext,
   X,
 } from '@dooz/engine';
-import { type CSSProperties, type KeyboardEvent, memo, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 import { haptics, sfx } from '@/lib/sound';
@@ -84,6 +92,15 @@ export function Board({
   const gravity = config.variant === 'gravity';
   const radii = radiiFor(size);
   const gridRef = useRef<HTMLDivElement>(null);
+  const [enlarged, setEnlarged] = useState(false);
+  const canEnlarge = size > 9;
+  const zoomed = canEnlarge && enlarged;
+  useEffect(() => {
+    if (!zoomed || game.lastMove === null) return;
+    gridRef.current
+      ?.querySelector<HTMLElement>(`[data-cell="${game.lastMove}"]`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [zoomed, game.lastMove]);
 
   // Roving tabindex: the grid is one tab stop and the arrow keys move within
   // it, so a 15x15 board does not put 225 stops in the page's tab order.
@@ -196,98 +213,134 @@ export function Board({
       )}
       style={{ borderRadius: radii.frame }}
     >
+      {canEnlarge ? (
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-ink-muted">
+          <span>
+            {zoomed
+              ? 'Scroll to explore the board'
+              : `${size} × ${size} · ${config.winLength} in a row`}
+          </span>
+          <button
+            type="button"
+            aria-pressed={zoomed}
+            onClick={() => setEnlarged((value) => !value)}
+            className="min-h-8 shrink-0 rounded-lg border border-stroke px-2 text-ink hover:bg-stroke-soft"
+          >
+            {zoomed ? 'Fit board' : 'Enlarge board'}
+          </button>
+        </div>
+      ) : null}
       <div
-        className="relative aspect-square w-full overflow-hidden bg-surface transition-[border-radius] duration-500 ease-soft"
-        style={{ borderRadius: radii.inner }}
-        onPointerLeave={gravity ? () => setHoverCol(null) : undefined}
+        className="w-full overflow-auto overscroll-contain"
+        style={{ borderRadius: radii.inner, maxHeight: zoomed ? 'min(60dvh, 26rem)' : undefined }}
+        role={canEnlarge ? 'region' : undefined}
+        aria-label={canEnlarge ? 'Scrollable game board' : undefined}
       >
         <div
-          ref={gridRef}
-          role="grid"
-          aria-label={boardLabel(game)}
-          aria-busy={disabled && status === 'playing'}
-          aria-readonly={readOnly || undefined}
-          onKeyDown={handleKeyDown}
-          className="grid h-full w-full"
-          style={{
-            // Rows are real elements, because `role="grid"` is only valid with
-            // `role="row"` between it and the cells. Each row is its own grid of
-            // columns, which keeps the layout to plain `1fr` tracks: with auto
-            // sizing the row holding a mark grows to the mark and steals height
-            // from the others.
-            gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
-          }}
+          className="relative aspect-square w-full overflow-hidden bg-surface transition-[border-radius] duration-500 ease-soft"
+          style={{ borderRadius: radii.inner, minWidth: zoomed ? `${size * 36}px` : undefined }}
+          onPointerLeave={gravity ? () => setHoverCol(null) : undefined}
         >
-          {Array.from({ length: size }, (_row, row) => (
-            <div
-              key={row}
-              role="row"
-              className="grid"
-              style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
-            >
-              {Array.from({ length: size }, (_col, col) => {
-                const index = row * size + col;
-                const drop = landing ? (landing[col] ?? -1) : -1;
-                // Under gravity every square of a column plays the column; the
-                // mark goes wherever it lands.
-                const target = gravity ? (drop >= 0 ? drop : null) : index;
-                const canPlay = interactive && target !== null && playable.has(target);
-                return (
-                  <BoardCell
-                    key={index}
-                    index={index}
-                    row={row}
-                    col={col}
-                    size={size}
-                    cell={board[index] ?? Empty}
-                    currentPlayer={game.currentPlayer}
-                    target={canPlay ? target : null}
-                    interactive={interactive}
-                    isLastMove={game.lastMove === index}
-                    tabStop={index === focus}
-                    winOrder={winOrder.get(index)}
-                    hint={hintFor.get(index)}
-                    animate={animate || game.lastMove === index}
-                    gravity={gravity}
-                    columnLit={gravity && interactive && hoverCol === col && drop >= 0}
-                    preview={gravity ? interactive && hoverCol === col && drop === index : true}
-                    fade={
-                      fading.mover === index ? 'mover' : fading.waiting === index ? 'waiting' : null
-                    }
-                    ghost={lifted === index ? ghostOf(game) : null}
-                    ghostKey={lifted === index ? game.moves.length : 0}
-                    ripple={ripple?.get(index)}
-                    rippleColour={glow}
-                    label={describeCell(game, index, drop)}
-                    onFocus={setFocusIndex}
-                    onHover={gravity ? setHoverCol : undefined}
-                    onPlay={onPlay}
-                  />
-                );
-              })}
-            </div>
-          ))}
-        </div>
+          <div
+            ref={gridRef}
+            role="grid"
+            aria-label={boardLabel(game)}
+            aria-busy={disabled && status === 'playing'}
+            aria-readonly={readOnly || undefined}
+            onKeyDown={handleKeyDown}
+            className="grid h-full w-full"
+            style={{
+              // Rows are real elements, because `role="grid"` is only valid with
+              // `role="row"` between it and the cells. Each row is its own grid of
+              // columns, which keeps the layout to plain `1fr` tracks: with auto
+              // sizing the row holding a mark grows to the mark and steals height
+              // from the others.
+              gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
+            }}
+          >
+            {Array.from({ length: size }, (_row, row) => (
+              <div
+                key={row}
+                role="row"
+                className="grid"
+                style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+              >
+                {Array.from({ length: size }, (_col, col) => {
+                  const index = row * size + col;
+                  const drop = landing ? (landing[col] ?? -1) : -1;
+                  // Under gravity every square of a column plays the column; the
+                  // mark goes wherever it lands.
+                  const target = gravity ? (drop >= 0 ? drop : null) : index;
+                  const canPlay = interactive && target !== null && playable.has(target);
+                  return (
+                    <BoardCell
+                      key={index}
+                      index={index}
+                      row={row}
+                      col={col}
+                      size={size}
+                      cell={board[index] ?? Empty}
+                      currentPlayer={game.currentPlayer}
+                      target={canPlay ? target : null}
+                      interactive={interactive}
+                      isLastMove={game.lastMove === index}
+                      tabStop={index === focus}
+                      winOrder={winOrder.get(index)}
+                      hint={hintFor.get(index)}
+                      animate={animate || game.lastMove === index}
+                      gravity={gravity}
+                      columnLit={gravity && interactive && hoverCol === col && drop >= 0}
+                      preview={gravity ? interactive && hoverCol === col && drop === index : true}
+                      fade={
+                        fading.mover === index
+                          ? 'mover'
+                          : fading.waiting === index
+                            ? 'waiting'
+                            : null
+                      }
+                      ghost={lifted === index ? ghostOf(game) : null}
+                      ghostKey={lifted === index ? game.moves.length : 0}
+                      ripple={ripple?.get(index)}
+                      rippleColour={glow}
+                      label={`${describeCell(game, index, drop)}${
+                        hintFor.has(index)
+                          ? hintFor.get(index) === 'win'
+                            ? ', winning move'
+                            : hintFor.get(index) === 'threat'
+                              ? ', block opponent’s winning move'
+                              : ', suggested move'
+                          : ''
+                      }`}
+                      onFocus={setFocusIndex}
+                      onHover={gravity ? setHoverCol : undefined}
+                      onPlay={onPlay}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
 
-        {status === 'won' ? (
-          <span
-            aria-hidden="true"
-            className="victory-burst pointer-events-none absolute inset-0"
-            style={{ '--burst-color': glow } as CSSProperties}
-          />
-        ) : null}
-        {game.ultimate ? <UltimateOverlay game={game} /> : null}
-        {winLine ? (
-          <WinLine
-            line={winLine}
-            size={size}
-            winner={winner}
-            delay={gravity ? dropTime(Math.floor((game.lastMove ?? 0) / size) + 1) * 0.66 : 0}
-          />
-        ) : null}
-        {game.ultimate?.winBoards ? (
-          <WinLine line={game.ultimate.winBoards} size={3} winner={winner} delay={0.15} />
-        ) : null}
+          {status === 'won' ? (
+            <span
+              aria-hidden="true"
+              className="victory-burst pointer-events-none absolute inset-0"
+              style={{ '--burst-color': glow } as CSSProperties}
+            />
+          ) : null}
+          {game.ultimate ? <UltimateOverlay game={game} /> : null}
+          {winLine ? (
+            <WinLine
+              line={winLine}
+              size={size}
+              winner={winner}
+              delay={gravity ? dropTime(Math.floor((game.lastMove ?? 0) / size) + 1) * 0.66 : 0}
+            />
+          ) : null}
+          {game.ultimate?.winBoards ? (
+            <WinLine line={game.ultimate.winBoards} size={3} winner={winner} delay={0.15} />
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -634,12 +687,14 @@ const BoardCell = memo(function BoardCell({
         <span
           aria-hidden="true"
           className={cx(
-            'pointer-events-none absolute inset-[18%] rounded-full border-2 animate-pulse-soft',
-            hint === 'win' && 'border-ok',
-            hint === 'threat' && 'border-warn',
-            hint === 'best' && 'border-dashed border-ink',
+            'pointer-events-none absolute inset-[18%] flex items-center justify-center border-2 animate-pulse-soft',
+            hint === 'win' && 'rounded-full border-ok',
+            hint === 'threat' && 'rounded-sm border-warn text-warn',
+            hint === 'best' && 'rounded-full border-dashed border-ink',
           )}
-        />
+        >
+          {hint === 'threat' ? <span className="text-xs font-bold">!</span> : null}
+        </span>
       ) : null}
 
       {/* Faint hint of the mark that would land here. Suppressed on a big

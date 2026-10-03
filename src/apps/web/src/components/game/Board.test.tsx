@@ -12,6 +12,48 @@ function played(indices: number[]) {
 }
 
 describe('Board', () => {
+  it('announces the purpose of each hint without requiring colour perception', () => {
+    render(
+      <Board
+        game={createGame(3)}
+        onPlay={vi.fn()}
+        hints={[
+          { index: 0, kind: 'win' },
+          { index: 1, kind: 'threat' },
+          { index: 2, kind: 'best' },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByRole('gridcell', { name: /row 1, column 1, empty, winning move/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: /row 1, column 2, empty, block/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', { name: /row 1, column 3, empty, suggested move/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('enlarges a large board and keeps the same move targets and keyboard navigation', async () => {
+    const onPlay = vi.fn();
+    render(<Board game={createGame(modeById('gomoku-15').config)} onPlay={onPlay} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Enlarge board' }));
+    expect(screen.getByRole('button', { name: 'Fit board' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const cell = screen.getByRole('gridcell', { name: 'row 1, column 1, empty' });
+    await userEvent.click(cell);
+    expect(onPlay).toHaveBeenCalledWith(0);
+    await userEvent.keyboard('{ArrowRight}{ArrowDown}');
+    expect(screen.getByRole('gridcell', { name: 'row 2, column 2, empty' })).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Fit board' }));
+    expect(screen.getByRole('button', { name: 'Enlarge board' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
   it('plays the cell that was clicked', async () => {
     const onPlay = vi.fn();
     render(<Board game={createGame(3)} onPlay={onPlay} />);

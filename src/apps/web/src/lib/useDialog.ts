@@ -28,8 +28,8 @@ const FOCUSABLE =
  * 3. Everything else on the page is `inert` for as long as the panel is up, so
  *    it is unreachable by pointer and hidden from the accessibility tree.
  *
- * `onEscape` is optional because not every overlay is dismissible - the result
- * panel deliberately has no way out but its own two buttons.
+ * `onEscape` is optional because some result panels require a choice from
+ * their own actions.
  */
 export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObject<T | null> {
   const history = useRouter({ warn: false })?.history;

@@ -14,6 +14,8 @@ import { BulbIcon, UsersIcon } from '@/components/art/ui-icons';
 import { Board } from '@/components/game/Board';
 import { GameControls } from '@/components/game/GameControls';
 import { GameHeader } from '@/components/game/GameHeader';
+import { GameResetDialog } from '@/components/game/GameResetDialog';
+import { HintLegend } from '@/components/game/HintLegend';
 import { ModeChip } from '@/components/game/ModePicker';
 import { OpenerBanner } from '@/components/game/OpenerBanner';
 import { outcomeMark, ResultModal, revealDelayFor } from '@/components/game/ResultModal';
@@ -75,6 +77,8 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const [hintsOn, setHintsOn] = useState(() => loadPreferences().hints);
   const [names, setNames] = useState(() => loadPreferences().localNames);
   const [renaming, setRenaming] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const [reviewedRound, setReviewedRound] = useState(-1);
   const [score, setScore] = useState<Score>(() => loadScore(mode));
   const recordLocalGame = useProgressStore((state) => state.recordLocalGame);
 
@@ -170,13 +174,28 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           />
         </div>
         <VariantStatus game={game} />
+        {hintsOn ? <HintLegend hints={hints} /> : null}
       </main>
 
-      <footer className="animate-rise pb-4" style={{ animationDelay: '0.22s' }}>
+      <footer
+        className="flex animate-rise flex-col items-center gap-3 pb-4"
+        style={{ animationDelay: '0.22s' }}
+      >
+        {finished && reviewedRound === round ? (
+          <Button size="small" variant="ghost" onClick={() => setReviewedRound(-1)}>
+            Show result
+          </Button>
+        ) : null}
         <GameControls
-          onRestart={() => restart()}
+          onRestart={() => {
+            if (!finished && game.moves.length > 0) setConfirmRestart(true);
+            else restart();
+          }}
           restartLabel="New game"
-          onUndo={undo}
+          onUndo={() => {
+            setReviewedRound(-1);
+            undo();
+          }}
           canUndo={canUndo}
           extra={
             <>
@@ -196,8 +215,9 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
         />
       </footer>
 
-      {finished ? (
+      {finished && reviewedRound !== round ? (
         <ResultModal
+          onDismiss={() => setReviewedRound(round)}
           title={title}
           art={outcomeMark(game.winner)}
           detail={<SeriesDetail score={score} names={names} winner={game.winner} />}
@@ -236,6 +256,15 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
             savePreferences({ localNames: next });
           }}
           onClose={() => setRenaming(false)}
+        />
+      ) : null}
+      {confirmRestart ? (
+        <GameResetDialog
+          onCancel={() => setConfirmRestart(false)}
+          onConfirm={() => {
+            setConfirmRestart(false);
+            restart();
+          }}
         />
       ) : null}
     </Screen>

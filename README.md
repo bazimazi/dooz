@@ -260,7 +260,11 @@ npm run lint       # oxlint, type-aware
 npm run format     # prettier
 
 npm run audit:a11y --workspace @dooz/web   # contrast and naming, against a real browser
+npm run audit:experience --workspace @dooz/web  # teaching, touch, recovery and motion
 ```
+
+The [player experience review](docs/PLAYER_EXPERIENCE_REVIEW.md) records the
+research, observed friction, implemented improvements, and next playtest priorities.
 
 ## Online play
 

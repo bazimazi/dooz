@@ -38,7 +38,10 @@ async function audit(path, theme = 'dark') {
     theme,
   );
   const page = await ctx.newPage();
-  await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+  // Background account requests can retry while the server is unavailable.
+  // Wait for the rendered app rather than for all networking to stop.
+  await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+  await page.locator('button, a').first().waitFor();
   await page.waitForTimeout(1800);
 
   // 1. Every interactive element must have an accessible name.

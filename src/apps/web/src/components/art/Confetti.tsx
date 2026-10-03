@@ -54,7 +54,7 @@ export function Confetti({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-x-0 top-1/3 z-10 overflow-visible ${className ?? ''}`}
+      className={`confetti pointer-events-none absolute inset-x-0 top-1/3 z-10 overflow-visible ${className ?? ''}`}
     >
       {PIECES.map((piece, index) => (
         <span

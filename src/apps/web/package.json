@@ -14,6 +14,7 @@
     "icons": "node scripts/generate-icons.mjs",
     "audit:a11y": "node scripts/a11y-audit.mjs",
     "audit:animations": "node scripts/animation-audit.mjs",
+    "audit:experience": "node scripts/player-experience-audit.mjs",
     "audit:offline": "node scripts/offline-audit.mjs",
     "audit:home-music": "node scripts/home-music-audit.mjs",
     "audit:sheet-back": "node scripts/sheet-back-audit.mjs"

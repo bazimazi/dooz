@@ -100,11 +100,11 @@ export function JourneyScreen() {
             const reached = isUnlocked(stages[0]!, earned);
             return (
               <li key={rival.id} className="flex flex-col gap-2">
-                <div className={cx('flex items-center gap-3 px-1', !reached && 'opacity-55')}>
+                <div className="flex items-center gap-3 px-1">
                   <AvatarBadge
                     avatar={rival.avatar}
                     ring="var(--color-canvas)"
-                    className="size-11"
+                    className={cx('size-11', !reached && 'opacity-55')}
                   />
                   <div className="flex min-w-0 flex-col">
                     <span className="font-semibold">
@@ -183,7 +183,7 @@ function StageRow({
           'flex w-full items-center gap-3 rounded-2xl border p-2 text-left',
           'transition-[transform,border-color,background-color] duration-200 ease-spring',
           'hover:-translate-y-0.5 active:scale-[0.98]',
-          'disabled:pointer-events-none disabled:opacity-45',
+          'disabled:pointer-events-none',
           next ? 'border-stroke bg-surface' : 'border-stroke-soft bg-surface/70',
         )}
       >

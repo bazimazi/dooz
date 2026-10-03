@@ -5,7 +5,8 @@ import { BackIcon, RefreshIcon, ShareIcon } from '@/components/art/icons';
 import { Mark } from '@/components/art/marks';
 import { BulbIcon } from '@/components/art/ui-icons';
 import { Board, type BoardHint } from '@/components/game/Board';
-import { ResultModal } from '@/components/game/ResultModal';
+import { ResultModal, revealDelayFor } from '@/components/game/ResultModal';
+import { HintLegend } from '@/components/game/HintLegend';
 import { Button } from '@/components/ui/Button';
 import { Card, EmptyState } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
@@ -219,6 +220,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
           finishTone={phase === 'solved' ? 'win' : null}
           hints={hints}
         />
+        {hinted ? <HintLegend hints={hints} /> : null}
 
         <p
           key={message}
@@ -262,7 +264,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
               : `Solved after ${misses} ${misses === 1 ? 'miss' : 'misses'}.`
           }
           celebrate
-          revealDelay={1500}
+          revealDelay={revealDelayFor(game)}
           actions={
             <>
               {nextPuzzle ? (

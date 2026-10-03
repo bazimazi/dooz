@@ -150,6 +150,20 @@ export function HomeScreen() {
                 </Button>
               </div>
             </nav>
+            <Button
+              onClick={() =>
+                void navigate({
+                  to: '/play/bot',
+                  search: { mode, difficulty: 'beginner', practice: true },
+                })
+              }
+              variant="ghost"
+              size="small"
+              block
+              icon={<TargetIcon />}
+            >
+              Practice with hints
+            </Button>
           </section>
 
           {/* The two reasons to come back when nobody else is around: the next

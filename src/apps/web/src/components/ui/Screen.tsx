@@ -43,10 +43,9 @@ export function Screen({
         className={cx(
           'relative mx-auto flex w-full flex-col items-center px-5',
           width === 'wide' ? 'max-w-wide' : 'max-w-screen',
-          // A board screen is pinned to the viewport so the board never
-          // scrolls out from under the player; a list screen has to be able to
-          // grow past it or half the rows are unreachable.
-          scroll ? 'min-h-full' : 'h-full',
+          // Fill the viewport when play fits. On short screens, grow to the
+          // content's minimum height so the board and controls stay reachable.
+          scroll ? 'min-h-full' : 'h-full min-h-fit',
           className,
         )}
         style={{

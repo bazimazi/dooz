@@ -1,5 +1,43 @@
 @import 'tailwindcss';
 
+/* Finish entrance and draw animations immediately, retaining their final
+   state, rather than hiding marks or leaving win lines undrawn. */
+/* @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .confetti,
+  .victory-burst,
+  .piece-trace {
+    display: none !important;
+  }
+} */
+
+:root[data-reduced-motion] *,
+:root[data-reduced-motion] *::before,
+:root[data-reduced-motion] *::after,
+:root[data-reduced-motion]::view-transition-group(*),
+:root[data-reduced-motion]::view-transition-old(*),
+:root[data-reduced-motion]::view-transition-new(*) {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-reduced-motion] :is(.confetti, .victory-burst, .piece-trace) {
+  display: none !important;
+}
+
 /**
  * Design tokens.
  *

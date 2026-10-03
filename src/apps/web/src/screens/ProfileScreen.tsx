@@ -19,7 +19,7 @@ import {
   useProgressStore,
 } from '@/features/progress/store';
 import { isSkinUnlocked, SKIN_UNLOCKS } from '@/features/progress/unlocks';
-import { api, type MatchSummary, type ProfileResponse } from '@/lib/api';
+import { api, type Credentials, type MatchSummary, type ProfileResponse } from '@/lib/api';
 import { cx } from '@/lib/cx';
 import { duration, fullDate, signed, timeAgo, winRate } from '@/lib/format';
 import { ACHIEVEMENT_LABELS } from '@/lib/achievements';
@@ -30,8 +30,25 @@ export function ProfileScreen() {
 
   const pendingChanges = useAccountStore((state) => Object.keys(state.changes).length > 0);
 
-  const [ranks, setRanks] = useState<ProfileResponse['ranks']>([]);
-  const [matches, setMatches] = useState<MatchSummary[] | null>([]);
+  const [loadedRanks, setRanks] = useState<{
+    for: Credentials;
+    value: ProfileResponse['ranks'];
+  } | null>(null);
+  const [loadedMatches, setMatches] = useState<{ for: Credentials; value: MatchSummary[] } | null>(
+    null,
+  );
+  // Read cached activity during render so reopening an offline profile does
+  // not briefly show an empty history or a previous account's ratings.
+  const ranks = credentials
+    ? loadedRanks?.for === credentials
+      ? loadedRanks.value
+      : (api.cachedProfile(credentials)?.ranks ?? [])
+    : [];
+  const matches = credentials
+    ? loadedMatches?.for === credentials
+      ? loadedMatches.value
+      : (api.cachedMatches(credentials)?.matches ?? [])
+    : [];
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
@@ -39,24 +56,18 @@ export function ProfileScreen() {
   }, [initialise]);
 
   useEffect(() => {
-    if (!credentials) {
-      setRanks([]);
-      setMatches([]);
-      return;
-    }
-    setRanks(api.cachedProfile(credentials)?.ranks ?? []);
-    setMatches(api.cachedMatches(credentials)?.matches ?? []);
+    if (!credentials) return;
     void useAccountStore.getState().refresh();
     const controller = new AbortController();
 
     void api
       .profile(credentials, controller.signal)
-      .then((response) => setRanks(response.ranks))
+      .then((response) => setRanks({ for: credentials, value: response.ranks }))
       .catch(() => undefined);
 
     void api
       .matches(credentials, 20, controller.signal)
-      .then((response) => setMatches(response.matches))
+      .then((response) => setMatches({ for: credentials, value: response.matches }))
       .catch(() => undefined);
 
     return () => controller.abort();

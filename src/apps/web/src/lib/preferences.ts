@@ -19,6 +19,8 @@ export interface Preferences {
   mode: ModeId;
   difficulty: BotDifficulty;
   theme: ThemeChoice;
+  /** Reduce animation in addition to the device's motion preference. */
+  reducedMotion: boolean;
   /** Show the squares that would win or lose the game this move. */
   hints: boolean;
   /** The onboarding has been seen, so it is not shown again. */
@@ -41,6 +43,7 @@ const DEFAULTS: Preferences = {
   mode: DEFAULT_MODE_ID,
   difficulty: 'medium',
   theme: 'system',
+  reducedMotion: false,
   hints: false,
   onboarded: false,
   sound: true,
@@ -93,6 +96,7 @@ export function loadPreferences(): Preferences {
       mode: isModeId(stored.mode) ? stored.mode : DEFAULTS.mode,
       difficulty: isBotDifficulty(stored.difficulty) ? stored.difficulty : DEFAULTS.difficulty,
       theme: isTheme(stored.theme) ? stored.theme : DEFAULTS.theme,
+      reducedMotion: typeof stored.reducedMotion === 'boolean' ? stored.reducedMotion : false,
       hints: typeof stored.hints === 'boolean' ? stored.hints : DEFAULTS.hints,
       onboarded: typeof stored.onboarded === 'boolean' ? stored.onboarded : DEFAULTS.onboarded,
       sound: typeof stored.sound === 'boolean' ? stored.sound : DEFAULTS.sound,
@@ -136,6 +140,7 @@ export function savePreferences(preferences: Partial<Preferences>): void {
     next = { ...loadPreferences(), ...preferences };
   }
   if (preferences.theme !== undefined) applyTheme(next.theme);
+  if (preferences.reducedMotion !== undefined) applyMotion(next.reducedMotion);
   for (const listener of listeners) listener(next);
 }
 
@@ -155,4 +160,18 @@ export function applyTheme(theme: ThemeChoice): void {
 
   // Keep the browser's own chrome - the address bar, the scrollbars - in step.
   root.style.colorScheme = theme === 'system' ? 'light dark' : theme;
+}
+
+export function applyMotion(reduced: boolean): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.toggleAttribute('data-reduced-motion', reduced);
+}
+
+export function prefersReducedMotion(): boolean {
+  return (
+    (typeof document !== 'undefined' &&
+      document.documentElement.hasAttribute('data-reduced-motion')) ||
+    (typeof window !== 'undefined' &&
+      (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false))
+  );
 }

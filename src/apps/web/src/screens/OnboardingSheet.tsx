@@ -25,8 +25,8 @@ interface Step {
   body: string;
   /** The position to start from, as moves played on a 3x3 board from X. */
   setup: readonly number[];
-  /** The square the player has to find. */
-  answer: number;
+  /** The square to find, or any empty square for the first step. */
+  answer: number | null;
   /** What to say once they find it. */
   success: string;
 }
@@ -36,8 +36,8 @@ const STEPS: readonly Step[] = [
     title: 'Place your mark',
     body: 'Tap any empty square to play there. You are X and you move first.',
     setup: [],
-    answer: 4,
-    success: 'The middle is the strongest opening — it sits on four different lines.',
+    answer: null,
+    success: 'Your mark is down. Now the other player takes a turn.',
   },
   {
     title: 'Win the game',
@@ -75,7 +75,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
   function attempt(index: number) {
     if (solved) return;
 
-    if (index !== current.answer) {
+    if (current.answer !== null && index !== current.answer) {
       // A wrong answer is not punished, only named: the board stays as it was
       // and the hint gets more specific. Nothing is lost by guessing.
       setWrong(true);
@@ -154,7 +154,12 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
             <Board
               game={game}
               onPlay={attempt}
-              hints={solved ? [] : wrong ? [{ index: current.answer, kind: 'win' }] : []}
+              disabled={solved}
+              hints={
+                !solved && wrong && current.answer !== null
+                  ? [{ index: current.answer, kind: step === 2 ? 'threat' : 'win' }]
+                  : []
+              }
             />
           </div>
 
@@ -165,7 +170,13 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
               solved ? 'text-ok' : wrong ? 'text-warn' : 'text-ink-faint',
             )}
           >
-            {solved ? current.success : wrong ? 'Not that one — try the ringed square.' : ' '}
+            {solved
+              ? step === 0 && game.lastMove === 4
+                ? 'Nice. The middle sits on four different lines. Now the other player takes a turn.'
+                : current.success
+              : wrong
+                ? 'Look for the marked square and try again.'
+                : ' '}
           </p>
 
           {last && solved ? (

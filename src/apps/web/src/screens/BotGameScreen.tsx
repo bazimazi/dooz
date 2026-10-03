@@ -15,6 +15,8 @@ import { BulbIcon, SparkIcon, TargetIcon } from '@/components/art/ui-icons';
 import { Board, type BoardHint } from '@/components/game/Board';
 import { GameControls } from '@/components/game/GameControls';
 import { GameHeader } from '@/components/game/GameHeader';
+import { GameResetDialog } from '@/components/game/GameResetDialog';
+import { HintLegend } from '@/components/game/HintLegend';
 import { ModeChip } from '@/components/game/ModePicker';
 import { OpenerBanner } from '@/components/game/OpenerBanner';
 import {
@@ -73,8 +75,8 @@ export function BotGameScreen({
   if (stageId && !stage) return <BotGame mode={mode} difficulty={difficulty} practice={practice} />;
   return (
     <BotGame
-      // A new stage is a new game with new rules for stars, so it starts clean.
-      key={stage?.id ?? 'free'}
+      // Stages and practice have their own saved positions and help settings.
+      key={stage?.id ?? (practice ? 'practice' : 'free')}
       mode={stage?.mode ?? mode}
       difficulty={stage?.rival.difficulty ?? difficulty}
       practice={practice && !stage}
@@ -101,15 +103,18 @@ function BotGame({
     storageKey: stage ? `journey:${stage.id}` : `bot:${mode}:${difficulty}:${practice}`,
   });
   const [hintsOn, setHintsOn] = useState(() => !stage && (practice || loadPreferences().hints));
+  const [pendingChange, setPendingChange] = useState<'restart' | BotDifficulty | null>(null);
+  const [reviewedRound, setReviewedRound] = useState(-1);
   const recordBotGame = useProgressStore((state) => state.recordBotGame);
   const recordStage = useProgressStore((state) => state.recordStage);
 
   const onMove = useCallback((index: number) => play(index), [play]);
-  const { thinking, lastSearch } = useBotOpponent({
+  const { thinking } = useBotOpponent({
     game,
     botPlayer: O,
     difficulty,
     onMove,
+    paused: pendingChange !== null,
   });
   const { suggestion, thinking: suggesting, suggest } = useSuggestion(game);
 
@@ -131,6 +136,7 @@ function BotGame({
   const rivalName = stage ? stage.rival.name : `${DIFFICULTY_LABELS[difficulty]} bot`;
   const finished = game.status !== 'playing';
   const outcome = outcomeFor(game, X);
+  const perfectClassic = mode === 'classic' && ['hard', 'expert', 'master'].includes(difficulty);
   const yourMoves = countMovesBy(game.moves.length, startingPlayerOf(game), X);
 
   // Record each finished game exactly once, when it finishes - not on every
@@ -176,13 +182,20 @@ function BotGame({
       ...(practice ? { practice: true as const } : {}),
     };
     savePreferences({ mode: search.mode, difficulty: search.difficulty });
-    void navigate({ to: '/play/bot', search, replace: true, viewTransition: false });
+    return navigate({ to: '/play/bot', search, replace: true, viewTransition: false });
   }
 
   function toggleHints() {
     const next = !hintsOn;
     setHintsOn(next);
     if (!practice) savePreferences({ hints: next });
+  }
+
+  function requestChange(change: 'restart' | BotDifficulty) {
+    if (change === difficulty) return;
+    if (!finished && game.moves.length > 0) setPendingChange(change);
+    else if (change === 'restart') restart();
+    else void goTo({ difficulty: change });
   }
 
   /**
@@ -193,6 +206,7 @@ function BotGame({
    * the bot's previous move as well and hand it the turn.
    */
   function takeBack() {
+    setReviewedRound(-1);
     const lastMover = game.lastMove === null ? null : game.board[game.lastMove];
     undo();
     if (!(finished && lastMover === X)) undo();
@@ -207,7 +221,7 @@ function BotGame({
     : outcome === 'win'
       ? 'You win!'
       : outcome === 'loss'
-        ? 'You lose'
+        ? `${DIFFICULTY_LABELS[difficulty]} bot wins`
         : 'Draw';
 
   const following = stage ? stageAfter(stage) : undefined;
@@ -245,7 +259,7 @@ function BotGame({
           <Board
             game={game}
             onPlay={play}
-            disabled={thinking || game.currentPlayer === O}
+            disabled={pendingChange !== null || thinking || game.currentPlayer === O}
             finishTone={finished ? outcome : null}
             hints={hints}
           />
@@ -257,30 +271,39 @@ function BotGame({
         </div>
 
         <VariantStatus game={game} />
+        {hintsOn || practice ? <HintLegend hints={hints} /> : null}
+
+        {!stage && practice ? (
+          <p className="text-center text-xs text-ink-muted">
+            Try ideas freely · Take back moves or ask for a suggestion.
+          </p>
+        ) : !stage && perfectClassic ? (
+          <p className="text-center text-xs text-ink-muted">
+            This bot plays Classic perfectly. Holding a draw is a success.
+          </p>
+        ) : null}
 
         {stage ? (
           <StageGoal stage={stage} moves={yourMoves} finished={finished} />
         ) : (
           <ThinkingIndicator thinking={thinking} />
         )}
-
-        {practice && lastSearch ? (
-          <p className="tnum text-center text-xs text-ink-faint">
-            Last search: depth {lastSearch.depth}, {lastSearch.nodes.toLocaleString()} positions
-            {lastSearch.reason === 'search' ? '' : ` · ${lastSearch.reason}`}
-          </p>
-        ) : null}
       </main>
 
       <footer
         className="flex animate-rise flex-col items-center gap-3 pb-4"
         style={{ animationDelay: '0.22s' }}
       >
+        {finished && reviewedRound === round ? (
+          <Button size="small" variant="ghost" onClick={() => setReviewedRound(-1)}>
+            Show result
+          </Button>
+        ) : null}
         {stage ? null : (
           <Segmented<BotDifficulty>
             label="Bot difficulty"
             value={difficulty}
-            onChange={(next) => goTo({ difficulty: next })}
+            onChange={requestChange}
             size="small"
             className="w-full max-w-board"
             options={BOT_DIFFICULTIES.map((value) => ({
@@ -292,7 +315,7 @@ function BotGame({
         )}
 
         <GameControls
-          onRestart={() => restart()}
+          onRestart={() => requestChange('restart')}
           restartLabel={stage ? 'Restart stage' : 'New game'}
           onUndo={practice ? takeBack : undefined}
           canUndo={canUndo && !thinking}
@@ -325,8 +348,9 @@ function BotGame({
         />
       </footer>
 
-      {finished ? (
+      {finished && reviewedRound !== round ? (
         <ResultModal
+          onDismiss={() => setReviewedRound(round)}
           title={title}
           art={
             stage ? (
@@ -344,7 +368,9 @@ function BotGame({
           note={
             stage
               ? `“${outcome === 'win' ? stage.rival.concede : stage.rival.gloat}”`
-              : `${DIFFICULTY_LABELS[difficulty]} bot · ${modeById(mode).name}`
+              : outcome === 'draw' && perfectClassic
+                ? 'You held a draw against a bot that plays perfectly. Well played.'
+                : `${DIFFICULTY_LABELS[difficulty]} bot · ${modeById(mode).name}`
           }
           detail={
             thisRound ? (
@@ -398,7 +424,7 @@ function BotGame({
                 <Button variant="primary" size="small" block onClick={() => restart()}>
                   Play again
                 </Button>
-                {outcome !== 'win' ? (
+                {outcome === 'loss' && difficulty !== BOT_DIFFICULTIES[0] ? (
                   <Button
                     size="small"
                     variant="ghost"
@@ -407,7 +433,7 @@ function BotGame({
                   >
                     Try an easier bot
                   </Button>
-                ) : (
+                ) : outcome === 'win' && difficulty !== BOT_DIFFICULTIES.at(-1) ? (
                   <Button
                     size="small"
                     variant="ghost"
@@ -416,13 +442,51 @@ function BotGame({
                   >
                     Try a harder bot
                   </Button>
-                )}
+                ) : null}
+                {!practice ? (
+                  <Button
+                    onClick={() =>
+                      void navigate({
+                        to: '/play/bot',
+                        search: { mode, difficulty, practice: true },
+                      })
+                    }
+                    variant="ghost"
+                    size="small"
+                    block
+                  >
+                    Practice with hints
+                  </Button>
+                ) : null}
                 <Button as={Link} to="/" variant="ghost" size="small" block>
                   Back to home
                 </Button>
               </>
             )
           }
+        />
+      ) : null}
+      {pendingChange !== null ? (
+        <GameResetDialog
+          title={pendingChange === 'restart' ? 'Start a new round?' : 'Change bot difficulty?'}
+          description={
+            pendingChange === 'restart'
+              ? 'This will replace the round you are playing.'
+              : `Start a round against the ${DIFFICULTY_LABELS[pendingChange]} bot. This will replace your current round.`
+          }
+          actionLabel={pendingChange === 'restart' ? 'New round' : 'Change difficulty'}
+          onCancel={() => setPendingChange(null)}
+          onConfirm={() => {
+            const change = pendingChange;
+            if (change === 'restart') {
+              setPendingChange(null);
+              restart();
+            } else {
+              // Keep the dialog's history entry until navigation commits;
+              // closing it earlier would send Back over the new settings.
+              void goTo({ difficulty: change }).then(() => setPendingChange(null));
+            }
+          }}
         />
       ) : null}
     </Screen>
