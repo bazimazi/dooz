@@ -1,42 +1,8 @@
 @import 'tailwindcss';
 
-/* Finish entrance and draw animations immediately, retaining their final
-   state, rather than hiding marks or leaving win lines undrawn. */
-/* @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after,
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-  .confetti,
-  .victory-burst,
-  .piece-trace {
-    display: none !important;
-  }
-} */
-
-:root[data-reduced-motion] *,
-:root[data-reduced-motion] *::before,
-:root[data-reduced-motion] *::after,
-:root[data-reduced-motion]::view-transition-group(*),
-:root[data-reduced-motion]::view-transition-old(*),
-:root[data-reduced-motion]::view-transition-new(*) {
-  animation-duration: 0.01ms !important;
-  animation-delay: 0ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
-  scroll-behavior: auto !important;
-}
-:root[data-reduced-motion] :is(.confetti, .victory-burst, .piece-trace) {
-  display: none !important;
-}
+/* Project policy: always use the full animation experience. Ignore system and
+   legacy reduced-motion settings; do not add motion overrides or toggles.
+   See the root README.md and AGENTS.md for contributor guidance. */
 
 /**
  * Design tokens.
@@ -155,7 +121,7 @@
   --animate-confetti-x: confetti-x 2.8s linear forwards;
   --animate-confetti-spin: confetti-spin 2.8s linear forwards;
 
-  /* Ambient - decorative loops, all suppressed under reduced motion */
+  /* Ambient - decorative loops */
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
   --animate-float-a: float-a 14s ease-in-out infinite;
   --animate-float-b: float-b 18s ease-in-out infinite;

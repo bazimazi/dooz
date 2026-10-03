@@ -73,12 +73,6 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               ]}
             />
             <SkinPicker value={preferences.skin} onChange={(skin) => update({ skin })} />
-            <Toggle
-              label="Reduce motion"
-              description="Keep moves and results still. Your device’s motion preference is also respected."
-              checked={preferences.reducedMotion}
-              onChange={(reducedMotion) => update({ reducedMotion })}
-            />
           </Group>
 
           <Group title="Sound">

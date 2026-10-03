@@ -8,7 +8,6 @@ import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
 import { useDialog } from '@/lib/useDialog';
 import { useClosing } from '@/lib/useClosing';
-import { prefersReducedMotion } from '@/lib/preferences';
 
 interface ResultModalProps {
   title: string;
@@ -83,7 +82,6 @@ function useRevealed(delay: number): boolean {
  * starts, and the shockwave off a finished line is worth its half second.
  */
 export function revealDelayFor(game: GameState, reason?: EndReason): number {
-  if (prefersReducedMotion()) return 0;
   if (reason && reason !== 'line' && reason !== 'draw') return 0;
   const falling = game.config.variant === 'gravity' ? 450 : 0;
   if (game.winLine) return 1450 + falling;

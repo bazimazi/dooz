@@ -340,6 +340,23 @@ is actually painted on, compositing included.
 Artwork is inline SVG rather than image files: it scales to any display, needs
 no network, and recolours with the theme.
 
+### Animation policy
+
+The game always uses its full animation experience on web, PWA, desktop, and
+mobile. OS/browser reduced-motion settings and legacy saved `reducedMotion`
+values are intentionally ignored. There is no in-game reduced-motion setting.
+
+Future contributions must preserve animation timing, view transitions,
+decorative effects, and result reveal delays regardless of device motion
+settings. Do not add `prefers-reduced-motion` overrides, `motion-reduce` or
+`motion-safe` utilities, motion preference detection, or a reduced-motion
+toggle unless the project owner explicitly changes this policy. Contributor
+instructions also live in [AGENTS.md](AGENTS.md).
+
+`npm run audit:animations --workspace @dooz/web` and
+`npm run audit:experience --workspace @dooz/web` check that full animations
+remain enabled when the browser reports reduced motion.
+
 ## Accessibility
 
 The board is a `role="grid"` of `role="row"`s with a roving tabindex, so it is a
@@ -355,8 +372,8 @@ Overlays that set `aria-modal` honour it: focus moves in and is restored on
 close, Tab wraps inside the panel, and the rest of the page is `inert` for as
 long as the panel is up. Turn and status changes are announced through a live
 region; a clock announces itself only once it is nearly out, because announcing
-every second of both clocks would make the board unusable. Reduced motion is
-honoured, and the page does not block zoom.
+every second of both clocks would make the board unusable. The page does not
+block zoom. Motion follows the [animation policy](#animation-policy) above.
 
 There are tests for the parts a refactor can silently break — the tab stop, the
 arrow keys, the grid structure, the focus trap, and the roles and names of every

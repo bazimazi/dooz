@@ -7,6 +7,16 @@ combines source inspection, browser measurements, automated play scenarios,
 and published research. It does not claim to measure enjoyment or retention
 among actual players.
 
+## Current animation policy
+
+The project owner subsequently directed the game to ignore reduced-motion
+settings completely. Full animations, decorative effects, view transitions,
+and result reveal delays remain enabled on every platform. Legacy saved motion
+preferences are ignored and the in-game motion toggle has been removed.
+The motion recommendation from the original review is superseded by this
+decision. Follow [the README animation policy](../README.md#animation-policy)
+and [AGENTS.md](../AGENTS.md) in future changes.
+
 ## Evidence and scope
 
 Inspected the home screen, onboarding, local and bot play, practice, puzzles,
@@ -56,9 +66,9 @@ tested view, rather than a claim of complete WCAG conformance.
 [Understanding Target Size Minimum](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum)
 
 Xbox's motion guidance recommends options to reduce visual distractions.
-The app's comments described reduced-motion support, but inspection found no
-corresponding CSS implementation. Device preferences and an in-game toggle
-now suppress animation while retaining the final marks and winning line.
+The original review recommended device preference support and an in-game
+toggle. That recommendation has been superseded by the project's current
+animation policy; the game intentionally retains full motion.
 [Xbox Accessibility Guideline 117](https://learn.microsoft.com/en-us/xbox/accessibility/xbox-accessibility-guidelines/117)
 
 Nielsen Norman Group recommends selective confirmation for consequential
@@ -79,7 +89,7 @@ rounds containing moves; empty and completed rounds can restart directly.
 | Result panels covered the board and had no review action.                                                                                    | Inspecting the final position and taking back a finished practice or local move were obstructed. | Allow local and bot results to uncover the board, reopen results, and use existing take-backs.                                                               |
 | Classic is solved by Hard, Expert, and Master, but draws led to an easier-bot offer. Boundary levels also offered ineffective changes.       | A successful defensive result could look like failure.                                           | Explain perfect Classic play, acknowledge a draw against those levels, offer an easier level after losses, and hide offers beyond the available levels.      |
 | Most unusual variant rules had no text reminder under the board.                                                                             | A rule learned earlier could be forgotten during play.                                           | Show concise Misère, Gravity, Ultimate, and Vanish reminders, retaining Vanish's draw countdown.                                                             |
-| Motion support was described in comments but was absent from the stylesheet.                                                                 | Players asking their device to reduce motion still received animated effects.                    | Respect the device setting, persist an optional in-game setting, suppress decorative effects, and remove result animation waits.                             |
+| Motion support was described in comments but was absent from the stylesheet.                                                                 | Players asking their device to reduce motion still received animated effects.                    | Superseded by the owner's animation policy: ignore motion preferences, retain full effects and result waits, and remove the motion toggle.                   |
 | Journey opacity reduced locked-stage and rival text contrast in both themes. The browser audit reported 88 contrast findings on that screen. | Future goals and unlock instructions became harder to read.                                      | Keep text at full opacity and retain lock icons and subdued avatar artwork.                                                                                  |
 | Profile caches were copied to state after rendering.                                                                                         | Reopening a profile could briefly display empty activity.                                        | Derive fallback activity from the current account's cache during render; keep fetched data associated with its credentials.                                  |
 
@@ -155,11 +165,13 @@ on slower connections before deciding on further performance work.
 Unit and interaction tests cover accepting tutorial openings, retaining the
 win and block lessons, accessible hint meanings, enlarged-board input,
 restart cancellation and focus restoration, finished-board review and
-take-backs, and motion preference migration and application.
+take-backs, and the full-animation policy, including ignoring legacy motion
+preferences while retaining other saved settings.
 
 `npm run audit:experience --workspace @dooz/web` runs real-browser checks for
 those flows, bot cancellation, 36-pixel enlarged cells, page overflow,
-keyboard access, both themes, and visible win lines under reduced motion.
+keyboard access, both themes, and full animation timing and visible win lines
+regardless of system or legacy saved motion preferences.
 Screenshots are written to the ignored `src/apps/web/build/player-experience`
 directory. The existing accessibility audit now waits for the rendered app
 instead of network silence, so retries from an unavailable server cannot

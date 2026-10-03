@@ -1,30 +1,34 @@
 import { createGame } from '@dooz/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { revealDelayFor } from '@/components/game/ResultModal';
-import { applyMotion, loadPreferences, prefersReducedMotion, savePreferences } from './preferences';
+import { loadPreferences, savePreferences } from './preferences';
 
 afterEach(() => {
-  applyMotion(false);
   vi.restoreAllMocks();
 });
 
-describe('motion preferences', () => {
-  it('migrates older preferences and ignores malformed values', () => {
-    localStorage.setItem('dooz.preferences', JSON.stringify({ reducedMotion: 'yes' }));
-    expect(loadPreferences().reducedMotion).toBe(false);
+describe('animation policy', () => {
+  it.each([true, false, 'yes'])('ignores the legacy reducedMotion value %s', (reducedMotion) => {
+    localStorage.setItem(
+      'dooz.preferences',
+      JSON.stringify({ reducedMotion, hints: true, volume: 0.4 }),
+    );
+    expect(loadPreferences()).not.toHaveProperty('reducedMotion');
+    expect(loadPreferences()).toMatchObject({ hints: true, volume: 0.4 });
+
+    savePreferences({ sound: false });
+    expect(JSON.parse(localStorage.getItem('dooz.preferences')!)).not.toHaveProperty(
+      'reducedMotion',
+    );
+    expect(loadPreferences()).toMatchObject({ hints: true, volume: 0.4, sound: false });
   });
-  it('persists a motion setting and applies it immediately', () => {
-    savePreferences({ reducedMotion: true });
-    expect(loadPreferences().reducedMotion).toBe(true);
-    expect(prefersReducedMotion()).toBe(true);
-    expect(revealDelayFor(createGame(3))).toBe(0);
-    savePreferences({ reducedMotion: false });
-    expect(prefersReducedMotion()).toBe(false);
-  });
-  it('respects the device preference even when the in-game toggle is off', () => {
-    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList);
-    applyMotion(false);
-    expect(prefersReducedMotion()).toBe(true);
-    expect(revealDelayFor(createGame(3))).toBe(0);
-  });
+  it.each([true, false])(
+    'keeps result timing when the device motion preference is %s',
+    (matches) => {
+      const media = vi.spyOn(window, 'matchMedia').mockReturnValue({ matches } as MediaQueryList);
+      expect(revealDelayFor(createGame(3))).toBe(700);
+      expect(revealDelayFor(createGame(3), 'resign')).toBe(0);
+      expect(media).not.toHaveBeenCalled();
+    },
+  );
 });

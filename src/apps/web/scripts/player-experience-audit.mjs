@@ -65,7 +65,7 @@ try {
   // First-time teaching must accept exactly what its instructions promise.
   {
     const { context, page } = await open('/', {
-      preferences: { onboarded: false, reducedMotion: true },
+      preferences: { onboarded: false },
     });
     await page.getByRole('gridcell', { name: 'row 1, column 1, empty' }).click();
     assert.equal(await page.getByRole('button', { name: 'Next', exact: true }).isEnabled(), true);
@@ -88,7 +88,6 @@ try {
         width,
         height,
         theme,
-        preferences: { reducedMotion: true },
       });
       await page.getByRole('button', { name: 'Enlarge board', exact: true }).click();
       const bounds = await page.locator('[data-cell="0"]').boundingBox();
@@ -115,9 +114,7 @@ try {
 
   // Reset protection, review, focus restoration and take-backs on a real board.
   {
-    const { context, page } = await open('/play/local?mode=classic', {
-      preferences: { reducedMotion: true },
-    });
+    const { context, page } = await open('/play/local?mode=classic');
     await page.locator('[data-cell="0"]').click();
     await page.getByRole('button', { name: 'New game', exact: true }).click();
     await page.getByRole('dialog', { name: 'Start a new round?' }).waitFor();
@@ -153,7 +150,6 @@ try {
   // A difficulty prompt pauses the worker; cancelling it resumes the same turn.
   {
     const { context, page } = await open('/play/bot?mode=classic&difficulty=beginner', {
-      preferences: { reducedMotion: true },
       saved: {
         'dooz.game:bot:classic:beginner:false': {
           config: { variant: 'classic', size: 3, winLength: 3 },
@@ -186,7 +182,7 @@ try {
   // Entering practice from a bot result also enables its teaching tools.
   {
     const { context, page } = await open('/play/bot?mode=classic&difficulty=expert', {
-      preferences: { reducedMotion: true, hints: false },
+      preferences: { hints: false },
       saved: {
         'dooz.game:bot:classic:expert:false': {
           config: { variant: 'classic', size: 3, winLength: 3 },
@@ -206,7 +202,7 @@ try {
   // Win and block cues expose words and different shapes as well as colours.
   {
     const { context, page } = await open('/play/local?mode=classic', {
-      preferences: { hints: true, reducedMotion: true },
+      preferences: { hints: true },
       saved: {
         'dooz.game:local:classic': {
           config: { variant: 'classic', size: 3, winLength: 3 },
@@ -221,53 +217,52 @@ try {
     await context.close();
   }
 
-  // Device and in-game motion preferences both suppress CSS motion.
-  for (const useSystem of [true, false]) {
-    const { context, page } = await open('/play/local?mode=classic', {
-      reducedMotion: useSystem ? 'reduce' : 'no-preference',
-      preferences: { reducedMotion: !useSystem },
-    });
-    const durations = await page.locator('main').evaluate((element) => ({
-      animation: getComputedStyle(element).animationDuration,
-      delay: getComputedStyle(element).animationDelay,
-    }));
-    assert(parseFloat(durations.animation) <= 0.001 && parseFloat(durations.delay) === 0);
-    for (const index of [0, 3, 1, 4, 2]) await page.locator(`[data-cell="${index}"]`).click();
-    await page.getByRole('button', { name: 'Review board', exact: true }).click();
-    assert.equal(
-      await page
-        .locator('svg line')
-        .last()
-        .evaluate((line) => Number.parseFloat(getComputedStyle(line).strokeDashoffset)),
-      0,
-      'reduced motion hid the winning line',
-    );
-    await context.close();
+  // Project policy: device and legacy saved motion preferences have no effect.
+  for (const systemMotion of ['reduce', 'no-preference']) {
+    for (const legacyMotion of [true, false]) {
+      const { context, page } = await open('/play/local?mode=classic', {
+        reducedMotion: systemMotion,
+        preferences: { reducedMotion: legacyMotion },
+      });
+      const duration = await page
+        .locator('main')
+        .evaluate((element) => parseFloat(getComputedStyle(element).animationDuration));
+      assert(duration >= 0.5, 'motion preference shortened the board entrance');
+      for (const index of [0, 3, 1, 4, 2]) await page.locator(`[data-cell="${index}"]`).click();
+      assert.equal(await page.getByRole('dialog').count(), 0, 'result skipped its animation delay');
+      await page.getByRole('button', { name: 'Review board', exact: true }).click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      assert.equal(
+        await page
+          .locator('svg line')
+          .last()
+          .evaluate((line) => Number.parseFloat(getComputedStyle(line).strokeDashoffset)),
+        0,
+        'winning line did not finish drawing',
+      );
+      await context.close();
+    }
   }
 
-  // The optional setting takes effect at once, survives reload, and can be disabled.
+  // The removed toggle stays absent and old saved values are discarded on save.
   {
-    const { context, page } = await open('/');
+    const { context, page } = await open('/', {
+      reducedMotion: 'reduce',
+      preferences: { reducedMotion: true },
+    });
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('switch', { name: 'Reduce motion', exact: true }).click();
+    assert.equal(await page.getByRole('switch', { name: 'Reduce motion', exact: true }).count(), 0);
+    await page.getByRole('switch', { name: 'Sound effects', exact: true }).click();
     assert.equal(
-      await page.evaluate(() => document.documentElement.hasAttribute('data-reduced-motion')),
-      true,
-    );
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Settings', exact: true }).waitFor();
-    assert.equal(
-      await page.evaluate(() => document.documentElement.hasAttribute('data-reduced-motion')),
-      true,
-    );
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('switch', { name: 'Reduce motion', exact: true }).click();
-    assert.equal(
-      await page.evaluate(() => document.documentElement.hasAttribute('data-reduced-motion')),
+      await page.evaluate(() =>
+        Object.hasOwn(JSON.parse(localStorage.getItem('dooz.preferences')), 'reducedMotion'),
+      ),
       false,
     );
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Settings', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    assert.equal(await page.getByRole('switch', { name: 'Reduce motion', exact: true }).count(), 0);
     assert.equal(
       await page.evaluate(() => document.documentElement.hasAttribute('data-reduced-motion')),
       false,
@@ -277,7 +272,7 @@ try {
 
   assert.deepEqual(errors, [], 'runtime browser errors');
   console.log(
-    'Player experience audit passed: teaching, touch targets, keyboard, recovery, bot cancellation, hints and motion.',
+    'Player experience audit passed: teaching, touch targets, keyboard, recovery, bot cancellation, hints and full-animation policy.',
   );
 } finally {
   await browser.close();

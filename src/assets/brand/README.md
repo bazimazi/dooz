@@ -5,6 +5,12 @@ The larger mark adds restrained shading; the favicon is an optical reduction
 without shadows so it stays readable at 16 pixels. Game pieces and animated
 in-app illustrations remain theme-aware SVG components.
 
+Animated in-app artwork follows the project's
+[animation policy](../../../README.md#animation-policy): keep full animation
+timing and effects enabled regardless of OS/browser reduced-motion settings
+or legacy saved preferences. Do not add motion-based alternatives or suppression
+unless the project owner changes that policy.
+
 ## Sources and exports
 
 | Asset            | Location / size                                                  | Use                                                            |

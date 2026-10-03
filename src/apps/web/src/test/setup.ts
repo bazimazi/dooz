@@ -5,8 +5,8 @@ import { afterEach, beforeEach } from 'vitest';
 /**
  * jsdom stops short of a few things the app leans on.
  *
- * `matchMedia` is used to honour the reduced-motion preference, `inert` is how
- * the modal overlays take the rest of the page out of the tab order, and
+ * `matchMedia` lets tests emulate device settings; `inert` is how the modal
+ * overlays take the rest of the page out of the tab order, and
  * `scrollIntoView` is how the tab strips bring the selected tab into view.
  * None of them exist in jsdom, so they are filled in once here rather than
  * guarded at each call site - the app should not carry test-only branches.
