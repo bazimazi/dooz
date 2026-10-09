@@ -42,7 +42,8 @@
     "audit:experience": "node scripts/player-experience-audit.mjs",
     "audit:offline": "node scripts/offline-audit.mjs",
     "audit:home-music": "node scripts/home-music-audit.mjs",
-    "audit:sheet-back": "node scripts/sheet-back-audit.mjs"
+    "audit:sheet-back": "node scripts/sheet-back-audit.mjs",
+    "audit:navigation": "node scripts/navigation-audit.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

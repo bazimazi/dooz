@@ -1,5 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { GAME_MODES, modeById, type ModeId } from '@/game/engine';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { BackIcon, BotIcon } from '@/components/art/icons';
 import { BulbIcon, TargetIcon, TrophyIcon } from '@/components/art/ui-icons';
@@ -21,14 +22,14 @@ import { OnboardingSheet } from './OnboardingSheet';
  */
 export function LearnScreen({ mode }: { mode: ModeId }) {
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<ModeId>(mode);
+  const selected = mode;
   const [tutorial, setTutorial] = useState(false);
   const detail = modeById(selected);
 
   return (
     <Screen width="wide" scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-4">
-        <IconButton as={Link} to="/" tone="bare" size="small" label="Back to home">
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
           <BackIcon />
         </IconButton>
         <h1 className="font-display text-xl">How to play</h1>
@@ -60,7 +61,15 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
         <Tabs
           label="Mode"
           value={selected}
-          onChange={setSelected}
+          onChange={(next) =>
+            void navigate({
+              to: '/learn',
+              search: { mode: next },
+              replace: true,
+              viewTransition: false,
+              resetScroll: false,
+            })
+          }
           options={GAME_MODES.map((entry) => ({ value: entry.id, label: entry.name }))}
         />
 

@@ -1,5 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
+import { useNavigate } from '@tanstack/react-router';
 import { RANKED_MODES, type ModeId } from '@/game/engine';
-import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BackIcon } from '@/components/art/icons';
@@ -15,7 +16,8 @@ import { cx } from '@/lib/cx';
 import { winRate } from '@/lib/format';
 
 export function LeaderboardScreen({ mode }: { mode: ModeId }) {
-  const [selected, setSelected] = useState<ModeId>(mode);
+  const navigate = useNavigate();
+  const selected = mode;
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const me = useAccountStore((state) => state.profile);
@@ -46,7 +48,7 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
   return (
     <Screen width="wide" scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-4">
-        <IconButton as={Link} to="/" tone="bare" size="small" label="Back to home">
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
           <BackIcon />
         </IconButton>
         <h1 className="font-display text-xl">Leaderboard</h1>
@@ -55,7 +57,15 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
       <Tabs
         label="Leaderboard mode"
         value={selected}
-        onChange={setSelected}
+        onChange={(next) =>
+          void navigate({
+            to: '/leaderboard',
+            search: { mode: next },
+            replace: true,
+            viewTransition: false,
+            resetScroll: false,
+          })
+        }
         options={RANKED_MODES.map((entry) => ({ value: entry.id, label: entry.name }))}
         className="mb-3"
       />
@@ -79,7 +89,7 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
             title="Nobody has qualified yet"
             body={`Play ${data.placementGames} ranked matches in this mode to appear here.`}
             action={
-              <Button as={Link} to="/" size="small" className="w-auto px-4">
+              <Button as={ReturnLink} to="/" size="small" className="w-auto px-4">
                 Play a ranked match
               </Button>
             }

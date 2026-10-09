@@ -36,8 +36,17 @@ export function Tabs<T extends string>({
     // Queried by value rather than by `aria-selected`, so the effect actually
     // reads the thing it depends on - and so it cannot pick up a stale
     // selection from the render before this one.
-    const selected = stripRef.current?.querySelector<HTMLElement>(`[data-tab="${value}"]`);
-    selected?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    const strip = stripRef.current;
+    const selected = strip?.querySelector<HTMLElement>(`[data-tab="${value}"]`);
+    if (!strip || !selected) return;
+    const bounds = strip.getBoundingClientRect();
+    const tab = selected.getBoundingClientRect();
+    // scrollIntoView also moves the whole page. Returning to a long puzzle
+    // list must keep its restored position while centering the filter tab.
+    strip.scrollTo({
+      left: strip.scrollLeft + tab.left - bounds.left - (bounds.width - tab.width) / 2,
+      behavior: 'smooth',
+    });
   }, [value]);
 
   /**

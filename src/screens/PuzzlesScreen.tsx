@@ -1,6 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { modeById } from '@/game/engine';
-import { Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { BackIcon, CheckIcon } from '@/components/art/icons';
 import { SparkIcon, TargetIcon } from '@/components/art/ui-icons';
 import { MiniBoard } from '@/game/components/MiniBoard';
@@ -30,10 +30,10 @@ type Filter = 'all' | '1' | '2' | '3';
  * worth replaying, and a list that shrinks as you use it feels like it is
  * running out.
  */
-export function PuzzlesScreen() {
+export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
+  const navigate = useNavigate();
   const solved = useProgressStore((state) => state.puzzles);
   const daily = useProgressStore((state) => state.daily);
-  const [filter, setFilter] = useState<Filter>('all');
 
   const today = dayNumber();
   const todays = dailyPuzzle(today);
@@ -45,7 +45,7 @@ export function PuzzlesScreen() {
   return (
     <Screen width="wide" scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-4">
-        <IconButton as={Link} to="/" tone="bare" size="small" label="Back to home">
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
           <BackIcon />
         </IconButton>
         <h1 className="font-display text-xl">Puzzles</h1>
@@ -103,7 +103,15 @@ export function PuzzlesScreen() {
           <Tabs<Filter>
             label="Difficulty"
             value={filter}
-            onChange={setFilter}
+            onChange={(next) =>
+              void navigate({
+                to: '/puzzles',
+                search: { tier: next === 'all' ? undefined : next },
+                replace: true,
+                viewTransition: false,
+                resetScroll: false,
+              })
+            }
             options={[
               { value: 'all', label: 'All' },
               { value: '1', label: TIER_NAMES[1] },

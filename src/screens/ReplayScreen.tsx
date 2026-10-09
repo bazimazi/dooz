@@ -1,6 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { describeConfig, type GameState, X } from '@/game/engine';
 import type { Avatar, MatchRecord } from '@/protocol';
-import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BackIcon, ShareIcon } from '@/components/art/icons';
@@ -88,7 +88,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
             title="Match not found"
             body={error}
             action={
-              <Button as={Link} to="/profile" size="small" className="w-auto px-4">
+              <Button as={ReturnLink} to="/profile" size="small" className="w-auto px-4">
                 Your matches
               </Button>
             }
@@ -245,7 +245,13 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
 function Header() {
   return (
     <header className="flex w-full items-center gap-3 pt-2 pb-3">
-      <IconButton as={Link} to="/profile" tone="bare" size="small" label="Back to your matches">
+      <IconButton
+        as={ReturnLink}
+        to="/profile"
+        tone="bare"
+        size="small"
+        label="Back to your matches"
+      >
         <BackIcon />
       </IconButton>
       <h1 className="font-display text-xl">Replay</h1>

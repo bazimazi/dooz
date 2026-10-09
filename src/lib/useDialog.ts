@@ -1,15 +1,24 @@
 import { type RefObject, useEffect, useRef } from 'react';
-import { useRouter } from '@tanstack/react-router';
+import { type RouterHistory, useRouter } from '@tanstack/react-router';
 import { sfx } from './sound';
-
-declare module '@tanstack/history' {
-  interface HistoryState {
-    __doozSheet?: string;
-  }
-}
+import { registerDialogBackGuard } from './navigation';
 
 const SHEET_STATE = '__doozSheet';
-const sheets: symbol[] = [];
+const sheets = new WeakMap<RouterHistory, Array<() => Promise<void>>>();
+const pendingReleases = new WeakMap<RouterHistory, Promise<void>>();
+const dialogs: symbol[] = [];
+let bodyOverflow = '';
+
+/** Consume the overlay entry before a return action or a same-screen URL edit. */
+export async function consumeDialogHistory(history: RouterHistory): Promise<void> {
+  await pendingReleases.get(history);
+  const stack = sheets.get(history) ?? [];
+  // Each Back must finish before consuming the sheet below it.
+  for (let index = stack.length - 1; index >= 0; index--) {
+    // eslint-disable-next-line no-await-in-loop
+    await stack[index]?.();
+  }
+}
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -46,52 +55,110 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
   useEffect(() => {
     if (!history || !escapeRef.current) return;
     let disposed = false;
-    let release: (() => void) | undefined;
+    let release: (() => Promise<void>) | undefined;
     // StrictMode mounts effects twice. Wait until its first cleanup has run
     // before adding a browser entry, so one sheet always owns one entry.
-    queueMicrotask(() => {
+    void Promise.resolve(pendingReleases.get(history)).then(() => {
       if (disposed) return;
       const token = crypto.randomUUID();
-      const layer = Symbol('sheet');
-      sheets.push(layer);
+      const stack = sheets.get(history) ?? [];
+      sheets.set(history, stack);
       const { href, state } = history.location;
+      history.flush();
       history.push(href, { ...state, [SHEET_STATE]: token }, { ignoreBlocker: true });
       history.flush();
-      const unblock = history.block({
-        enableBeforeUnload: false,
-        blockerFn: ({ action, currentLocation, nextLocation }) => {
-          if (sheets.at(-1) !== layer) return false;
-          const backwards =
-            action === 'BACK' ||
-            (action === 'GO' && nextLocation.state.__TSR_index < currentLocation.state.__TSR_index);
-          if (!backwards) return false;
-          escapeRef.current?.();
-          // The first Back consumes the sheet entry while staying on this
-          // page. Keep rapid or multi-page Back attempts on the page until
-          // the sheet's closing animation finishes.
-          return currentLocation.state[SHEET_STATE] !== token || nextLocation.href !== href;
-        },
-      });
-      release = () => {
-        unblock();
-        sheets.splice(sheets.indexOf(layer), 1);
-        if (history.location.state[SHEET_STATE] === token && history.location.href === href) {
-          // Done, Escape and backdrop dismissal also consume their entry.
-          // Navigation chosen inside the sheet already has a different
-          // entry and must be allowed to continue to its destination.
-          history.back({ ignoreBlocker: true });
+      let restoration: { index: number; done: Promise<void>; resolve: () => void } | undefined;
+      const onPopState = (event: PopStateEvent) => {
+        const nextIndex: unknown = event.state?.['__TSR_index'];
+        if (typeof nextIndex !== 'number') return;
+        if (restoration) {
+          event.stopImmediatePropagation();
+          if (nextIndex === restoration.index) {
+            restoration.resolve();
+            restoration = undefined;
+          }
+          return;
         }
+        const current = history.location;
+        const currentIndex = current.state['__TSR_index'];
+        if (stack.at(-1) !== release || nextIndex >= currentIndex) return;
+        escapeRef.current?.();
+        const nextHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (
+          current.state[SHEET_STATE] === token &&
+          nextIndex === state['__TSR_index'] &&
+          nextHref === href
+        )
+          return;
+
+        // A long-press traversal or a second Back during the exit must not
+        // leave the game. Restore the entire skipped distance before cleanup
+        // consumes the sheet, rather than relying on a one-step rollback.
+        event.stopImmediatePropagation();
+        let resolve!: () => void;
+        const done = new Promise<void>((complete) => {
+          resolve = complete;
+        });
+        restoration = { index: currentIndex, done, resolve };
+        window.history.go(currentIndex - nextIndex);
       };
+      const unregister = registerDialogBackGuard(history, onPopState);
+      const unsubscribe =
+        unregister ??
+        history.subscribe(({ action }) => {
+          if (
+            stack.at(-1) === release &&
+            (action.type === 'BACK' || (action.type === 'GO' && action.index < 0))
+          )
+            escapeRef.current?.();
+        });
+      let released: Promise<void> | undefined;
+      release = () => {
+        if (released) return released;
+        released = (async () => {
+          await restoration?.done;
+          unsubscribe();
+          const index = stack.indexOf(release!);
+          if (index >= 0) stack.splice(index, 1);
+          if (history.location.state[SHEET_STATE] === token && history.location.href === href) {
+            // Done, Escape and backdrop dismissal also consume their entry.
+            // Navigation chosen inside the sheet already has a different
+            // entry and must be allowed to continue to its destination.
+            await new Promise<void>((resolve) => {
+              const stop = history.subscribe(({ action }) => {
+                if (action.type !== 'BACK' && action.type !== 'GO') return;
+                stop();
+                resolve();
+              });
+              history.back({ ignoreBlocker: true });
+            });
+          }
+        })();
+        pendingReleases.set(history, released);
+        void released.then(() => {
+          if (pendingReleases.get(history) === released) pendingReleases.delete(history);
+          return undefined;
+        });
+        return released;
+      };
+      stack.push(release);
+      return undefined;
     });
     return () => {
       disposed = true;
-      release?.();
+      void release?.();
     };
   }, [history]);
 
   useEffect(() => {
     const panel = ref.current;
     if (!panel) return;
+
+    const layer = Symbol('dialog');
+    // Keep touch scrolling inside the overlay, including on short screens.
+    if (dialogs.length === 0) bodyOverflow = document.body.style.overflow;
+    dialogs.push(layer);
+    document.body.style.overflow = 'hidden';
 
     const previous = document.activeElement;
     panel.focus();
@@ -112,7 +179,9 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (dialogs.at(-1) !== layer) return;
       if (event.key === 'Escape') {
+        event.preventDefault();
         escapeRef.current?.();
         return;
       }
@@ -121,9 +190,15 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
       const stops = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)];
       const first = stops[0];
       const last = stops.at(-1);
-      if (!first || !last) return;
+      if (!first || !last) {
+        event.preventDefault();
+        return;
+      }
 
-      if (event.shiftKey && document.activeElement === first) {
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === panel)
+      ) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
@@ -135,8 +210,12 @@ export function useDialog<T extends HTMLElement>(onEscape?: () => void): RefObje
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      dialogs.splice(dialogs.indexOf(layer), 1);
+      if (dialogs.length === 0) document.body.style.overflow = bodyOverflow;
       for (const node of inerted) node.inert = false;
-      if (previous instanceof HTMLElement) previous.focus();
+      if (previous instanceof HTMLElement && previous.isConnected && !previous.closest('[inert]')) {
+        previous.focus({ preventScroll: true });
+      }
     };
   }, []);
 

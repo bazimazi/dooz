@@ -57,7 +57,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         )}
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="flex max-h-[85vh] flex-col gap-5 overflow-y-auto panel-face rounded-t-[1.5rem] bg-surface px-5 py-6 sm:rounded-[1.5rem]">
+        <div className="flex max-h-[85dvh] flex-col gap-5 overflow-y-auto panel-face rounded-t-[1.5rem] bg-surface px-5 py-6 sm:rounded-[1.5rem]">
           <span aria-hidden="true" className="mx-auto h-1 w-10 shrink-0 rounded-full bg-ink/25" />
           <h2 className="text-center font-display text-2xl">Settings</h2>
 

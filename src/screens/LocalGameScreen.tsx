@@ -1,3 +1,4 @@
+import { ReturnLink, useReturnTo } from '@/components/ui/ReturnLink';
 import {
   modeById,
   type ModeId,
@@ -7,7 +8,6 @@ import {
   startingPlayerOf,
   X,
 } from '@/game/engine';
-import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Mark } from '@/components/art/marks';
 import { BulbIcon, UsersIcon } from '@/components/art/ui-icons';
@@ -68,7 +68,7 @@ function loadScore(mode: ModeId): Score {
  * already use and the one that keeps a series close. Draws alternate.
  */
 export function LocalGameScreen({ mode }: LocalGameScreenProps) {
-  const navigate = useNavigate();
+  const returnTo = useReturnTo();
   const avatar = useAccountStore((state) => state.profile?.avatar);
   const config = useMemo(() => modeById(mode).config, [mode]);
   const { game, play, restart, undo, canUndo, round } = useGame(config, {
@@ -153,7 +153,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           right={{ name: names[1], kind: 'local' }}
           centre={
             <div className="flex flex-col items-center gap-1">
-              <ModeChip mode={mode} onClick={() => void navigate({ to: '/', search: undefined })} />
+              <ModeChip mode={mode} onClick={() => void returnTo('/')} />
               <ScoreLine score={score} />
             </div>
           }
@@ -240,7 +240,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
               >
                 New series
               </Button>
-              <Button as={Link} to="/" variant="ghost" size="small" block>
+              <Button as={ReturnLink} to="/" variant="ghost" size="small" block>
                 Back to home
               </Button>
             </>
@@ -368,7 +368,7 @@ function NamesSheet({
         aria-label="Name the players"
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
+          'max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}

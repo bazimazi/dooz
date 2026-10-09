@@ -14,16 +14,22 @@ import { sfx } from './sound';
 export function useClosing(onClose: () => void, duration = 180) {
   const [closing, setClosing] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const started = useRef(false);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const close = useCallback(() => {
-    if (closing) return;
+    if (started.current) return;
+    started.current = true;
     setClosing(true);
     sfx.whoosh(false);
 
-    timer.current = setTimeout(onClose, duration);
-  }, [closing, duration, onClose]);
+    timer.current = setTimeout(() => onCloseRef.current(), duration);
+  }, [duration]);
 
   return { closing, close };
 }

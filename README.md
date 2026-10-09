@@ -280,6 +280,8 @@ npm run format     # prettier
 
 npm run audit:a11y   # contrast and naming, against a real browser
 npm run audit:experience  # teaching, touch, recovery and motion
+npm run audit:sheet-back  # repeated selections and every sheet dismissal method
+npm run audit:navigation  # return paths, settings, scrolling and phone layouts
 ```
 
 The [player experience review](docs/PLAYER_EXPERIENCE_REVIEW.md) records the

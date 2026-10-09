@@ -35,7 +35,7 @@ export function GameResetDialog({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="w-full max-w-80 rounded-panel border border-stroke bg-surface p-6 shadow-lg outline-none"
+        className="max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto rounded-panel border border-stroke bg-surface p-6 shadow-lg outline-none"
       >
         <h2 className="font-display text-xl">{title}</h2>
         <p className="mt-2 text-sm text-ink-muted">{description}</p>

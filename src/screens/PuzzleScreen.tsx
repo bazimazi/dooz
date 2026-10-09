@@ -1,5 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { applyMove, type GameState, modeById, X } from '@/game/engine';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackIcon, RefreshIcon, ShareIcon } from '@/components/art/icons';
 import { Mark } from '@/components/art/marks';
@@ -42,7 +43,7 @@ export function PuzzleScreen({ id, daily = false }: { id: string; daily?: boolea
             title="Puzzle not found"
             body="It may have been replaced in an update."
             action={
-              <Button as={Link} to="/puzzles" size="small" className="w-auto px-4">
+              <Button as={ReturnLink} to="/puzzles" size="small" className="w-auto px-4">
                 All puzzles
               </Button>
             }
@@ -165,7 +166,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
   return (
     <Screen>
       <header className="flex w-full items-center gap-3 pt-2">
-        <IconButton as={Link} to="/puzzles" tone="bare" size="small" label="All puzzles">
+        <IconButton as={ReturnLink} to="/puzzles" tone="bare" size="small" label="All puzzles">
           <BackIcon />
         </IconButton>
         <div className="flex min-w-0 flex-col">
@@ -287,7 +288,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
               <Button variant="ghost" size="small" block onClick={retry}>
                 Play it again
               </Button>
-              <Button as={Link} to="/puzzles" variant="ghost" size="small" block>
+              <Button as={ReturnLink} to="/puzzles" variant="ghost" size="small" block>
                 All puzzles
               </Button>
             </>

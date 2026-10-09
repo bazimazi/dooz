@@ -7,7 +7,7 @@ import {
   RANKED_MODES,
 } from '@/game/engine';
 import { ROOM_CODE_LENGTH } from '@/protocol';
-import { createRootRoute, createRoute, createRouter, Link, Outlet } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
 import { UnlockToast } from '@/game/components/UnlockToast';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
@@ -22,6 +22,8 @@ import { ProfileScreen } from '@/screens/ProfileScreen';
 import { PuzzleScreen } from '@/screens/PuzzleScreen';
 import { PuzzlesScreen } from '@/screens/PuzzlesScreen';
 import { ReplayScreen } from '@/screens/ReplayScreen';
+import { createAppHistory } from '@/lib/navigation';
+import { ReturnLink } from '@/components/ui/ReturnLink';
 
 /**
  * Routes are declared in code rather than generated from the file system.
@@ -173,7 +175,15 @@ const journeyRoute = createRoute({
 const puzzlesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/puzzles',
-  component: PuzzlesScreen,
+  validateSearch: (search: Record<string, unknown>): { tier?: '1' | '2' | '3' } => {
+    const value = search['tier'];
+    const tier = typeof value === 'number' ? String(value) : value;
+    return tier === '1' || tier === '2' || tier === '3' ? { tier } : {};
+  },
+  component: function PuzzlesRoute() {
+    const { tier } = puzzlesRoute.useSearch();
+    return <PuzzlesScreen filter={tier ?? 'all'} />;
+  },
 });
 
 const puzzleRoute = createRoute({
@@ -206,7 +216,7 @@ function NotFound() {
           That link does not point at a screen in this app. It may have been a room that has since
           closed.
         </p>
-        <Button as={Link} to="/" variant="primary">
+        <Button as={ReturnLink} to="/" variant="primary">
           Back to home
         </Button>
       </div>
@@ -234,7 +244,7 @@ function RouteError({ error }: { error: Error }) {
           <Button variant="primary" className="w-auto px-5" onClick={() => location.reload()}>
             Reload
           </Button>
-          <Button as={Link} to="/" variant="ghost" className="w-auto px-5">
+          <Button as={ReturnLink} to="/" variant="ghost" className="w-auto px-5">
             Home
           </Button>
         </div>
@@ -259,8 +269,12 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
+  history: createAppHistory(),
   defaultPreload: 'intent',
-  scrollRestoration: false,
+  scrollRestoration: true,
+  // Sheets and settings replace state on the same page, so scroll belongs to
+  // the URL rather than to the temporary entry's generated history key.
+  getScrollRestorationKey: (location) => location.href,
   // Every navigation goes through the View Transitions API where the browser
   // has it, so a screen change is one continuous move. Browsers without it
   // simply swap as before - the styling for it lives in `theme.css`. Changing a
@@ -276,6 +290,19 @@ export const router = createRouter({
 router.subscribe('onBeforeNavigate', ({ hrefChanged }) => {
   if (!hrefChanged) router.shouldViewTransition = false;
 });
+
+// A quick second navigation may skip an unfinished snapshot. The browser
+// rejects `ready` in that case; the route update still completes normally.
+// Observe the animation promises while leaving update failures to the router.
+router.startViewTransition = (update) => {
+  const animate = router.shouldViewTransition ?? router.options.defaultViewTransition;
+  router.shouldViewTransition = undefined;
+  if (!animate || typeof document.startViewTransition !== 'function') return update();
+  const transition = document.startViewTransition(update);
+  void transition.ready.catch(() => undefined);
+  void transition.finished.catch(() => undefined);
+  return transition.updateCallbackDone;
+};
 
 declare module '@tanstack/react-router' {
   interface Register {

@@ -1,3 +1,4 @@
+import { ReturnLink, useReturnTo } from '@/components/ui/ReturnLink';
 import {
   BOT_DIFFICULTIES,
   type BotDifficulty,
@@ -8,7 +9,7 @@ import {
   startingPlayerOf,
   X,
 } from '@/game/engine';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BulbIcon, SparkIcon, TargetIcon } from '@/components/art/ui-icons';
@@ -44,6 +45,7 @@ import { cx } from '@/lib/cx';
 import { hintsFor } from '@/game/hints';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
 import { sfx } from '@/lib/sound';
+import { consumeDialogHistory } from '@/lib/useDialog';
 
 interface BotGameScreenProps {
   mode: ModeId;
@@ -97,6 +99,8 @@ function BotGame({
   stage?: Stage;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
+  const returnTo = useReturnTo();
   const config = useMemo(() => modeById(mode).config, [mode]);
   const { game, play, restart, undo, canUndo, round } = useGame(config, {
     ...(stage ? { opener: X } : {}),
@@ -175,13 +179,16 @@ function BotGame({
    * `replace` keeps Back pointing at the home screen rather than walking back
    * through every setting the player tried.
    */
-  function goTo(next: { mode?: ModeId; difficulty?: BotDifficulty }) {
+  async function goTo(next: { mode?: ModeId; difficulty?: BotDifficulty }) {
     const search = {
       mode: next.mode ?? mode,
       difficulty: next.difficulty ?? difficulty,
       ...(practice ? { practice: true as const } : {}),
     };
     savePreferences({ mode: search.mode, difficulty: search.difficulty });
+    // A confirmation/result overlay must release its temporary entry before
+    // replacing game settings, or Back would restore the old difficulty.
+    await consumeDialogHistory(router.history);
     return navigate({ to: '/play/bot', search, replace: true, viewTransition: false });
   }
 
@@ -243,7 +250,7 @@ function BotGame({
             stage ? (
               <ModeChip mode={mode} />
             ) : (
-              <ModeChip mode={mode} onClick={() => void navigate({ to: '/' })} />
+              <ModeChip mode={mode} onClick={() => void returnTo('/')} />
             )
           }
           badge={stage ? 'Journey' : practice ? 'Practice' : 'vs Bot'}
@@ -392,7 +399,8 @@ function BotGame({
                     variant="primary"
                     size="small"
                     block
-                    onClick={() =>
+                    onClick={async () => {
+                      await consumeDialogHistory(router.history);
                       void navigate({
                         to: '/play/bot',
                         search: {
@@ -401,8 +409,8 @@ function BotGame({
                           stage: following.id,
                         },
                         replace: true,
-                      })
-                    }
+                      });
+                    }}
                   >
                     Next: {following.rival.name}
                   </Button>
@@ -415,7 +423,7 @@ function BotGame({
                 >
                   {outcome === 'win' ? 'Play again' : 'Try again'}
                 </Button>
-                <Button as={Link} to="/journey" variant="ghost" size="small" block>
+                <Button as={ReturnLink} to="/journey" variant="ghost" size="small" block>
                   Journey map
                 </Button>
               </>
@@ -445,12 +453,14 @@ function BotGame({
                 ) : null}
                 {!practice ? (
                   <Button
-                    onClick={() =>
+                    onClick={async () => {
+                      await consumeDialogHistory(router.history);
                       void navigate({
                         to: '/play/bot',
                         search: { mode, difficulty, practice: true },
-                      })
-                    }
+                        replace: true,
+                      });
+                    }}
                     variant="ghost"
                     size="small"
                     block
@@ -458,7 +468,7 @@ function BotGame({
                     Practice with hints
                   </Button>
                 ) : null}
-                <Button as={Link} to="/" variant="ghost" size="small" block>
+                <Button as={ReturnLink} to="/" variant="ghost" size="small" block>
                   Back to home
                 </Button>
               </>
@@ -482,8 +492,7 @@ function BotGame({
               setPendingChange(null);
               restart();
             } else {
-              // Keep the dialog's history entry until navigation commits;
-              // closing it earlier would send Back over the new settings.
+              // goTo consumes the dialog entry before updating the URL.
               void goTo({ difficulty: change }).then(() => setPendingChange(null));
             }
           }}

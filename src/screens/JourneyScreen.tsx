@@ -1,5 +1,6 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { modeById } from '@/game/engine';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BackIcon } from '@/components/art/icons';
@@ -40,7 +41,7 @@ export function JourneyScreen() {
   return (
     <Screen scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-3">
-        <IconButton as={Link} to="/" tone="bare" size="small" label="Back to home">
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
           <BackIcon />
         </IconButton>
         <h1 className="font-display text-xl">Journey</h1>

@@ -1,3 +1,4 @@
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { AVATARS, type Avatar } from '@/protocol';
 import { describeConfig, GAME_MODES, modeById } from '@/game/engine';
 import { Link } from '@tanstack/react-router';
@@ -204,7 +205,7 @@ export function ProfileScreen() {
               title="No online games yet"
               body="Ratings and per-mode records appear here after your first match."
               action={
-                <Button as={Link} to="/" size="small" className="w-auto px-4">
+                <Button as={ReturnLink} to="/" size="small" className="w-auto px-4">
                   Play a match
                 </Button>
               }
@@ -352,7 +353,7 @@ export function ProfileScreen() {
 function Header() {
   return (
     <header className="flex w-full items-center gap-3 pt-2 pb-4">
-      <IconButton as={Link} to="/" tone="bare" size="small" label="Back to home">
+      <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
         <BackIcon />
       </IconButton>
       <h1 className="font-display text-xl">Profile</h1>

@@ -41,6 +41,8 @@ beforeEach(() => {
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = () => {};
   }
+  window.scrollTo = () => {};
+  if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
 
   sessionStorage.clear();
   localStorage.clear();

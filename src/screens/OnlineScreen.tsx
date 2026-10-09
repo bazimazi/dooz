@@ -1,7 +1,8 @@
+import { ReturnLink, useReturnTo } from '@/components/ui/ReturnLink';
 import { type GameState, modeById, type ModeId, O, type Player, X } from '@/game/engine';
 import type { Avatar, Clock } from '@/protocol';
 import { ROOM_CODE_LENGTH } from '@/protocol';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackIcon,
@@ -34,6 +35,8 @@ import { cx } from '@/lib/cx';
 import { signed } from '@/lib/format';
 import { inviteUrl, shareOrCopy } from '@/lib/invite';
 import { sfx } from '@/lib/sound';
+import { useClosing } from '@/lib/useClosing';
+import { useDialog } from '@/lib/useDialog';
 
 export interface OnlineSearch {
   mode: ModeId;
@@ -47,6 +50,7 @@ export interface OnlineSearch {
 }
 
 export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) {
+  const router = useRouter();
   const store = useOnlineStore();
   const { connect, disconnect } = store;
   const accountStatus = useAccountStore((state) => state.onlineStatus);
@@ -55,6 +59,16 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
   // The intent behind this visit is acted on once, as soon as the socket is
   // ready; re-running it on every render would spam the server.
   const intentSent = useRef(false);
+
+  // An intentional page departure releases the room/queue immediately.
+  // Closing the socket alone would leave an opponent waiting for reconnect.
+  useEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+        if (toLocation.pathname !== '/play/online') useOnlineStore.getState().leave(false);
+      }),
+    [router],
+  );
 
   useEffect(() => {
     void initialise();
@@ -114,8 +128,8 @@ function OnlineFeedback({ game, you }: { game: GameState; you: Player | null }) 
 function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
   const accountError = useAccountStore((state) => state.syncError);
   const retryAccount = useAccountStore((state) => state.ensureOnline);
-  const { phase, reconnecting, error, roomCode, queued, queue, leave } = useOnlineStore();
-  const navigate = useNavigate();
+  const { phase, reconnecting, error, roomCode, queued, queue } = useOnlineStore();
+  const returnTo = useReturnTo();
   const detail = modeById(mode);
 
   const status =
@@ -204,8 +218,7 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
                 tone="solid"
                 label="Back to home"
                 onClick={() => {
-                  leave();
-                  void navigate({ to: '/' });
+                  void returnTo('/');
                 }}
               >
                 <BackIcon />
@@ -342,7 +355,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
     emotes,
     muted,
   } = store;
-  const navigate = useNavigate();
+  const returnTo = useReturnTo();
   const [confirmResign, setConfirmResign] = useState(false);
 
   const dismissEmote = useCallback((id: number) => useOnlineStore.getState().dismissEmote(id), []);
@@ -504,8 +517,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           <IconButton
             label={watching ? 'Stop watching' : finished ? 'Back to home' : 'Leave game'}
             onClick={() => {
-              store.leave();
-              void navigate({ to: '/' });
+              void returnTo('/');
             }}
           >
             <BackIcon />
@@ -597,7 +609,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
                 </Button>
               ) : null}
 
-              <Button as={Link} to="/" size="small" variant="ghost" block>
+              <Button as={ReturnLink} to="/" size="small" variant="ghost" block>
                 Back to home
               </Button>
             </>
@@ -642,13 +654,25 @@ function ConfirmResign({
   onConfirm: () => void;
   ranked: boolean;
 }) {
+  const { closing, close } = useClosing(onCancel);
+  const panelRef = useDialog<HTMLDivElement>(close);
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-scrim p-5">
+    <div
+      className={cx(
+        'fixed inset-0 z-50 flex items-center justify-center bg-scrim p-5',
+        closing ? 'animate-fade-out' : 'animate-fade-in',
+      )}
+    >
       <div
+        ref={panelRef}
         role="alertdialog"
         aria-modal="true"
         aria-label="Resign this game?"
-        className="w-full max-w-72 animate-panel-in rounded-[1.75rem] border border-stroke bg-surface p-5"
+        tabIndex={-1}
+        className={cx(
+          'max-h-[calc(100dvh-2.5rem)] w-full max-w-72 overflow-y-auto rounded-[1.75rem] border border-stroke bg-surface p-5 outline-none',
+          closing ? 'animate-panel-out' : 'animate-panel-in',
+        )}
       >
         <h2 className="font-display text-lg">Resign this game?</h2>
         <p className="mt-1.5 text-sm text-ink-muted">
@@ -657,7 +681,7 @@ function ConfirmResign({
             : 'Your opponent wins the game.'}
         </p>
         <div className="mt-4 flex gap-2">
-          <Button size="small" variant="ghost" block onClick={onCancel}>
+          <Button size="small" variant="ghost" block onClick={close}>
             Keep playing
           </Button>
           <Button size="small" variant="danger" block onClick={onConfirm}>

@@ -78,7 +78,7 @@ interface OnlineState {
   sendEmote: (emote: Emote) => void;
   setMuted: (muted: boolean) => void;
   dismissEmote: (id: number) => void;
-  leave: () => void;
+  leave: (reset?: boolean) => void;
   clearError: () => void;
 }
 
@@ -438,8 +438,9 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     dismissEmote: (id) =>
       set((state) => ({ emotes: state.emotes.filter((entry) => entry.id !== id) })),
 
-    leave: () => {
+    leave: (reset = true) => {
       send({ type: 'leave' });
+      if (!reset) return;
       resetRoom();
       set({ phase: 'idle' });
     },

@@ -119,7 +119,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <div className="flex max-h-[90vh] flex-col gap-3 overflow-y-auto panel-face rounded-[1.5rem] bg-surface px-5 py-5">
+        <div className="flex max-h-[90dvh] flex-col gap-3 overflow-y-auto panel-face rounded-[1.5rem] bg-surface px-5 py-5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs tracking-wide text-ink-faint uppercase">
               Step {step + 1} of {STEPS.length}

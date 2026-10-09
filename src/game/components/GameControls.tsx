@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { ReturnLink } from '@/components/ui/ReturnLink';
 import { type ReactNode, useState } from 'react';
 import { HomeIcon, RefreshIcon } from '@/components/art/icons';
 import { UndoIcon } from '@/components/art/ui-icons';
@@ -61,7 +61,7 @@ export function GameControls({
 
       {extra}
 
-      <IconButton as={Link} to="/" tone={tone} label="Back to home">
+      <IconButton as={ReturnLink} to="/" tone={tone} label="Back to home">
         <span className="block transition-transform duration-200 ease-spring group-hover:-translate-y-0.5">
           <HomeIcon />
         </span>

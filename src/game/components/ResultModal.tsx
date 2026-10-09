@@ -132,7 +132,7 @@ function ResultPanel({
         )}
         style={{ animationDelay: '0.06s' }}
       >
-        <div className="flex max-h-[85vh] flex-col items-center gap-4 overflow-y-auto panel-face rounded-[2rem] bg-surface px-6 py-8">
+        <div className="flex max-h-[85dvh] flex-col items-center gap-4 overflow-y-auto panel-face rounded-[2rem] bg-surface px-6 py-8">
           <div
             className="animate-pop text-[4.5rem] leading-none"
             style={{ animationDelay: '0.22s' }}

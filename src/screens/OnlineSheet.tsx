@@ -55,7 +55,7 @@ export function OnlineSheet({
         aria-label={`Play ${modeName} online`}
         tabIndex={-1}
         className={cx(
-          'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
+          'max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
           'shadow-[0_30px_70px_-30px_var(--color-shadow)]',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
