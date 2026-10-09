@@ -1,6 +1,6 @@
 [package]
 name = "dooz"
-version = "0.2.0"
+version = "0.3.0"
 description = "dooz (Tic Tac Toe) desktop and mobile shell"
 authors = ["msynk"]
 license = "MIT"
