@@ -12,14 +12,14 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 
 ## What it is
 
-| | |
-| --- | --- |
-| **Modes** | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Vanish · Gravity · Ultimate |
-| **Play** | Pass-and-play series with names and a running score · vs AI (6 levels) · practice with hints and engine suggestions · ranked · casual · private rooms · spectating |
-| **Solo** | A journey of six rivals and eighteen stages with star ratings · a pack of proven win-in-N puzzles with a daily puzzle and streaks |
-| **Feel** | Synthesised sound on every move, an optional generative score, haptics, four piece sets to unlock, gravity drops, vanishing marks, win ripples |
-| **Competitive** | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards |
-| **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics |
+|                    |                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Modes**          | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Vanish · Gravity · Ultimate                                                                       |
+| **Play**           | Pass-and-play series with names and a running score · vs AI (6 levels) · practice with hints and engine suggestions · ranked · casual · private rooms · spectating |
+| **Solo**           | A journey of six rivals and eighteen stages with star ratings · a pack of proven win-in-N puzzles with a daily puzzle and streaks                                  |
+| **Feel**           | Synthesised sound on every move, an optional generative score, haptics, four piece sets to unlock, gravity drops, vanishing marks, win ripples                     |
+| **Competitive**    | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards                                                       |
+| **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics                                                                       |
 
 ## Offline use
 
@@ -36,23 +36,23 @@ on the server.
 
 The web app must be loaded online once so its service worker can download the
 game bundle; native builds include that bundle. To verify the production PWA,
-run `npm run build:web`, start `npm run preview --workspace @dooz/web -- --port 4173`,
-then run `npm run audit:offline --workspace @dooz/web` from `src`.
+run `npm run build:web`, start `npm run preview -- --port 4173`,
+then run `npm run audit:offline` from the repository root.
 
 ## The stack, and why
 
 | Layer      | Choice                     | Why this one                                                                                                                                                                     |
 | ---------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language   | TypeScript 7               | The Go-native compiler. Type-checks the whole workspace in well under a second.                                                                                                  |
+| Language   | TypeScript 7               | The Go-native compiler. Checks the frontend, shared game code, server, and build scripts together.                                                                               |
 | UI         | React 19                   | The design is a handful of screens with local state; React's ecosystem is the one everything else here targets.                                                                  |
 | Build      | Vite 8 (Rolldown)          | Rust bundler, sub-second production builds, first-class worker and PWA support.                                                                                                  |
 | Routing    | TanStack Router            | Type-safe routes **and** type-safe search params, which is where the mode, the difficulty and the room code live.                                                                |
 | Styling    | Tailwind CSS v4            | CSS-first `@theme` config, so the palette lives in one file as real CSS variables. Zero runtime.                                                                                 |
 | Shell      | Tauri 2                    | The one toolchain that covers desktop **and** mobile from a web frontend. Binaries are a few MB rather than a bundled browser.                                                   |
-| State      | Zustand                    | Only the connection and the account need cross-screen state; everything else is component state.                                                                                |
-| Server     | Hono + `ws` on Node        | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                 |
+| State      | Zustand                    | Only the connection and the account need cross-screen state; everything else is component state.                                                                                 |
+| Server     | Hono + `ws` on Node        | Small, standards-based, and deployable anywhere that runs Node. No vendor lock.                                                                                                  |
 | Storage    | SQLite (`better-sqlite3`)  | Accounts, ratings, matches and replays outlive a restart. Synchronous API, real transactions, one file to back up.                                                               |
-| Validation | Zod 4                      | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                        |
+| Validation | Zod 4                      | The server treats clients as hostile, so every inbound frame is parsed rather than cast.                                                                                         |
 | Test       | Vitest 4 + Testing Library | Same config format as Vite. The engine and the server run headless; the client runs against jsdom, because its reconnect and keyboard behaviour is not observable without a DOM. |
 | Lint       | oxlint (+ tsgolint)        | Rust linter with type-aware rules built on TypeScript 7. `typescript-eslint` does not yet support TS 7.                                                                          |
 
@@ -63,23 +63,43 @@ screen and would still need a wrapper for desktop.
 
 ## Layout
 
-Everything lives under [`src/`](src/), which is the npm workspace root - every
-command below is run from there.
+Run every npm command from the repository root. This is one Vite app with
+one `package.json`, one TypeScript config, and a sibling `src-tauri/` directory,
+following [Tauri's Vite integration](https://v2.tauri.app/start/frontend/vite/).
 
 ```
-src/
-├── packages/
-│   ├── engine/      rules, variants, and the AI - pure TypeScript, no framework
-│   └── protocol/    the wire format, shared by client and server
-└── apps/
-    ├── web/         the client: React + Vite + Tailwind, and the PWA
-    ├── server/      authoritative multiplayer server
-    └── native/      Tauri shell for desktop and mobile
+dooz/
+├── package.json       dependencies and commands for every target
+├── index.html         Vite entry point
+├── vite.config.ts     web/PWA and Tauri frontend build
+├── src/
+│   ├── main.tsx       React entry point
+│   ├── router.tsx     routes and validated search parameters
+│   ├── game/          game code in one place
+│   │   ├── engine/    pure rules, variants, replay model, and AI search
+│   │   ├── bot/       worker and React hooks for the AI opponent
+│   │   ├── components/ board, players, controls, and result reveal
+│   │   └── useGame.ts local game state; feedback and hints live alongside it
+│   ├── screens/       route screens and their composition
+│   ├── features/      accounts, online play, journey, puzzles, and progress
+│   ├── components/    shared UI and artwork
+│   ├── lib/           preferences, audio, API, and UI utilities
+│   ├── protocol/      validated wire format shared with the server
+│   └── styles/        theme, animations, and fonts
+├── src-tauri/         Rust shell, capabilities, native icons, and mobile projects
+├── server/            authoritative multiplayer server and SQLite storage
+├── public/            static browser/PWA assets
+├── assets/brand/      editable artwork sources
+└── scripts/           browser audits, icon generation, and engine benchmarks
 ```
 
-`engine` is a package rather than a folder inside the client because the server
-runs the identical rules. The client predicts nothing: it sends a cell index and
-renders whatever board comes back.
+Start with `src/router.tsx` to find a screen, `src/game/useGame.ts` for local
+play, and `src/game/engine/index.ts` for the shared game API. Imports beginning
+with `@/` resolve to `src/` in Vite, tests, and the server's `tsx` runner.
+The server imports the same pure rules and protocol directly; separate npm
+packages and generated TypeScript declarations are no longer needed. The online
+client sends a cell index and renders the authoritative board returned by the
+server.
 
 ## The engine
 
@@ -88,8 +108,8 @@ moves played. Everything else is derived.
 
 ```ts
 const game = createGame({ variant: 'gomoku', size: 15, winLength: 5 });
-const next = applyMove(game, 112);        // null if the move is illegal
-replay(game.config, X, next!.moves);      // the same position, rebuilt
+const next = applyMove(game, 112); // null if the move is illegal
+replay(game.config, X, next!.moves); // the same position, rebuilt
 ```
 
 Variants live behind one interface (`create`, `canPlay`, `legalMoves`, `apply`)
@@ -126,7 +146,7 @@ to one engine:
 
 Under that sits an iterative-deepening alpha-beta search with a transposition
 table (Zobrist-hashed, with a second hash verified on lookup), killer moves,
-threat-based move ordering, and a quiescence extension that follows *forced*
+threat-based move ordering, and a quiescence extension that follows _forced_
 replies only. Positions are scored by their win-windows, with open and closed
 threats valued separately — the difference between a three that must be answered
 now and one that is already half dead.
@@ -149,8 +169,8 @@ principle as the search's depth limit. Because draws exist and neither side is
 forced to end one, a game with no line is drawn after fifty plies.
 
 ```bash
-npm run bench --workspace @dooz/engine    # the full strength ladder
-npm run bench:speed --workspace @dooz/engine
+npm run bench    # the full strength ladder
+npm run bench:speed
 ```
 
 ## Playing alone
@@ -163,7 +183,7 @@ npm run bench:speed --workspace @dooz/engine
   talk: a taunt when they make a threat, a worry when you do, read off the same
   exact threat check the hints use.
 - **Puzzles.** A pack of win-in-N positions from real bot games, each one proved
-  by the generator in [`packages/engine/bench/puzzles.ts`](src/packages/engine/bench/puzzles.ts)
+  by the generator in [`scripts/bench/puzzles.ts`](scripts/bench/puzzles.ts)
   against every defence, with a unique solution and the most stubborn defence
   recorded — so the client plays it back without searching. One of them is the
   daily puzzle, the same for everyone on the same day, with a streak for solving
@@ -174,13 +194,13 @@ npm run bench:speed --workspace @dooz/engine
   here is trusted by the server; it is cosmetics and a profile card.
 
 ```bash
-npm run puzzles --workspace @dooz/engine  # regenerate the pack: ~5 minutes, byte-identical every run
+npm run puzzles  # regenerate the pack: ~5 minutes, byte-identical every run
 ```
 
 ## Sound
 
 Every sound is synthesised with the Web Audio API at the moment it plays
-([`apps/web/src/lib/sound.ts`](src/apps/web/src/lib/sound.ts)) — no audio files,
+([`src/lib/sound.ts`](src/lib/sound.ts)) — no audio files,
 for the same reasons the artwork is inline SVG: nothing to download, works
 offline, and it can follow the game. A mark's pitch comes from where it lands,
 higher up the board and further right being higher up a D major pentatonic
@@ -190,7 +210,7 @@ fall, vanish marks leave with a breath of air, and a win climbs to a chord.
 
 The whole palette stays in one pentatonic key, so any two sounds — two marks,
 a win and the music — sit together. The optional ambient score
-([`lib/music.ts`](src/apps/web/src/lib/music.ts)) is generated the same way and
+([`lib/music.ts`](src/lib/music.ts)) is generated the same way and
 never repeats. It is off by default, starts only after a gesture (browsers
 insist), and pauses in the background. Effects, music, volume and vibration are
 separate settings.
@@ -198,7 +218,6 @@ separate settings.
 ## Getting started
 
 ```bash
-cd src
 npm install
 
 npm run dev            # client on http://localhost:3000
@@ -207,8 +226,8 @@ npm run dev:all        # both at once
 ```
 
 Online play needs both. In development the client finds the server on its own;
-for anything else see [`src/apps/web/.env.example`](src/apps/web/.env.example)
-and [`src/apps/server/.env.example`](src/apps/server/.env.example).
+for anything else see [`.env.example`](.env.example)
+and [`server/.env.example`](server/.env.example).
 
 The server creates its SQLite database on first run (`./data/dooz.sqlite` by
 default). It is the only thing that needs to persist between deploys.
@@ -219,12 +238,12 @@ These need a [Rust toolchain](https://rustup.rs); everything else does not.
 
 ```bash
 npm run dev:desktop    # Windows, macOS or Linux window
-npm run build:desktop  # installers in apps/native/src-tauri/target/release/bundle
+npm run build:desktop  # installers in src-tauri/target/release/bundle
 
-npm run init:android   # scaffolds src/apps/native/src-tauri/gen/android
+npm run init:android   # scaffolds src-tauri/gen/android
 npm run dev:android    # needs Android Studio + NDK
 
-npm run init:ios       # scaffolds src/apps/native/src-tauri/gen/apple
+npm run init:ios       # scaffolds src-tauri/gen/apple
 npm run dev:ios        # macOS + Xcode only
 ```
 
@@ -238,14 +257,14 @@ The mobile and desktop builds **must** be given `VITE_SERVER_URL`: they are
 served from `tauri://localhost` and have no origin to infer a server from. The
 webview's content security policy is a static file rather than an environment
 variable, so
-[`src/apps/native/src-tauri/tauri.conf.json`](src/apps/native/src-tauri/tauri.conf.json)
+[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json)
 has to point at the same server.
 
 ### Game artwork
 
-The [brand asset guide](src/assets/brand/README.md) lists the editable sources,
+The [brand asset guide](assets/brand/README.md) lists the editable sources,
 web/PWA icons, native launcher sets, and promotional images. Run `npm run icons`
-from `src/` to regenerate the entire set and refresh scaffolded mobile projects.
+from the repository root to regenerate the entire set and refresh scaffolded mobile projects.
 The icon colors match the game's pink X, amber O, and indigo canvas.
 
 Set `VITE_PUBLIC_URL` to the deployed web app address when building for the web
@@ -255,12 +274,12 @@ so social cards use absolute image URLs.
 
 ```bash
 npm test           # rules, invariants, AI strength, server, protocol, client
-npm run typecheck  # whole workspace
+npm run typecheck  # all TypeScript source
 npm run lint       # oxlint, type-aware
 npm run format     # prettier
 
-npm run audit:a11y --workspace @dooz/web   # contrast and naming, against a real browser
-npm run audit:experience --workspace @dooz/web  # teaching, touch, recovery and motion
+npm run audit:a11y   # contrast and naming, against a real browser
+npm run audit:experience  # teaching, touch, recovery and motion
 ```
 
 The [player experience review](docs/PLAYER_EXPERIENCE_REVIEW.md) records the
@@ -328,7 +347,7 @@ Nothing. Beyond the rules above:
 
 The palette comes from the
 [Figma file](https://www.figma.com/file/qrujFLqQzWtczHCh8G0FQF) and lives in
-[`src/apps/web/src/styles/theme.css`](src/apps/web/src/styles/theme.css) under
+[`src/styles/theme.css`](src/styles/theme.css) under
 the same names it has there (`b1`–`b10`, `g1`–`g10`, `p1`–`p3`, `y1`–`y3`).
 
 Components never reach for those directly. They use the semantic layer above
@@ -353,8 +372,8 @@ settings. Do not add `prefers-reduced-motion` overrides, `motion-reduce` or
 toggle unless the project owner explicitly changes this policy. Contributor
 instructions also live in [AGENTS.md](AGENTS.md).
 
-`npm run audit:animations --workspace @dooz/web` and
-`npm run audit:experience --workspace @dooz/web` check that full animations
+`npm run audit:animations` and
+`npm run audit:experience` check that full animations
 remain enabled when the browser reports reduced motion.
 
 ## Accessibility
@@ -379,7 +398,7 @@ There are tests for the parts a refactor can silently break — the tab stop, th
 arrow keys, the grid structure, the focus trap, and the roles and names of every
 composite control. Contrast, target size and "is every control named" need
 layout and colour, so they are checked against a real browser by
-`npm run audit:a11y --workspace @dooz/web`.
+`npm run audit:a11y`.
 
 ## The earlier versions
 

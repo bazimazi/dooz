@@ -10,10 +10,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    working-directory: src
-
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -24,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: src/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - run: npm ci
 
@@ -41,4 +37,4 @@ jobs:
         run: npm test
 
       - name: Build
-        run: npm run build:web
+        run: npm run build

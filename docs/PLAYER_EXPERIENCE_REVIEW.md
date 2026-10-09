@@ -168,11 +168,11 @@ restart cancellation and focus restoration, finished-board review and
 take-backs, and the full-animation policy, including ignoring legacy motion
 preferences while retaining other saved settings.
 
-`npm run audit:experience --workspace @dooz/web` runs real-browser checks for
+`npm run audit:experience` runs real-browser checks for
 those flows, bot cancellation, 36-pixel enlarged cells, page overflow,
 keyboard access, both themes, and full animation timing and visible win lines
 regardless of system or legacy saved motion preferences.
-Screenshots are written to the ignored `src/apps/web/build/player-experience`
+Screenshots are written to the ignored `build/player-experience`
 directory. The existing accessibility audit now waits for the rendered app
 instead of network silence, so retries from an unavailable server cannot
 prevent the audit from running.
