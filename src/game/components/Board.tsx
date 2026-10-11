@@ -25,6 +25,7 @@ import {
 } from 'react';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { useGraphics } from '@/lib/graphics';
 import { haptics, sfx } from '@/lib/sound';
 import { UltimateOverlay } from './UltimateOverlay';
 import { WinLine } from './WinLine';
@@ -79,7 +80,7 @@ function dropTime(rows: number): number {
   return 0.22 + Math.sqrt(rows) * 0.13;
 }
 
-export function Board({
+export const Board = memo(function Board({
   game,
   onPlay,
   disabled = false,
@@ -87,6 +88,7 @@ export function Board({
   hints,
   readOnly = false,
 }: BoardProps) {
+  const graphics = useGraphics();
   const { board, winLine, status, config } = game;
   const { size } = config;
   const gravity = config.variant === 'gravity';
@@ -148,7 +150,7 @@ export function Board({
 
   // The wave that crosses the board from a win: each square's delay is its
   // distance from the middle of the line (or of the three winning boards).
-  const ripple = useMemo(() => rippleDelays(game), [game]);
+  const ripple = useMemo(() => (graphics === 'high' ? rippleDelays(game) : null), [game, graphics]);
 
   const hintFor = useMemo(() => {
     const map = new Map<number, BoardHint['kind']>();
@@ -280,14 +282,18 @@ export function Board({
                       col={col}
                       size={size}
                       cell={board[index] ?? Empty}
-                      currentPlayer={game.currentPlayer}
+                      currentPlayer={
+                        board[index] === Empty ? game.currentPlayer : (board[index]! as Player)
+                      }
                       target={canPlay ? target : null}
                       interactive={interactive}
                       isLastMove={game.lastMove === index}
                       tabStop={index === focus}
                       winOrder={winOrder.get(index)}
                       hint={hintFor.get(index)}
-                      animate={animate || game.lastMove === index}
+                      animate={graphics !== 'low' && (animate || game.lastMove === index)}
+                      effects={graphics === 'high'}
+                      motion={graphics !== 'low'}
                       gravity={gravity}
                       columnLit={gravity && interactive && hoverCol === col && drop >= 0}
                       preview={gravity ? interactive && hoverCol === col && drop === index : true}
@@ -298,7 +304,7 @@ export function Board({
                             ? 'waiting'
                             : null
                       }
-                      ghost={lifted === index ? ghostOf(game) : null}
+                      ghost={graphics !== 'low' && lifted === index ? ghostOf(game) : null}
                       ghostKey={lifted === index ? game.moves.length : 0}
                       ripple={ripple?.get(index)}
                       rippleColour={glow}
@@ -321,7 +327,7 @@ export function Board({
             ))}
           </div>
 
-          {status === 'won' ? (
+          {status === 'won' && graphics === 'high' ? (
             <span
               aria-hidden="true"
               className="victory-burst pointer-events-none absolute inset-0"
@@ -344,7 +350,7 @@ export function Board({
       </div>
     </div>
   );
-}
+});
 
 /** The mark that just left a vanish board: the one the last mover owned. */
 function ghostOf(game: GameState): Player | null {
@@ -404,6 +410,8 @@ interface BoardCellProps {
   winOrder: number | undefined;
   hint: BoardHint['kind'] | undefined;
   animate: boolean;
+  effects: boolean;
+  motion: boolean;
   gravity: boolean;
   /** Gravity: this square's column is under the pointer. */
   columnLit: boolean;
@@ -464,6 +472,8 @@ const BoardCell = memo(function BoardCell({
   winOrder,
   hint,
   animate,
+  effects,
+  motion,
   gravity,
   columnLit,
   preview,
@@ -478,6 +488,11 @@ const BoardCell = memo(function BoardCell({
   onPlay,
 }: BoardCellProps) {
   const [rejected, setRejected] = useState(false);
+  const [previousMotion, setPreviousMotion] = useState(motion);
+  if (motion !== previousMotion) {
+    setPreviousMotion(motion);
+    setRejected(false);
+  }
   const big = size > 9;
   const playable = target !== null;
   const soft = cell === X ? 'var(--color-mark-x-soft)' : 'var(--color-mark-o-soft)';
@@ -510,7 +525,7 @@ const BoardCell = memo(function BoardCell({
         else if (interactive) {
           // Refused, but heard: a tap that does nothing silently reads as a
           // tap the game missed.
-          setRejected(true);
+          if (motion) setRejected(true);
           sfx.invalid();
           haptics.buzz([10, 30, 10]);
         }
@@ -546,7 +561,7 @@ const BoardCell = memo(function BoardCell({
           {/* The ring that expands out from under a piece as it lands. It only
               ever plays once, on mount, and not at all on a board big enough
               for the cost to show. */}
-          {animate ? (
+          {animate && effects ? (
             <span
               aria-hidden="true"
               className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
@@ -554,7 +569,7 @@ const BoardCell = memo(function BoardCell({
             />
           ) : null}
 
-          {isLastMove && animate ? (
+          {isLastMove && animate && effects ? (
             <span
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 animate-cell-impact"
@@ -587,7 +602,7 @@ const BoardCell = memo(function BoardCell({
               )}
               style={winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : undefined}
             >
-              {animate && !gravity ? (
+              {animate && effects && !gravity ? (
                 <svg
                   viewBox="0 0 100 100"
                   aria-hidden="true"
@@ -629,7 +644,7 @@ const BoardCell = memo(function BoardCell({
           ) : null}
 
           {/* Sparks thrown off the mark that just landed. */}
-          {isLastMove && animate ? (
+          {isLastMove && animate && effects ? (
             <span aria-hidden="true" className="pointer-events-none absolute inset-0">
               {SPARKS.map((spark, at) => (
                 <span
@@ -658,7 +673,7 @@ const BoardCell = memo(function BoardCell({
             <span
               aria-hidden="true"
               className={cx(
-                'pointer-events-none absolute rounded-full ring-2 ring-g10/70',
+                'last-move-ring pointer-events-none absolute rounded-full ring-2 ring-g10/70',
                 big ? 'inset-[6%]' : 'inset-[10%]',
               )}
               style={falling ? { animation: `fade-in 0.2s ${landedAt}s both` } : undefined}

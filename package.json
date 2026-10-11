@@ -39,11 +39,13 @@
     "puzzles": "tsx scripts/bench/puzzles.ts",
     "audit:a11y": "node scripts/a11y-audit.mjs",
     "audit:animations": "node scripts/animation-audit.mjs",
+    "audit:graphics": "node scripts/graphics-audit.mjs",
     "audit:experience": "node scripts/player-experience-audit.mjs",
     "audit:offline": "node scripts/offline-audit.mjs",
     "audit:home-music": "node scripts/home-music-audit.mjs",
     "audit:sheet-back": "node scripts/sheet-back-audit.mjs",
-    "audit:navigation": "node scripts/navigation-audit.mjs"
+    "audit:navigation": "node scripts/navigation-audit.mjs",
+    "audit:performance": "node scripts/performance-audit.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

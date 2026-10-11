@@ -1,5 +1,6 @@
 import { type Player, type WinLine as WinLineCells, X } from '@/game/engine';
 import { type CSSProperties, useId } from 'react';
+import { useGraphics } from '@/lib/graphics';
 
 interface WinLineProps {
   line: WinLineCells;
@@ -24,6 +25,7 @@ interface WinLineProps {
  * two rings pulse out from its middle, which is the moment the win lands.
  */
 export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
+  const quality = useGraphics();
   const filterId = `dooz-win-glow-${useId().replace(/:/g, '')}`;
   const first = line[0];
   const last = line[line.length - 1];
@@ -51,7 +53,7 @@ export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
         </filter>
       </defs>
 
-      {[0, 0.16].map((stagger) => (
+      {(quality === 'high' ? [0, 0.16] : []).map((stagger) => (
         <circle
           key={stagger}
           cx={middle.x}
@@ -69,39 +71,43 @@ export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
         />
       ))}
 
-      <circle
-        cx={from.x}
-        cy={from.y}
-        r={0.11 * Math.max(1, size / 8)}
-        fill={colour}
-        style={
-          {
-            '--travel-x': `${to.x - from.x}px`,
-            '--travel-y': `${to.y - from.y}px`,
-            transformOrigin: `${from.x}px ${from.y}px`,
-            animation: `win-tip 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) both`,
-          } as CSSProperties
-        }
-      />
+      {quality === 'high' ? (
+        <circle
+          cx={from.x}
+          cy={from.y}
+          r={0.11 * Math.max(1, size / 8)}
+          fill={colour}
+          style={
+            {
+              '--travel-x': `${to.x - from.x}px`,
+              '--travel-y': `${to.y - from.y}px`,
+              transformOrigin: `${from.x}px ${from.y}px`,
+              animation: `win-tip 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) both`,
+            } as CSSProperties
+          }
+        />
+      ) : null}
 
-      <line
-        x1={from.x}
-        y1={from.y}
-        x2={to.x}
-        y2={to.y}
-        stroke={colour}
-        strokeWidth={0.16}
-        strokeLinecap="round"
-        filter={`url(#${filterId})`}
-        style={{
-          ...sweep,
-          // Two animations on one element, so they have to share the shorthand:
-          // a Tailwind `animate-*` class each would have the later one win.
-          animation:
-            `draw-line 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) forwards,` +
-            ` line-glow 1.8s ${delay + 0.5}s ease-in-out infinite`,
-        }}
-      />
+      {quality === 'high' ? (
+        <line
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          stroke={colour}
+          strokeWidth={0.16}
+          strokeLinecap="round"
+          filter={`url(#${filterId})`}
+          style={{
+            ...sweep,
+            // Two animations on one element, so they have to share the shorthand:
+            // a Tailwind `animate-*` class each would have the later one win.
+            animation:
+              `draw-line 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) forwards,` +
+              ` line-glow 1.8s ${delay + 0.5}s ease-in-out infinite`,
+          }}
+        />
+      ) : null}
 
       <line
         x1={from.x}
@@ -112,8 +118,11 @@ export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
         strokeWidth={0.075}
         strokeLinecap="round"
         style={{
-          ...sweep,
-          animation: `draw-line 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) forwards`,
+          ...(quality === 'low' ? {} : sweep),
+          animation:
+            quality === 'low'
+              ? undefined
+              : `draw-line 0.45s ${delay + 0.1}s cubic-bezier(0.22, 1, 0.36, 1) forwards`,
         }}
       />
     </svg>

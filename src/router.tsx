@@ -7,23 +7,39 @@ import {
   RANKED_MODES,
 } from '@/game/engine';
 import { ROOM_CODE_LENGTH } from '@/protocol';
-import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  Outlet,
+} from '@tanstack/react-router';
 import { UnlockToast } from '@/game/components/UnlockToast';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
-import { BotGameScreen } from '@/screens/BotGameScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
-import { JourneyScreen } from '@/screens/JourneyScreen';
-import { LeaderboardScreen } from '@/screens/LeaderboardScreen';
-import { LearnScreen } from '@/screens/LearnScreen';
-import { LocalGameScreen } from '@/screens/LocalGameScreen';
-import { OnlineScreen } from '@/screens/OnlineScreen';
-import { ProfileScreen } from '@/screens/ProfileScreen';
-import { PuzzleScreen } from '@/screens/PuzzleScreen';
-import { PuzzlesScreen } from '@/screens/PuzzlesScreen';
-import { ReplayScreen } from '@/screens/ReplayScreen';
 import { createAppHistory } from '@/lib/navigation';
+import { loadPreferences } from '@/lib/preferences';
 import { ReturnLink } from '@/components/ui/ReturnLink';
+
+// Keep startup small. Preload wrapped screens before committing navigation so
+// their normal view transitions and entrance animations start with ready code.
+const BotGameScreen = lazyRouteComponent(() => import('@/screens/BotGameScreen'), 'BotGameScreen');
+const JourneyScreen = lazyRouteComponent(() => import('@/screens/JourneyScreen'), 'JourneyScreen');
+const LeaderboardScreen = lazyRouteComponent(
+  () => import('@/screens/LeaderboardScreen'),
+  'LeaderboardScreen',
+);
+const LearnScreen = lazyRouteComponent(() => import('@/screens/LearnScreen'), 'LearnScreen');
+const LocalGameScreen = lazyRouteComponent(
+  () => import('@/screens/LocalGameScreen'),
+  'LocalGameScreen',
+);
+const OnlineScreen = lazyRouteComponent(() => import('@/screens/OnlineScreen'), 'OnlineScreen');
+const ProfileScreen = lazyRouteComponent(() => import('@/screens/ProfileScreen'), 'ProfileScreen');
+const PuzzleScreen = lazyRouteComponent(() => import('@/screens/PuzzleScreen'), 'PuzzleScreen');
+const PuzzlesScreen = lazyRouteComponent(() => import('@/screens/PuzzlesScreen'), 'PuzzlesScreen');
+const ReplayScreen = lazyRouteComponent(() => import('@/screens/ReplayScreen'), 'ReplayScreen');
 
 /**
  * Routes are declared in code rather than generated from the file system.
@@ -72,6 +88,7 @@ const homeRoute = createRoute({
 const localRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/local',
+  beforeLoad: () => LocalGameScreen.preload?.(),
   validateSearch: (search: Record<string, unknown>): { mode: ModeId } => ({
     mode: readMode(search),
   }),
@@ -84,6 +101,7 @@ const localRoute = createRoute({
 const botRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/bot',
+  beforeLoad: () => BotGameScreen.preload?.(),
   validateSearch: (
     search: Record<string, unknown>,
   ): { mode: ModeId; difficulty: BotDifficulty; practice?: true; stage?: string } => {
@@ -107,6 +125,7 @@ const botRoute = createRoute({
 const onlineRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/play/online',
+  beforeLoad: () => OnlineScreen.preload?.(),
   validateSearch: (
     search: Record<string, unknown>,
   ): {
@@ -141,6 +160,7 @@ const profileRoute = createRoute({
 const leaderboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/leaderboard',
+  beforeLoad: () => LeaderboardScreen.preload?.(),
   validateSearch: (search: Record<string, unknown>): { mode: ModeId } => {
     const mode = readMode(search);
     // The ladder only exists for ranked modes, so a link to an unranked one
@@ -157,6 +177,7 @@ const leaderboardRoute = createRoute({
 const learnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/learn',
+  beforeLoad: () => LearnScreen.preload?.(),
   validateSearch: (search: Record<string, unknown>): { mode: ModeId } => ({
     mode: readMode(search),
   }),
@@ -175,6 +196,7 @@ const journeyRoute = createRoute({
 const puzzlesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/puzzles',
+  beforeLoad: () => PuzzlesScreen.preload?.(),
   validateSearch: (search: Record<string, unknown>): { tier?: '1' | '2' | '3' } => {
     const value = search['tier'];
     const tier = typeof value === 'number' ? String(value) : value;
@@ -189,6 +211,7 @@ const puzzlesRoute = createRoute({
 const puzzleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/puzzles/$id',
+  beforeLoad: () => PuzzleScreen.preload?.(),
   validateSearch: (search: Record<string, unknown>): { daily?: true } =>
     readFlag(search['daily']) ? { daily: true as const } : {},
   component: function PuzzleRoute() {
@@ -201,6 +224,7 @@ const puzzleRoute = createRoute({
 const replayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/replay/$matchId',
+  beforeLoad: () => ReplayScreen.preload?.(),
   component: function ReplayRoute() {
     const { matchId } = replayRoute.useParams();
     return <ReplayScreen matchId={matchId} />;
@@ -297,7 +321,12 @@ router.subscribe('onBeforeNavigate', ({ hrefChanged }) => {
 router.startViewTransition = (update) => {
   const animate = router.shouldViewTransition ?? router.options.defaultViewTransition;
   router.shouldViewTransition = undefined;
-  if (!animate || typeof document.startViewTransition !== 'function') return update();
+  if (
+    !animate ||
+    loadPreferences().graphics !== 'high' ||
+    typeof document.startViewTransition !== 'function'
+  )
+    return update();
   const transition = document.startViewTransition(update);
   void transition.ready.catch(() => undefined);
   void transition.finished.catch(() => undefined);

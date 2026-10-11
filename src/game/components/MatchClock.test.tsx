@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { Profiler } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatClock, MatchClock } from './MatchClock';
 
 describe('formatClock', () => {
@@ -23,6 +24,62 @@ describe('formatClock', () => {
   it('rounds seconds up, so a clock never shows 0:00 while time remains', () => {
     expect(formatClock(59_900)).toBe('1:00');
     expect(formatClock(10_001)).toBe('0:11');
+  });
+});
+
+describe('clock scheduling', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('updates seconds without committing a React render on every frame', () => {
+    const commits = vi.fn();
+    render(<Profiler id="clock" onRender={commits}>
+      <MatchClock remainingMs={120_000} ticking />
+    </Profiler>);
+    commits.mockClear();
+    for (let second = 0; second < 5; second++) act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText('1:55')).toBeInTheDocument();
+    expect(commits.mock.calls.length).toBeLessThanOrEqual(5);
+  });
+
+  it('changes to tenths at ten seconds and stops scheduling at zero', () => {
+    render(<MatchClock remainingMs={10_000} ticking />);
+    expect(screen.getByText('0:10')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByText('10.0')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(100));
+    expect(screen.getByText('9.9')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(10_000));
+    expect(screen.getByText('0.0')).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('stops hidden-tab timers and catches up on return', () => {
+    const { unmount } = render(<MatchClock remainingMs={30_000} ticking />);
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => vi.advanceTimersByTime(5000));
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(screen.getByText('0:25')).toBeInTheDocument();
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('uses new server values and cancels the previous countdown', () => {
+    const { rerender } = render(<MatchClock remainingMs={30_000} ticking />);
+    act(() => vi.advanceTimersByTime(2000));
+    rerender(<MatchClock remainingMs={60_000} ticking={false} />);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByText('1:00')).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

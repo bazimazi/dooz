@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sfx } from './sound';
+import { loadPreferences } from './preferences';
 
 /**
  * Lets an overlay animate itself out before its owner unmounts it.
@@ -28,7 +29,10 @@ export function useClosing(onClose: () => void, duration = 180) {
     setClosing(true);
     sfx.whoosh(false);
 
-    timer.current = setTimeout(() => onCloseRef.current(), duration);
+    timer.current = setTimeout(
+      () => onCloseRef.current(),
+      loadPreferences().graphics === 'low' ? 0 : duration,
+    );
   }, [duration]);
 
   return { closing, close };

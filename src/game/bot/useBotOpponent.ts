@@ -1,12 +1,7 @@
-import {
-  type BotDifficulty,
-  canPlay,
-  chooseMove,
-  type GameState,
-  type Player,
-} from '@/game/engine';
+import { type BotDifficulty, canPlay, type GameState, type Player } from '@/game/engine';
 import { useEffect, useRef, useState } from 'react';
-import type { BotMessage, BotRequest, BotResponse } from './bot.worker';
+import { usePageVisible } from '@/lib/usePageVisible';
+import { BotSearch } from './BotSearch';
 
 /** Never answer faster than this - an instant reply reads as a glitch. */
 const MINIMUM_THINK_MS = 450;
@@ -38,7 +33,7 @@ export interface BotStatus {
  *
  * The search runs in a worker; if the worker cannot start - an old browser, or
  * a restrictive content policy - it falls back to searching inline, which is
- * slower to the eye on a big board but never leaves the game stuck waiting.
+ * bounded to a short budget so a big board cannot freeze the interface.
  *
  * Every move is re-checked against the board it is about to be played on. The
  * search is asynchronous and the position can have moved on underneath it - a
@@ -51,26 +46,14 @@ export function useBotOpponent({
   onMove,
   paused = false,
 }: UseBotOpponentOptions): BotStatus {
-  const workerRef = useRef<Worker | null>(null);
-  // Tags each search, so a reply from an abandoned one is ignored.
-  const requestId = useRef(0);
+  const searchRef = useRef<BotSearch | null>(null);
+  const visible = usePageVisible();
   const [lastSearch, setLastSearch] = useState<BotStatus['lastSearch']>(null);
 
   useEffect(() => {
-    if (typeof Worker === 'undefined') return;
-
-    let worker: Worker;
-    try {
-      worker = new Worker(new URL('./bot.worker.ts', import.meta.url), { type: 'module' });
-    } catch {
-      return;
-    }
-
-    workerRef.current = worker;
-    return () => {
-      workerRef.current = null;
-      worker.terminate();
-    };
+    const search = new BotSearch();
+    searchRef.current = search;
+    return () => search.dispose();
   }, []);
 
   // "Thinking" is not separate state: the bot is thinking exactly while it is
@@ -79,7 +62,7 @@ export function useBotOpponent({
   const thinking = !paused && game.status === 'playing' && game.currentPlayer === botPlayer;
 
   useEffect(() => {
-    if (!thinking) return;
+    if (!thinking || !visible) return;
 
     let cancelled = false;
     let delayTimer: ReturnType<typeof setTimeout> | undefined;
@@ -102,52 +85,19 @@ export function useBotOpponent({
       }, wait);
     };
 
-    const worker = workerRef.current;
-
-    if (worker) {
-      const id = ++requestId.current;
-      const onMessage = (event: MessageEvent<BotResponse>) => {
-        if (event.data.id !== id) return;
-        worker.removeEventListener('message', onMessage);
-        settle(event.data.move, {
-          depth: event.data.depth,
-          nodes: event.data.nodes,
-          reason: event.data.reason,
-        });
-      };
-      worker.addEventListener('message', onMessage);
-
-      const request: BotRequest = { type: 'search', id, state: game, options: { difficulty } };
-      worker.postMessage(request);
-
-      return () => {
-        cancelled = true;
-        clearTimeout(delayTimer);
-        worker.removeEventListener('message', onMessage);
-        // Tell the worker to stop rather than merely ignoring what it sends:
-        // a search it finishes for a board nobody is looking at is a core spun
-        // up for nothing, which on a phone is felt as much as it is measured.
-        const cancel: BotMessage = { type: 'cancel', id };
-        worker.postMessage(cancel);
-      };
-    }
-
-    // No worker: search on the main thread, one tick later so the mark the
-    // human just placed has a chance to paint first.
-    const fallbackTimer = setTimeout(() => {
-      const chosen = chooseMove(game, { difficulty });
+    const cancelSearch = searchRef.current?.search(game, { difficulty }, (chosen) => {
       settle(
         chosen?.move ?? null,
         chosen ? { depth: chosen.depth, nodes: chosen.nodes, reason: chosen.reason } : null,
       );
-    }, 0);
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(fallbackTimer);
+      cancelSearch?.();
       clearTimeout(delayTimer);
     };
-  }, [thinking, game, difficulty, onMove]);
+  }, [thinking, visible, game, difficulty, onMove]);
 
   return { thinking, lastSearch };
 }

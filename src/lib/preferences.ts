@@ -9,6 +9,7 @@ import {
 const STORAGE_KEY = 'dooz.preferences';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
+export type GraphicsQuality = 'low' | 'balanced' | 'high';
 
 /** The piece sets a player can choose between. See `components/art/marks.tsx`. */
 export const SKINS = ['classic', 'neon', 'chalk', 'candy'] as const;
@@ -19,6 +20,8 @@ export interface Preferences {
   mode: ModeId;
   difficulty: BotDifficulty;
   theme: ThemeChoice;
+  /** Rendering quality, chosen explicitly rather than inferred from the device. */
+  graphics: GraphicsQuality;
   /** Show the squares that would win or lose the game this move. */
   hints: boolean;
   /** The onboarding has been seen, so it is not shown again. */
@@ -41,6 +44,7 @@ const DEFAULTS: Preferences = {
   mode: DEFAULT_MODE_ID,
   difficulty: 'medium',
   theme: 'system',
+  graphics: 'high',
   hints: false,
   onboarded: false,
   sound: true,
@@ -54,6 +58,12 @@ const DEFAULTS: Preferences = {
 function isTheme(value: unknown): value is ThemeChoice {
   return value === 'system' || value === 'light' || value === 'dark';
 }
+
+function isGraphicsQuality(value: unknown): value is GraphicsQuality {
+  return value === 'low' || value === 'balanced' || value === 'high';
+}
+
+let sessionPreferences: Preferences | undefined;
 
 export function isSkin(value: unknown): value is Skin {
   return typeof value === 'string' && (SKINS as readonly string[]).includes(value);
@@ -81,6 +91,7 @@ function readName(value: unknown, fallback: string): string {
  * so every path falls back to the defaults rather than failing.
  */
 export function loadPreferences(): Preferences {
+  if (sessionPreferences) return sessionPreferences;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
@@ -93,6 +104,7 @@ export function loadPreferences(): Preferences {
       mode: isModeId(stored.mode) ? stored.mode : DEFAULTS.mode,
       difficulty: isBotDifficulty(stored.difficulty) ? stored.difficulty : DEFAULTS.difficulty,
       theme: isTheme(stored.theme) ? stored.theme : DEFAULTS.theme,
+      graphics: isGraphicsQuality(stored.graphics) ? stored.graphics : DEFAULTS.graphics,
       hints: typeof stored.hints === 'boolean' ? stored.hints : DEFAULTS.hints,
       onboarded: typeof stored.onboarded === 'boolean' ? stored.onboarded : DEFAULTS.onboarded,
       sound: typeof stored.sound === 'boolean' ? stored.sound : DEFAULTS.sound,
@@ -125,18 +137,26 @@ export function subscribePreferences(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function savePreferences(preferences: Partial<Preferences>): void {
-  let next: Preferences;
+export function savePreferences(preferences: Partial<Preferences>): Preferences {
+  const next = { ...loadPreferences(), ...preferences };
   try {
-    next = { ...loadPreferences(), ...preferences };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    sessionPreferences = undefined;
   } catch {
     // Preferences are a convenience; losing them is not worth reporting. The
     // change still applies for this session.
-    next = { ...loadPreferences(), ...preferences };
+    sessionPreferences = next;
   }
   if (preferences.theme !== undefined) applyTheme(next.theme);
+  if (preferences.graphics !== undefined) applyGraphics(next.graphics);
   for (const listener of listeners) listener(next);
+  return next;
+}
+
+/** Apply before first paint and immediately when the user changes quality. */
+export function applyGraphics(graphics: GraphicsQuality): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.graphics = graphics;
 }
 
 /**

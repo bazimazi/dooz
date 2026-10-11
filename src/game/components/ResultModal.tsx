@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { HappyFace, NeutralFace, SadFace } from '@/components/art/faces';
 import { Mark } from '@/components/art/marks';
 import { cx } from '@/lib/cx';
+import { useGraphics } from '@/lib/graphics';
+import { loadPreferences, type GraphicsQuality } from '@/lib/preferences';
 import { useDialog } from '@/lib/useDialog';
 import { useClosing } from '@/lib/useClosing';
 
@@ -42,7 +44,8 @@ interface ResultModalProps {
  * the board in the meantime. A tap or a keypress ends it early.
  */
 export function ResultModal({ revealDelay = 0, ...panel }: ResultModalProps) {
-  return useRevealed(revealDelay) ? <ResultPanel {...panel} /> : null;
+  const quality = useGraphics();
+  return useRevealed(quality === 'low' ? 0 : revealDelay) ? <ResultPanel {...panel} /> : null;
 }
 
 /** `true` once `delay` has passed since mounting, or the player cuts it short. */
@@ -67,7 +70,7 @@ function useRevealed(delay: number): boolean {
     };
   }, [delay, revealed]);
 
-  return revealed;
+  return revealed || delay <= 0;
 }
 
 /**
@@ -81,9 +84,15 @@ function useRevealed(delay: number): boolean {
  * to watch at all. Under gravity the last mark has to fall before any of it
  * starts, and the shockwave off a finished line is worth its half second.
  */
-export function revealDelayFor(game: GameState, reason?: EndReason): number {
+export function revealDelayFor(
+  game: GameState,
+  reason?: EndReason,
+  graphics: GraphicsQuality = loadPreferences().graphics,
+): number {
+  if (graphics === 'low') return 0;
   if (reason && reason !== 'line' && reason !== 'draw') return 0;
   const falling = game.config.variant === 'gravity' ? 450 : 0;
+  if (graphics === 'balanced') return (game.status === 'won' ? 700 : 300) + falling;
   if (game.winLine) return 1450 + falling;
   if (game.ultimate?.winBoards) return 1400;
   return 700 + falling;

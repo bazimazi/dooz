@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
-/* Project policy: always use the full animation experience. Ignore system and
-   legacy reduced-motion settings; do not add motion overrides or toggles.
+/* Graphics quality is an explicit in-game choice. Ignore system and
+   legacy reduced-motion settings; never infer graphics quality from them.
    See the root README.md and AGENTS.md for contributor guidance. */
 
 /**
@@ -154,6 +154,87 @@
   --animate-banner: banner 1.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-flip: flip 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-float-up: float-up 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Explicit graphics presets. Unlayered rules override utility styles, including
+   inline animation/filter effects, without changing layout or focus outlines. */
+:root:is([data-graphics='low'], [data-graphics='balanced']) *,
+:root:is([data-graphics='low'], [data-graphics='balanced']) *::before,
+:root:is([data-graphics='low'], [data-graphics='balanced']) *::after {
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced'])
+  :is(
+    .animate-float-a,
+    .animate-float-b,
+    .animate-float-c,
+    .animate-bob,
+    .animate-pulse-soft,
+    .animate-glow-ring,
+    .animate-turn-ping,
+    .animate-wiggle,
+    .animate-tear,
+    .animate-fading,
+    .animate-win-throb
+  ) {
+  animation: none !important;
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .animate-fading {
+  opacity: 0.6;
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .animate-turn-ping,
+:root:is([data-graphics='low'], [data-graphics='balanced']) .turn-tint {
+  display: none;
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .sheen::after {
+  display: none;
+}
+
+:root[data-graphics='balanced'] .animate-board-settle {
+  box-shadow: none !important;
+}
+
+:root[data-graphics='low'] *,
+:root[data-graphics='low'] *::before,
+:root[data-graphics='low'] *::after {
+  animation: none !important;
+  transition: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* Transient overlays must not linger when their fade-out animation is absent.
+   Persistent cues (last move, hints, turn and vanish rings) stay visible. */
+:root[data-graphics='low']
+  :is(
+    .confetti,
+    .victory-burst,
+    .piece-trace,
+    .animate-stamp,
+    .animate-cell-impact,
+    .animate-spark,
+    .animate-shockwave,
+    .animate-vanish-out,
+    .animate-float-up
+  ) {
+  display: none;
+}
+
+:root[data-graphics='low'] [stroke-dasharray],
+:root[data-graphics='low'] .chalk-stroke {
+  stroke-dashoffset: 0 !important;
+}
+
+/* Tailwind rings use box-shadow; use a border to retain the last-move cue. */
+:root[data-graphics='low'] .last-move-ring {
+  border: 2px solid color-mix(in srgb, var(--color-g10) 70%, transparent);
 }
 
 /* --------------------------------------------------------------------------

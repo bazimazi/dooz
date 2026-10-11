@@ -35,14 +35,12 @@ let currentSkin: Skin = loadPreferences().skin;
 subscribePreferences((next) => {
   currentSkin = next.skin;
 });
+const readSkin = () => currentSkin;
+const serverSkin = (): Skin => 'classic';
 
 /** The player's piece set, re-rendering whenever it changes. */
 export function useSkin(): Skin {
-  return useSyncExternalStore(
-    (notify) => subscribePreferences(notify),
-    () => currentSkin,
-    (): Skin => 'classic',
-  );
+  return useSyncExternalStore(subscribePreferences, readSkin, serverSkin);
 }
 
 // ---------------------------------------------------------------------------

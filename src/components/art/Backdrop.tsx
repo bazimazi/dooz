@@ -1,3 +1,5 @@
+import { useGraphics } from '@/lib/graphics';
+
 /**
  * The scattered rings and crosses behind every screen.
  *
@@ -14,6 +16,10 @@
  * still and only the content above it animates.
  */
 export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
+  const quality = useGraphics();
+  if (quality === 'low') {
+    return <div className="pointer-events-none fixed inset-0 -z-10 bg-canvas" />;
+  }
   return (
     <div
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-canvas"
@@ -141,7 +147,7 @@ export function Backdrop({ variant = 'game' }: { variant?: 'home' | 'game' }) {
           />
         </g>
 
-        {variant === 'home' ? (
+        {variant === 'home' && quality === 'high' ? (
           <g filter="url(#dooz-soft)" opacity="0.75">
             {/* Out-of-focus pieces pooled at the foot of the home screen. */}
             <g className="origin-center animate-float-c transform-fill">

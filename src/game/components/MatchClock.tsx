@@ -46,24 +46,42 @@ export function MatchClock({
     setDisplayed(remainingMs);
   }
 
-  const startedAt = useRef(0);
-
   useEffect(() => {
     if (!ticking) return;
 
     // The clock is read once when the countdown starts and never during render,
     // so the component stays a pure function of its props and this state.
-    startedAt.current = Date.now();
+    const startedAt = Date.now();
     const base = remainingMs;
 
-    let frame = 0;
+    let timer: ReturnType<typeof setTimeout>;
     const step = () => {
-      setDisplayed(Math.max(0, base - (Date.now() - startedAt.current)));
-      frame = requestAnimationFrame(step);
+      clearTimeout(timer);
+      if (document.hidden) return;
+      const left = Math.max(0, base - (Date.now() - startedAt));
+      setDisplayed(left);
+      if (left === 0) return;
+      // Update at the next visible digit change. CSS still animates the urgent
+      // pulse continuously, without running React 60 times per second.
+      const next =
+        left >= PRECISE_MS
+          ? left === PRECISE_MS
+            ? 1
+            : left % 1000 || 1000
+          : ((left + 50) % 100 || 100) + 1;
+      timer = setTimeout(step, Math.min(left, next));
     };
-    frame = requestAnimationFrame(step);
+    const visibilityChanged = () => {
+      clearTimeout(timer);
+      if (!document.hidden) step();
+    };
+    step();
+    document.addEventListener('visibilitychange', visibilityChanged);
 
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+    };
   }, [ticking, remainingMs]);
 
   const urgent = ticking && displayed <= URGENT_MS;

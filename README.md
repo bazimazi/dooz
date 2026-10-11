@@ -282,6 +282,7 @@ npm run audit:a11y   # contrast and naming, against a real browser
 npm run audit:experience  # teaching, touch, recovery and motion
 npm run audit:sheet-back  # repeated selections and every sheet dismissal method
 npm run audit:navigation  # return paths, settings, scrolling and phone layouts
+npm run audit:performance # production preview on port 4180, phone layout at 6x CPU slowdown
 ```
 
 The [player experience review](docs/PLAYER_EXPERIENCE_REVIEW.md) records the
@@ -363,17 +364,29 @@ no network, and recolours with the theme.
 
 ### Animation policy
 
-The game always uses its full animation experience on web, PWA, desktop, and
-mobile. OS/browser reduced-motion settings and legacy saved `reducedMotion`
-values are intentionally ignored. There is no in-game reduced-motion setting.
+The game defaults to its full animation experience on web, PWA, desktop, and
+mobile. Settings → Graphics lets players choose a quality preset. Changes apply
+immediately and survive relaunches:
 
-Future contributions must preserve animation timing, view transitions,
-decorative effects, and result reveal delays regardless of device motion
+- **Low:** static visuals, no particles, blur, glow or shadows, immediate results
+  and sheet dismissal. Recommended for slower phones.
+- **Balanced:** gameplay animations, a still background, 16 celebration particles
+  instead of 56, no blur or glow, and shorter result pauses. Screen changes skip
+  the full-document view transition.
+- **High (default):** the full animation and effects experience.
+
+OS/browser reduced-motion settings and legacy saved `reducedMotion` values are
+intentionally ignored. Graphics quality is always an explicit player choice.
+
+Future contributions must keep graphics quality, animation timing, view transitions,
+decorative effects, and result reveal delays independent of device motion
 settings. Do not add `prefers-reduced-motion` overrides, `motion-reduce` or
 `motion-safe` utilities, motion preference detection, or a reduced-motion
 toggle unless the project owner explicitly changes this policy. Contributor
 instructions also live in [AGENTS.md](AGENTS.md).
 
+`npm run audit:graphics` checks preset switching, persistence and gameplay on
+mobile and desktop, including static win lines and chalk marks on Low.
 `npm run audit:animations` and
 `npm run audit:experience` check that full animations
 remain enabled when the browser reports reduced motion.

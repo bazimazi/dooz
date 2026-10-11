@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useGraphics } from '@/lib/graphics';
 
 /**
  * The burst fired over the result panel when the game was won.
@@ -51,12 +52,15 @@ const PIECES = Array.from({ length: PIECE_COUNT }, (_, index) => {
 });
 
 export function Confetti({ className }: { className?: string }) {
+  const quality = useGraphics();
+  if (quality === 'low') return null;
+  const pieces = quality === 'balanced' ? PIECES.slice(0, 16) : PIECES;
   return (
     <div
       aria-hidden="true"
       className={`confetti pointer-events-none absolute inset-x-0 top-1/3 z-10 overflow-visible ${className ?? ''}`}
     >
-      {PIECES.map((piece, index) => (
+      {pieces.map((piece, index) => (
         <span
           key={index}
           className="absolute block animate-confetti-y"

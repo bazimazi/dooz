@@ -7,7 +7,14 @@ import { Segmented, Slider, Toggle } from '@/components/ui/Field';
 import { useProgressStore } from '@/features/progress/store';
 import { isSkinUnlocked, SKIN_UNLOCKS } from '@/features/progress/unlocks';
 import { cx } from '@/lib/cx';
-import { loadPreferences, savePreferences, type Skin, type ThemeChoice } from '@/lib/preferences';
+import { GRAPHICS_DESCRIPTIONS } from '@/lib/graphics';
+import {
+  loadPreferences,
+  savePreferences,
+  type GraphicsQuality,
+  type Skin,
+  type ThemeChoice,
+} from '@/lib/preferences';
 import { sfx } from '@/lib/sound';
 import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
@@ -28,8 +35,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 
   function update(changes: Parameters<typeof savePreferences>[0]) {
-    savePreferences(changes);
-    setPreferences(loadPreferences());
+    setPreferences(savePreferences(changes));
   }
 
   return (
@@ -73,6 +79,22 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
               ]}
             />
             <SkinPicker value={preferences.skin} onChange={(skin) => update({ skin })} />
+          </Group>
+
+          <Group title="Graphics">
+            <Segmented<GraphicsQuality>
+              label="Graphics quality"
+              value={preferences.graphics}
+              onChange={(graphics) => update({ graphics })}
+              options={[
+                { value: 'low', label: 'Low' },
+                { value: 'balanced', label: 'Balanced' },
+                { value: 'high', label: 'High' },
+              ]}
+            />
+            <p role="status" className="px-1 text-xs text-ink-muted">
+              {GRAPHICS_DESCRIPTIONS[preferences.graphics]}
+            </p>
           </Group>
 
           <Group title="Sound">
