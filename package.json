@@ -81,6 +81,7 @@
   },
   "dependencies": {
     "@fontsource-variable/open-sans": "^5.3.0",
+    "@fontsource-variable/vazirmatn": "^5.3.0",
     "@fontsource/joti-one": "^5.3.0",
     "@hono/node-server": "^2.1.1",
     "@tanstack/react-router": "^1.170.32",

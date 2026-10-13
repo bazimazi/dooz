@@ -62,8 +62,9 @@
   --color-warn: #fbbf24;
   --color-danger: #fb7185;
 
-  --font-display: 'Joti One', 'Comic Sans MS', cursive;
-  --font-sans: 'Open Sans Variable', 'Open Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Joti One', 'Vazirmatn Variable', 'Comic Sans MS', cursive;
+  --font-sans:
+    'Open Sans Variable', 'Open Sans', 'Vazirmatn Variable', system-ui, -apple-system, sans-serif;
 
   --radius-panel: 24px;
   --radius-tile: 16px;
@@ -1433,6 +1434,19 @@
     transition:
       background-color 0.3s var(--ease-soft),
       color 0.3s var(--ease-soft);
+  }
+
+  /* Persian is set in Vazirmatn (see fonts.css), which joins its letters.
+     Tracking pulls joined letters apart, so the spaced-out labels the Latin
+     interface uses are set solid. The display face's Persian is Vazirmatn at
+     a heavy weight, standing in for Joti One's chunky single weight; the
+     synthesis guard keeps Joti's Latin from being faux-bolded beside it. */
+  :lang(fa) {
+    letter-spacing: normal !important;
+  }
+  .font-display:lang(fa) {
+    font-weight: 800;
+    font-synthesis: none;
   }
 
   /* Anything the player may want to copy - a room code, a rating - opts back
