@@ -3,6 +3,8 @@ import { type Emote, EMOTES } from '@/protocol';
 import { useEffect } from 'react';
 import { MuteIcon, SpeakIcon } from '@/components/art/ui-icons';
 import { IconButton } from '@/components/ui/IconButton';
+import { useT } from '@/i18n';
+import { matchMessages } from '@/i18n/messages/onlineMatch';
 import { cx } from '@/lib/cx';
 import { sfx } from '@/lib/sound';
 import type { IncomingEmote } from '@/features/online/store';
@@ -12,17 +14,21 @@ import type { IncomingEmote } from '@/features/online/store';
  *
  * Six phrases and no free text. That is a deliberate ceiling rather than a
  * missing feature: a closed set needs no moderation queue, cannot carry a slur
- * or a link, and is the same in every language the app is translated into -
- * while still covering everything two strangers actually want to say over a
- * board. Anything it does not cover is what the mute button is for.
+ * or a link, and means the same in every language the app is translated into
+ * - each reader sees the phrase in their own - while still covering everything
+ * two strangers actually want to say over a board. Anything it does not cover
+ * is what the mute button is for.
+ *
+ * `text` is the English; what is shown comes from `matchMessages`, keyed by
+ * the emote id.
  */
 const LABELS: Record<Emote, { glyph: string; text: string }> = {
-  gg: { glyph: '🤝', text: 'Good game' },
-  nice: { glyph: '👏', text: 'Nice move' },
-  oops: { glyph: '😅', text: 'Oops' },
-  thinking: { glyph: '🤔', text: 'Thinking…' },
-  hurry: { glyph: '⏳', text: 'Your turn' },
-  hello: { glyph: '👋', text: 'Hello' },
+  gg: { glyph: '🤝', text: matchMessages.en.gg },
+  nice: { glyph: '👏', text: matchMessages.en.nice },
+  oops: { glyph: '😅', text: matchMessages.en.oops },
+  thinking: { glyph: '🤔', text: matchMessages.en.thinking },
+  hurry: { glyph: '⏳', text: matchMessages.en.hurry },
+  hello: { glyph: '👋', text: matchMessages.en.hello },
 };
 
 export function EmoteBar({
@@ -36,6 +42,7 @@ export function EmoteBar({
   onMuteChange: (muted: boolean) => void;
   disabled?: boolean;
 }) {
+  const t = useT(matchMessages);
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex items-center gap-1 rounded-tile border border-stroke-soft bg-surface/50 p-1">
@@ -45,8 +52,8 @@ export function EmoteBar({
             type="button"
             disabled={disabled}
             onClick={() => onSend(emote)}
-            title={LABELS[emote].text}
-            aria-label={`Send: ${LABELS[emote].text}`}
+            title={t(emote)}
+            aria-label={t('send', { emote: t(emote) })}
             className={cx(
               'flex size-9 items-center justify-center rounded-lg text-lg',
               'transition-[transform,background-color] duration-150 ease-spring',
@@ -62,7 +69,7 @@ export function EmoteBar({
       <IconButton
         tone="bare"
         size="small"
-        label={muted ? 'Unmute your opponent' : 'Mute your opponent'}
+        label={muted ? t('unmute') : t('mute')}
         aria-pressed={muted}
         onClick={() => onMuteChange(!muted)}
       >
@@ -99,6 +106,7 @@ export function EmoteToast({
     sfx.emote();
   }, []);
 
+  const t = useT(matchMessages);
   const fromYou = you !== null && emote.from === you;
   const label = LABELS[emote.emote];
 
@@ -115,7 +123,7 @@ export function EmoteToast({
         {label.glyph}
       </span>
       <span className="text-ink-muted">
-        {fromYou ? 'You' : 'Opponent'}: {label.text}
+        {t(fromYou ? 'fromYou' : 'fromOpponent', { emote: t(emote.emote) })}
       </span>
     </div>
   );

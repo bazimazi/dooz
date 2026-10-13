@@ -1,4 +1,4 @@
-import { type Board, Empty } from '../types.js';
+import { type Board, Empty, isMark } from '../types.js';
 
 /**
  * Empty cells worth considering: those within `radius` of a mark already on the
@@ -13,16 +13,25 @@ import { type Board, Empty } from '../types.js';
  * directly.
  */
 export function candidateMoves(board: Board, size: number, radius = 2): number[] {
+  // Blocked squares are part of the board's shape, not of the play: a board
+  // whose only occupants are obstacles is still an empty board.
   let occupied = false;
   for (const cell of board) {
-    if (cell !== Empty) {
+    if (isMark(cell)) {
       occupied = true;
       break;
     }
   }
   if (!occupied) {
     const centre = Math.floor(size / 2);
-    return [centre * size + centre];
+    const middle = centre * size + centre;
+    if (board[middle] === Empty) return [middle];
+    // Only an obstacle can sit on an empty board's centre: open beside it.
+    return candidateMoves(
+      board.map((cell, index) => (index === middle ? 1 : cell)),
+      size,
+      1,
+    );
   }
 
   const candidates: number[] = [];
@@ -57,7 +66,7 @@ function hasNeighbour(
 
   for (let r = minRow; r <= maxRow; r++) {
     for (let c = minCol; c <= maxCol; c++) {
-      if (board[r * size + c] !== Empty) return true;
+      if (isMark(board[r * size + c])) return true;
     }
   }
   return false;

@@ -2,12 +2,14 @@ import { Button } from '@/components/ui/Button';
 import { useDialog } from '@/lib/useDialog';
 import { useClosing } from '@/lib/useClosing';
 import { cx } from '@/lib/cx';
+import { useT } from '@/i18n';
+import { gameUiMessages } from '@/i18n/messages/gameUi';
 
 /** Only shown when an action would replace a round already in progress. */
 export function GameResetDialog({
-  title = 'Start a new round?',
-  description = 'This will replace the round you are playing.',
-  actionLabel = 'New round',
+  title: titleText,
+  description,
+  actionLabel,
   onConfirm,
   onCancel,
 }: {
@@ -17,6 +19,8 @@ export function GameResetDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useT(gameUiMessages);
+  const title = titleText ?? t('resetTitle');
   const { closing, close } = useClosing(onCancel);
   const panelRef = useDialog<HTMLDivElement>(close);
   return (
@@ -38,13 +42,13 @@ export function GameResetDialog({
         className="max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto rounded-panel border border-stroke bg-surface p-6 shadow-lg outline-none"
       >
         <h2 className="font-display text-xl">{title}</h2>
-        <p className="mt-2 text-sm text-ink-muted">{description}</p>
+        <p className="mt-2 text-sm text-ink-muted">{description ?? t('resetBody')}</p>
         <div className="mt-5 flex flex-col gap-3">
           <Button size="small" block onClick={close}>
-            Keep playing
+            {t('keepPlaying')}
           </Button>
           <Button size="small" variant="ghost" block onClick={onConfirm}>
-            {actionLabel}
+            {actionLabel ?? t('resetAction')}
           </Button>
         </div>
       </div>

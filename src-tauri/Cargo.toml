@@ -5,7 +5,7 @@ description = "dooz (Tic Tac Toe) desktop and mobile shell"
 authors = ["msynk"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.90"
 
 # The mobile targets build the app as a library that the platform harness calls
 # into; `main.rs` is only used by the desktop binary.
@@ -19,6 +19,23 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-notification = "2"
+# `generate_context!` emits `serde_json` for the plugin settings in tauri.conf.json.
+serde_json = "1"
+
+# A phone has a vibration motor worth driving through the platform's own
+# feedback styles; a desktop has none, so the plugin is not compiled there.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-haptics = "2"
+
+# Windows, installers and self-updates only exist on the desktop. The app stores
+# update mobile builds, and a phone has one window that the OS manages.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-updater = "2"
+tauri-plugin-window-state = "2"
 
 [profile.release]
 codegen-units = 1

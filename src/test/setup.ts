@@ -44,6 +44,12 @@ beforeEach(() => {
   window.scrollTo = () => {};
   if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
 
+  // The board's effects layer draws on a canvas. jsdom has no 2D context and
+  // logs a warning for every attempt; answering "no context" quietly is what
+  // the effects already handle - they simply draw nothing.
+  HTMLCanvasElement.prototype.getContext = (() =>
+    null) as typeof HTMLCanvasElement.prototype.getContext;
+
   sessionStorage.clear();
   localStorage.clear();
 });

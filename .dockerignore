@@ -1,0 +1,28 @@
+# The server image needs package*.json, tsconfig.json, server/ and src/ only.
+# Everything else stays out of the build context: it is either large (native
+# shells, build output, dependencies installed for another platform) or must
+# never be baked into an image (local data, secrets).
+.git
+.github
+node_modules
+dist
+dist-ssr
+build
+coverage
+data
+src-tauri
+assets
+docs
+public
+scripts
+*.log
+.env
+.env.*
+**/.env
+**/.env.*
+!server/.env.example
+.vscode
+.idea
+.DS_Store
+Dockerfile
+.dockerignore

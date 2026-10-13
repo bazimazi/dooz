@@ -1,5 +1,5 @@
-import { applyMove, createGame, type GameState, modeById, type ModeId } from '@/game/engine';
-import { useMemo, useState } from 'react';
+import { applyMove, createGame, type GameState, type ModeId } from '@/game/engine';
+import { useState } from 'react';
 import { Board } from '@/game/components/Board';
 import { useGameFeedback } from '@/game/useGameFeedback';
 import { Button } from '@/components/ui/Button';
@@ -7,6 +7,9 @@ import { cx } from '@/lib/cx';
 import { useClosing } from '@/lib/useClosing';
 import { sfx } from '@/lib/sound';
 import { useDialog } from '@/lib/useDialog';
+import { useT } from '@/i18n';
+import { learnMessages } from '@/i18n/messages/learn';
+import { useModeText } from '@/i18n/messages/modes';
 
 /**
  * Learning the game by playing it.
@@ -21,39 +24,31 @@ import { useDialog } from '@/lib/useDialog';
  * rather than a diagram of it.
  */
 interface Step {
-  title: string;
-  body: string;
+  /** Names the step's title, body and success messages in the catalog. */
+  key: 'step1' | 'step2' | 'step3';
   /** The position to start from, as moves played on a 3x3 board from X. */
   setup: readonly number[];
   /** The square to find, or any empty square for the first step. */
   answer: number | null;
-  /** What to say once they find it. */
-  success: string;
 }
 
 const STEPS: readonly Step[] = [
   {
-    title: 'Place your mark',
-    body: 'Tap any empty square to play there. You are X and you move first.',
+    key: 'step1',
     setup: [],
     answer: null,
-    success: 'Your mark is down. Now the other player takes a turn.',
   },
   {
-    title: 'Win the game',
-    body: 'Three of your marks in a row wins — across, down or diagonally. Find the square that finishes it.',
+    key: 'step2',
     // X holds 0 and 1, O holds 3 and 4. X to move: 2 completes the top row.
     setup: [0, 3, 1, 4],
     answer: 2,
-    success: 'That is three in a row. The line lights up when a game is won.',
   },
   {
-    title: 'Block the other player',
-    body: 'O is one move from winning down the left side. Take that square before they do.',
+    key: 'step3',
     // X: 1, 2. O: 0, 3. X to move: 6 blocks the 0-3-6 column.
     setup: [1, 0, 2, 3],
     answer: 6,
-    success: 'Blocked. Watching your opponent’s lines matters as much as building your own.',
   },
 ];
 
@@ -68,7 +63,8 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
   const current = STEPS[step]!;
   const [game, setGame] = useState<GameState>(() => positionFor(current));
 
-  const modeRules = useMemo(() => modeById(mode), [mode]);
+  const t = useT(learnMessages);
+  const modeRules = useModeText(mode);
   useGameFeedback(game);
   const last = step === STEPS.length - 1;
 
@@ -111,7 +107,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="How to play"
+        aria-label={t('howToPlay')}
         tabIndex={-1}
         className={cx(
           'w-full max-w-80 panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
@@ -122,14 +118,14 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
         <div className="flex max-h-[90dvh] flex-col gap-3 overflow-y-auto panel-face rounded-[1.5rem] bg-surface px-5 py-5">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs tracking-wide text-ink-faint uppercase">
-              Step {step + 1} of {STEPS.length}
+              {t('stepOf', { step: step + 1, total: STEPS.length })}
             </span>
             <button
               type="button"
               onClick={close}
               className="text-xs text-ink-faint underline underline-offset-4 hover:text-ink"
             >
-              Skip
+              {t('skip')}
             </button>
           </div>
 
@@ -147,10 +143,10 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
             ))}
           </div>
 
-          <h2 className="font-display text-xl">{current.title}</h2>
-          <p className="text-sm text-ink-muted">{current.body}</p>
+          <h2 className="font-display text-xl">{t(`${current.key}.title`)}</h2>
+          <p className="text-sm text-ink-muted">{t(`${current.key}.body`)}</p>
 
-          <div className="mx-auto w-full max-w-60">
+          <div dir="ltr" className="mx-auto w-full max-w-60">
             <Board
               game={game}
               onPlay={attempt}
@@ -172,17 +168,17 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
           >
             {solved
               ? step === 0 && game.lastMove === 4
-                ? 'Nice. The middle sits on four different lines. Now the other player takes a turn.'
-                : current.success
+                ? t('step1.middle')
+                : t(`${current.key}.success`)
               : wrong
-                ? 'Look for the marked square and try again.'
+                ? t('tryAgain')
                 : ' '}
           </p>
 
           {last && solved ? (
             <div className="rounded-tile border border-stroke-soft bg-surface/60 px-3 py-2.5">
-              <p className="text-xs text-ink-faint">Next up: {modeRules.name}</p>
-              <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4 text-xs text-ink-muted">
+              <p className="text-xs text-ink-faint">{t('nextUp', { mode: modeRules.name })}</p>
+              <ul className="mt-1 flex list-disc flex-col gap-0.5 ps-4 text-xs text-ink-muted">
                 {modeRules.rules.slice(0, 3).map((rule) => (
                   <li key={rule}>{rule}</li>
                 ))}
@@ -191,7 +187,7 @@ export function OnboardingSheet({ mode, onClose }: { mode: ModeId; onClose: () =
           ) : null}
 
           <Button size="small" variant="primary" disabled={!solved} onClick={advance} block>
-            {last ? 'Start playing' : 'Next'}
+            {last ? t('startPlaying') : t('next')}
           </Button>
         </div>
       </div>

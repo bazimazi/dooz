@@ -1,4 +1,4 @@
-import { applyMove, createGame, modeById, type GameState, O, X } from '@/game/engine';
+import { applyMove, createGame, modeById, type GameState, O, qubicIndex, X } from '@/game/engine';
 import { describe, expect, it } from 'vitest';
 import { hintsFor } from './hints';
 
@@ -104,5 +104,40 @@ describe('hintsFor', () => {
     }
     expect(game.currentPlayer).toBe(X);
     expect(game.board[3]).toBe(O);
+  });
+});
+
+describe('hints for the rule sets with their own geometry', () => {
+  it('points at a Qubic line through the layers, not along the flat board', () => {
+    const pillar = [0, 1, 2].map((layer) => qubicIndex(layer, 2, 1));
+    const game = fromMoves(modeById('qubic').config, [pillar[0]!, 7, pillar[1]!, 15, pillar[2]!]);
+    // O to move: X threatens the last cell of the pillar.
+    expect(hintsFor(game)).toEqual([{ index: qubicIndex(3, 2, 1), kind: 'threat' }]);
+  });
+
+  it('counts a Pente capture as a winning square', () => {
+    // X has four pairs; an X . O O shape is waiting for the fifth.
+    const size = 13;
+    const at = (row: number, col: number) => row * size + col;
+    let game = createGame(modeById('pente').config, X);
+    for (let pair = 0; pair < 4; pair++) {
+      const row = pair * 2;
+      for (const move of [
+        at(row, 0),
+        at(row, 1),
+        at(12, pair * 2),
+        at(row, 2),
+        at(row, 3),
+        at(row + 1, 12),
+      ]) {
+        game = applyMove(game, move)!;
+      }
+    }
+    for (const move of [at(10, 5), at(10, 6), at(12, 10), at(10, 7)]) game = applyMove(game, move)!;
+    expect(hintsFor(game)).toContainEqual({ index: at(10, 8), kind: 'win' });
+  });
+
+  it('offers none in Quantum, where no single square wins', () => {
+    expect(hintsFor(createGame(modeById('quantum').config, X))).toEqual([]);
   });
 });

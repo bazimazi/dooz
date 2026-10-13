@@ -1,7 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The minimum the game needs: its own window, and the ability to hand a link to the system browser.",
+  "description": "What every build needs: its own window, handing a link to the system browser, reading the dooz:// link it was opened with, and posting a notification.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:allow-open-url"]
+  "permissions": [
+    "core:default",
+    "opener:allow-open-url",
+    "deep-link:allow-get-current",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
 }

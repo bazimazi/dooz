@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { type Avatar, AVATARS, type PublicProfile } from '@/protocol';
-import { STARTING_RATING } from '../rating.js';
+import { DEFAULT_VOLATILITY, type Glicko, MAX_RD, STARTING_RATING } from '../rating.js';
 import type { Db } from './database.js';
 
 /**
@@ -24,6 +24,8 @@ export interface AccountRow {
   avatar: Avatar;
   createdAt: number;
   claimed: boolean;
+  /** A server-run bot account. Every view of one says so. */
+  bot?: boolean;
 }
 
 export interface ModeStats {
@@ -37,6 +39,19 @@ export interface ModeStats {
   drawn: number;
   streak: number;
   bestStreak: number;
+  /** Glicko-2 state. `rating` is this rounded. */
+  ratingExact: number;
+  rd: number;
+  volatility: number;
+  /** When the rating last changed, or `null` if it never has. */
+  ratedAt: number | null;
+  /** The season the `season*` counters belong to. Stale means zero. */
+  seasonId: number;
+  seasonPlayed: number;
+  seasonWon: number;
+  seasonLost: number;
+  seasonDrawn: number;
+  seasonPeak: number;
 }
 
 const TOKEN_BYTES = 32;
@@ -85,6 +100,7 @@ interface AccountRecord {
   password_hash: string | null;
   created_at: number;
   last_seen_at: number;
+  bot?: number;
 }
 
 interface StatsRecord {
@@ -97,9 +113,22 @@ interface StatsRecord {
   drawn: number;
   streak: number;
   best_streak: number;
+  rating_exact: number | null;
+  rd: number;
+  volatility: number;
+  rated_at: number | null;
+  season_id: number;
+  season_played: number;
+  season_won: number;
+  season_lost: number;
+  season_drawn: number;
+  season_peak: number;
 }
 
-const STATS_COLUMNS = 'mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak';
+const STATS_COLUMNS =
+  'mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak, ' +
+  'rating_exact, rd, volatility, rated_at, season_id, season_played, season_won, ' +
+  'season_lost, season_drawn, season_peak';
 
 export class Accounts {
   constructor(
@@ -142,6 +171,7 @@ export class Accounts {
         avatar: chosenAvatar,
         createdAt: timestamp,
         claimed: false,
+        bot: false,
       },
       token,
     };
@@ -264,6 +294,16 @@ export class Accounts {
       drawn: 0,
       streak: 0,
       bestStreak: 0,
+      ratingExact: STARTING_RATING,
+      rd: MAX_RD,
+      volatility: DEFAULT_VOLATILITY,
+      ratedAt: null,
+      seasonId: 0,
+      seasonPlayed: 0,
+      seasonWon: 0,
+      seasonLost: 0,
+      seasonDrawn: 0,
+      seasonPeak: 0,
     };
   }
 
@@ -285,22 +325,49 @@ export class Accounts {
    *
    * `ranked` says whether the game counts towards the ladder as well as the
    * profile: every game adds to `played`, only a ranked one to `rankedPlayed`.
+   *
+   * `rating` is either a bare number - unchanged, for an unrated game - or the
+   * full Glicko-2 state after a rated one. `seasonId` is the season a ranked
+   * game counts towards; counters left over from an earlier season start again
+   * from zero.
    */
   recordResult(
     accountId: string,
     mode: string,
     outcome: 'win' | 'loss' | 'draw',
-    rating: number,
+    rating: number | Glicko,
     ranked: boolean,
+    seasonId?: number,
   ): ModeStats {
     const before = this.statsFor(accountId, mode);
+    const glicko = typeof rating === 'number' ? null : rating;
+    const displayed = glicko ? Math.round(glicko.rating) : (rating as number);
+    const counting = ranked && seasonId !== undefined;
+    const same = counting && before.seasonId === seasonId;
+    const season = counting
+      ? {
+          seasonId,
+          seasonPlayed: (same ? before.seasonPlayed : 0) + 1,
+          seasonWon: (same ? before.seasonWon : 0) + (outcome === 'win' ? 1 : 0),
+          seasonLost: (same ? before.seasonLost : 0) + (outcome === 'loss' ? 1 : 0),
+          seasonDrawn: (same ? before.seasonDrawn : 0) + (outcome === 'draw' ? 1 : 0),
+          seasonPeak: Math.max(same ? before.seasonPeak : 0, displayed),
+        }
+      : {
+          seasonId: before.seasonId,
+          seasonPlayed: before.seasonPlayed,
+          seasonWon: before.seasonWon,
+          seasonLost: before.seasonLost,
+          seasonDrawn: before.seasonDrawn,
+          seasonPeak: before.seasonPeak,
+        };
     // A streak counts consecutive wins and is reset - not decremented - by
     // anything else, so "three in a row" means what a player thinks it means.
     const streak = outcome === 'win' ? Math.max(0, before.streak) + 1 : 0;
 
     const next: ModeStats = {
       mode,
-      rating,
+      rating: displayed,
       played: before.played + 1,
       rankedPlayed: before.rankedPlayed + (ranked ? 1 : 0),
       won: before.won + (outcome === 'win' ? 1 : 0),
@@ -308,17 +375,28 @@ export class Accounts {
       drawn: before.drawn + (outcome === 'draw' ? 1 : 0),
       streak,
       bestStreak: Math.max(before.bestStreak, streak),
+      ratingExact: glicko ? glicko.rating : before.ratingExact,
+      rd: glicko ? glicko.rd : before.rd,
+      volatility: glicko ? glicko.volatility : before.volatility,
+      ratedAt: glicko ? this.now() : before.ratedAt,
+      ...season,
     };
 
     this.db
       .prepare(
-        `INSERT INTO stats (account_id, mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO stats (account_id, mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak,
+           rating_exact, rd, volatility, rated_at, season_id, season_played, season_won, season_lost,
+           season_drawn, season_peak)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(account_id, mode) DO UPDATE SET
            rating = excluded.rating, played = excluded.played,
            ranked_played = excluded.ranked_played, won = excluded.won,
            lost = excluded.lost, drawn = excluded.drawn, streak = excluded.streak,
-           best_streak = excluded.best_streak`,
+           best_streak = excluded.best_streak, rating_exact = excluded.rating_exact,
+           rd = excluded.rd, volatility = excluded.volatility, rated_at = excluded.rated_at,
+           season_id = excluded.season_id, season_played = excluded.season_played,
+           season_won = excluded.season_won, season_lost = excluded.season_lost,
+           season_drawn = excluded.season_drawn, season_peak = excluded.season_peak`,
       )
       .run(
         accountId,
@@ -331,6 +409,16 @@ export class Accounts {
         next.drawn,
         next.streak,
         next.bestStreak,
+        next.ratingExact,
+        next.rd,
+        next.volatility,
+        next.ratedAt,
+        next.seasonId,
+        next.seasonPlayed,
+        next.seasonWon,
+        next.seasonLost,
+        next.seasonDrawn,
+        next.seasonPeak,
       );
 
     return next;
@@ -457,6 +545,7 @@ function toAccountRow(row: AccountRecord): AccountRow {
       : AVATARS[0],
     createdAt: row.created_at,
     claimed: row.password_hash !== null,
+    bot: row.bot === 1,
   };
 }
 
@@ -471,6 +560,16 @@ function toModeStats(row: StatsRecord): ModeStats {
     drawn: row.drawn,
     streak: row.streak,
     bestStreak: row.best_streak,
+    ratingExact: row.rating_exact ?? row.rating,
+    rd: row.rd,
+    volatility: row.volatility,
+    ratedAt: row.rated_at,
+    seasonId: row.season_id,
+    seasonPlayed: row.season_played,
+    seasonWon: row.season_won,
+    seasonLost: row.season_lost,
+    seasonDrawn: row.season_drawn,
+    seasonPeak: row.season_peak,
   };
 }
 
@@ -481,5 +580,6 @@ export function toPublicProfile(account: AccountRow, rating: number | null): Pub
     displayName: account.displayName,
     avatar: account.avatar,
     rating,
+    ...(account.bot ? { bot: true } : {}),
   };
 }

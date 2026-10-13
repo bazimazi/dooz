@@ -156,6 +156,13 @@ try {
     },
     { profile },
   );
+  const season = {
+    id: 1,
+    name: 'Season 1',
+    startsAt: 1700000000000,
+    endsAt: 1704838400000,
+    closedAt: null,
+  };
   await connected.route('**/api/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     const data =
@@ -165,21 +172,30 @@ try {
           ? { matches: [match] }
           : path === '/api/matches/saved-match'
             ? match
-            : {
-                mode: 'classic',
-                placementGames: 5,
-                entries: [
-                  {
-                    rank: 1,
-                    profile: publicProfile,
-                    rating: 1234,
-                    played: 1,
-                    won: 1,
-                    drawn: 0,
-                    lost: 0,
-                  },
-                ],
-              };
+            : path === '/api/seasons'
+              ? { current: season, seasons: [season] }
+              : {
+                  mode: new URL(route.request().url()).searchParams.get('mode') ?? 'grid-6',
+                  placementGames: 5,
+                  season,
+                  total: 1,
+                  offset: 0,
+                  me: null,
+                  entries: [
+                    {
+                      rank: 1,
+                      profile: publicProfile,
+                      rating: 1234,
+                      played: 1,
+                      won: 1,
+                      drawn: 0,
+                      lost: 0,
+                      tier: 'silver',
+                      label: 'Silver I',
+                      peak: 1240,
+                    },
+                  ],
+                };
     return route.fulfill({ json: data });
   });
   const cachedPage = await connected.newPage();

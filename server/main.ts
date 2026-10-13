@@ -6,11 +6,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { createApi } from './api.js';
+import { createCompetitive } from './competitive.js';
 import { Accounts } from './db/accounts.js';
 import { openDatabase } from './db/database.js';
 import { Matches } from './db/matches.js';
 import { Lobby } from './lobby.js';
 import { log } from './log.js';
+import { installOps } from './ops.js';
 import type { Session } from './types.js';
 
 const PORT = Number(process.env['PORT'] ?? 8787);
@@ -76,11 +78,40 @@ function isOriginAllowed(origin: string | undefined): boolean {
 const db = openDatabase(DATA_FILE);
 const accounts = new Accounts(db);
 const matches = new Matches(db);
-const lobby = new Lobby(accounts, matches);
+// Seasons, bots, tournaments and anti-cheat; see `competitive.ts`.
+const competitive = createCompetitive(db, accounts);
+const lobby = new Lobby(accounts, matches, competitive.lobbyOptions);
+competitive.attach(lobby);
 
 const app = new Hono();
 
 app.use('*', cors({ origin: ALLOWED_ORIGINS === '*' ? '*' : ORIGIN_ALLOWLIST }));
+
+// Friends, correspondence, push, moderation, account data, telemetry, backups
+// and live-room persistence. Installed before the core routes so its ban guard
+// sits in front of them.
+const ops = installOps({
+  app,
+  db,
+  accounts,
+  matches,
+  lobby,
+  env: process.env,
+  dataFile: DATA_FILE,
+  trustProxy: TRUST_PROXY,
+});
+
+// Entrants who have wandered off hear that their tournament has begun.
+competitive.tournaments.onStarted((event, accountIds) => {
+  for (const accountId of accountIds) {
+    ops.notifier.notify(accountId, {
+      kind: 'tournament',
+      title: `${event.name} has started`,
+      body: event.kind === 'arena' ? 'Pairings are live. Jump in.' : 'Your first match is ready.',
+      url: '/tournaments',
+    });
+  }
+});
 
 app.route(
   '/',
@@ -90,13 +121,17 @@ app.route(
     db,
     signupsPerHour: Number.isFinite(SIGNUPS_PER_HOUR) ? SIGNUPS_PER_HOUR : 20,
     trustProxy: TRUST_PROXY,
+    seasons: competitive.seasons,
     health: () => ({
       sessions: lobby.sessionCount,
       rooms: lobby.roomCount,
       queued: lobby.queuedCount,
+      ...ops.metrics(),
     }),
   }),
 );
+
+app.route('/', competitive.api(lobby));
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST, createServer }, (info) => {
   log.info('server.listening', { host: HOST, port: info.port, version: PROTOCOL_VERSION });
@@ -217,6 +252,10 @@ function shutdown(): void {
   log.info('server.shutdown');
 
   clearInterval(ticker);
+  // Written down before the sockets go, so the next process can seat everyone
+  // back in the games they were playing.
+  ops.persistRooms();
+  ops.stop();
   for (const client of wss.clients) client.terminate();
   wss.close();
 

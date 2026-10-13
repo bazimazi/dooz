@@ -51,7 +51,7 @@ export function OpenerBanner({ round, player, label, fresh }: OpenerBannerProps)
       aria-hidden="true"
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
     >
-      <div className="flex animate-banner items-center gap-2.5 rounded-full border border-stroke bg-surface/95 py-2 pr-5 pl-2.5 shadow-[0_18px_40px_-18px_var(--color-shadow)] backdrop-blur-sm">
+      <div className="flex animate-banner items-center gap-2.5 rounded-full border border-stroke bg-surface/95 py-2 ps-2.5 pe-5 shadow-[0_18px_40px_-18px_var(--color-shadow)] backdrop-blur-sm">
         <span className="flex size-9 animate-flip items-center justify-center">
           <Mark player={shown.player} hole="var(--color-surface)" className="size-8" />
         </span>

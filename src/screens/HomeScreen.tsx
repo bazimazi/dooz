@@ -1,18 +1,20 @@
 import { modeById, type ModeId } from '@/game/engine';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
 import { BotIcon, CheckIcon, FriendsIcon } from '@/components/art/icons';
 import { Logo } from '@/components/art/Logo';
 import {
   BulbIcon,
   ChartIcon,
+  MedalIcon,
   SettingsIcon,
   SparkIcon,
   TargetIcon,
   TrophyIcon,
+  UsersIcon,
 } from '@/components/art/ui-icons';
-import { MiniBoard } from '@/game/components/MiniBoard';
+import { HeroBoard } from '@/game/components/HeroBoard';
 import { ModePicker } from '@/game/components/ModePicker';
 import { StarIcon } from '@/game/components/Stars';
 import { MAX_STARS, nextStage } from '@/features/journey/stages';
@@ -23,23 +25,37 @@ import {
   useProgressStore,
 } from '@/features/progress/store';
 import { dailyPuzzle } from '@/features/puzzles/puzzles';
+import { LevelBadge } from '@/features/collection/art';
+import { levelFor } from '@/features/progress/xp';
 import { Button } from '@/components/ui/Button';
 import { IconButton, iconButtonClasses } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
 import { cx } from '@/lib/cx';
+import { useT } from '@/i18n';
+import { homeMessages } from '@/i18n/messages/home';
+import { useModeText } from '@/i18n/messages/modes';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
 import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
-import { OnboardingSheet } from './OnboardingSheet';
-import { SettingsSheet } from './SettingsSheet';
-import { OnlineSheet } from './OnlineSheet';
+
+// The sheets open on demand, so the home screen paints without their code and
+// fetches each the first time it is wanted.
+const OnboardingSheet = lazy(async () => ({
+  default: (await import('./OnboardingSheet')).OnboardingSheet,
+}));
+const SettingsSheet = lazy(async () => ({
+  default: (await import('./SettingsSheet')).SettingsSheet,
+}));
+const OnlineSheet = lazy(async () => ({ default: (await import('./OnlineSheet')).OnlineSheet }));
 
 export function HomeScreen() {
   const navigate = useNavigate();
   const initialise = useAccountStore((state) => state.initialise);
+  const t = useT(homeMessages);
 
   const [mode, setMode] = useState<ModeId>(() => loadPreferences().mode);
+  const modeText = useModeText(mode);
   const [modeOpen, setModeOpen] = useState(false);
   const [onlineOpen, setOnlineOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -70,8 +86,8 @@ export function HomeScreen() {
           <Link
             to="/learn"
             search={{ mode }}
-            aria-label="How to play"
-            title="How to play"
+            aria-label={t('howToPlay')}
+            title={t('howToPlay')}
             className={iconButtonClasses({ tone: 'bare', size: 'small' })}
           >
             <BulbIcon />
@@ -84,7 +100,7 @@ export function HomeScreen() {
           <IconButton
             tone="bare"
             size="small"
-            label="Settings"
+            label={t('settings')}
             onClick={() => setSettingsOpen(true)}
           >
             <SettingsIcon />
@@ -92,33 +108,33 @@ export function HomeScreen() {
         </div>
 
         <div className="flex w-full flex-1 flex-col justify-center gap-4 py-3 [@media(max-height:599px)]:gap-3 [@media(max-height:599px)]:py-0">
-          <section aria-label="Play" className="flex w-full flex-col gap-4">
+          <section aria-label={t('play')} className="flex w-full flex-col gap-4">
             <button
               type="button"
               onClick={() => setModeOpen(true)}
               aria-haspopup="dialog"
-              className="home-mode-card rounded-3xl border border-stroke-soft bg-surface/70 p-4 text-left"
+              className="home-mode-card home-hero-card rounded-3xl border border-stroke-soft bg-surface/70 p-4 text-start"
             >
-              <span aria-hidden="true" className="home-mode-preview shrink-0">
-                <MiniBoard key={mode} config={modeById(mode).config} active className="w-full" />
+              <span aria-hidden="true" dir="ltr" className="home-mode-preview shrink-0">
+                <HeroBoard key={mode} config={modeById(mode).config} className="w-full" />
               </span>
               <span className="flex w-full min-w-0 items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-col gap-1">
-                  <span className="text-xs text-ink-faint">Game mode</span>
+                  <span className="text-xs text-ink-faint">{t('gameMode')}</span>
                   <span className="font-display text-xl" aria-live="polite">
-                    {modeById(mode).name}
+                    {modeText.name}
                   </span>
                   <span className="home-mode-tagline text-xs text-ink-muted">
-                    {modeById(mode).tagline}
+                    {modeText.tagline}
                   </span>
                 </span>
                 <span className="shrink-0 rounded-full border border-stroke-soft px-3 py-2 text-xs text-ink-muted">
-                  Change
+                  {t('change')}
                 </span>
               </span>
             </button>
 
-            <nav aria-label="Start a game" className="flex flex-col gap-3">
+            <nav aria-label={t('startGame')} className="flex flex-col gap-3">
               <Button
                 variant="primary"
                 block
@@ -130,61 +146,73 @@ export function HomeScreen() {
                   })
                 }
               >
-                Play vs bot
+                {t('playBot')}
               </Button>
-              <div className="grid grid-cols-2 gap-3">
+              {/* One row for the three other ways in, so the whole home screen
+                fits a small phone without scrolling. */}
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   size="small"
                   block
-                  className="whitespace-nowrap max-[359px]:text-sm"
+                  className="px-2 whitespace-nowrap max-[359px]:text-sm"
                   onClick={() => void navigate({ to: '/play/local', search: { mode } })}
                 >
-                  Two players
+                  {t('twoPlayers')}
                 </Button>
                 <Button
                   size="small"
                   block
+                  className="px-2 max-[359px]:text-sm"
                   icon={<FriendsIcon />}
                   onClick={() => setOnlineOpen(true)}
                 >
-                  Online
+                  {t('online')}
+                </Button>
+                <Button
+                  onClick={() =>
+                    void navigate({
+                      to: '/play/bot',
+                      search: { mode, difficulty: 'beginner', practice: true },
+                    })
+                  }
+                  variant="ghost"
+                  size="small"
+                  block
+                  className="px-2 max-[359px]:text-sm"
+                  aria-label={t('practiceLabel')}
+                  icon={<TargetIcon />}
+                >
+                  {t('practice')}
                 </Button>
               </div>
             </nav>
-            <Button
-              onClick={() =>
-                void navigate({
-                  to: '/play/bot',
-                  search: { mode, difficulty: 'beginner', practice: true },
-                })
-              }
-              variant="ghost"
-              size="small"
-              block
-              icon={<TargetIcon />}
-            >
-              Practice with hints
-            </Button>
           </section>
 
-          {/* The two reasons to come back when nobody else is around: the next
-            rival on the journey, and today's puzzle. */}
+          {/* More ways to play: the reasons to come back when nobody else is
+            around. New modes and features add their card to this grid - each
+            card is a compact `featureCard` link: an icon, a title and one line,
+            three to a row. */}
           <div
-            className="grid w-full animate-rise grid-cols-2 gap-2.5"
+            role="group"
+            aria-label={t('moreWays')}
+            className="home-cards grid w-full animate-rise grid-cols-3 gap-2"
             style={{ animationDelay: '0.36s' }}
           >
             <JourneyCard />
             <DailyCard />
+            <ArcadeCard />
           </div>
         </div>
         <nav
-          aria-label="Explore"
+          aria-label={t('explore')}
           className="flex w-full items-center justify-center gap-2 pt-2"
           style={{ animationDelay: '0.48s' }}
         >
-          <FooterLink to="/leaderboard" icon={<TrophyIcon />} label="Ranks" />
-          <FooterLink to="/profile" icon={<ChartIcon />} label="Profile" />
-          <FooterLink to="/puzzles" icon={<TargetIcon />} label="Puzzles" />
+          <FooterLink to="/leaderboard" icon={<TrophyIcon />} label={t('ranks')} />
+          <FooterLink to="/tournaments" icon={<MedalIcon />} label={t('compete')} />
+          <FooterLink to="/profile" icon={<ChartIcon />} label={t('profile')} />
+          <FooterLink to="/puzzles" icon={<TargetIcon />} label={t('puzzles')} />
+          <FooterLink to="/friends" icon={<UsersIcon />} label={t('friends')} />
         </nav>
       </div>
 
@@ -192,38 +220,40 @@ export function HomeScreen() {
         <ModeSheet mode={mode} onChange={chooseMode} onClose={() => setModeOpen(false)} />
       ) : null}
 
-      {onlineOpen ? (
-        <OnlineSheet
-          onClose={() => setOnlineOpen(false)}
-          onQuick={(ranked) =>
-            void navigate({
-              to: '/play/online',
-              replace: true,
-              search: { mode, ranked: ranked || undefined },
-            })
-          }
-          onHost={() =>
-            void navigate({ to: '/play/online', replace: true, search: { mode, host: true } })
-          }
-          onJoin={(code) =>
-            void navigate({ to: '/play/online', replace: true, search: { mode, code } })
-          }
-          onWatch={(code) =>
-            void navigate({ to: '/play/online', replace: true, search: { mode, watch: code } })
-          }
-          rankedAvailable={modeById(mode).ranked}
-          modeName={modeById(mode).name}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {onlineOpen ? (
+          <OnlineSheet
+            onClose={() => setOnlineOpen(false)}
+            onQuick={(ranked) =>
+              void navigate({
+                to: '/play/online',
+                replace: true,
+                search: { mode, ranked: ranked || undefined },
+              })
+            }
+            onHost={() =>
+              void navigate({ to: '/play/online', replace: true, search: { mode, host: true } })
+            }
+            onJoin={(code) =>
+              void navigate({ to: '/play/online', replace: true, search: { mode, code } })
+            }
+            onWatch={(code) =>
+              void navigate({ to: '/play/online', replace: true, search: { mode, watch: code } })
+            }
+            rankedAvailable={modeById(mode).ranked}
+            modeName={modeText.name}
+          />
+        ) : null}
 
-      {settingsOpen ? <SettingsSheet onClose={() => setSettingsOpen(false)} /> : null}
-      {tutorialOpen ? <OnboardingSheet mode={mode} onClose={dismissTutorial} /> : null}
+        {settingsOpen ? <SettingsSheet onClose={() => setSettingsOpen(false)} /> : null}
+        {tutorialOpen ? <OnboardingSheet mode={mode} onClose={dismissTutorial} /> : null}
+      </Suspense>
     </Screen>
   );
 }
 
 const featureCard = cx(
-  'group relative flex min-h-[4.75rem] items-center gap-2.5 overflow-hidden rounded-2xl border px-3 py-2.5 text-left no-underline max-[359px]:gap-2 max-[359px]:px-2',
+  'group relative flex min-w-0 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border px-2 py-2.5 text-center no-underline',
   'border-stroke-soft bg-surface/80',
   'transition-[transform,border-color,box-shadow] duration-200 ease-spring',
   'hover:-translate-y-0.5 hover:border-stroke hover:shadow-[0_12px_26px_-16px_var(--color-shadow)]',
@@ -232,6 +262,7 @@ const featureCard = cx(
 
 /** The journey's next stop: the rival waiting there, and the stars so far. */
 function JourneyCard() {
+  const t = useT(homeMessages);
   const earned = useProgressStore((state) => state.journey);
   const upNext = nextStage(earned);
   const stars = totalStars(earned);
@@ -240,21 +271,37 @@ function JourneyCard() {
     <Link
       to="/journey"
       className={featureCard}
-      aria-label={`Journey: ${stars} of ${MAX_STARS} stars. Next, ${upNext.rival.name}.`}
+      aria-label={t('journeyLabel', { stars, max: MAX_STARS, rival: upNext.rival.name })}
     >
       <span className="transition-transform duration-300 ease-spring group-hover:scale-110 group-hover:-rotate-6">
         <AvatarBadge
           avatar={upNext.rival.avatar}
           ring="var(--color-sunken)"
-          className="size-11 max-[359px]:size-8"
+          className="size-9 max-[359px]:size-8"
         />
       </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-sm font-semibold">Journey</span>
-        <span className="truncate text-xs text-ink-faint">Next: {upNext.rival.name}</span>
-        <span className="tnum mt-0.5 flex items-center gap-1 text-xs text-ink-muted">
-          <StarIcon lit className="size-3.5" /> {stars}/{MAX_STARS}
+      <span className="flex w-full min-w-0 flex-col items-center">
+        <span className="text-sm font-semibold">{t('journey')}</span>
+        <span className="tnum flex items-center gap-1 text-xs text-ink-muted">
+          <StarIcon lit className="size-3.5 shrink-0" />{' '}
+          {t('starsProgress', { stars, max: MAX_STARS })}
         </span>
+      </span>
+    </Link>
+  );
+}
+
+/** The arcade: the daily challenge, the gauntlet, runs and blitz - and your level. */
+function ArcadeCard() {
+  const t = useT(homeMessages);
+  const xp = useProgressStore((state) => state.xp);
+  const level = levelFor(xp);
+  return (
+    <Link to="/arcade" className={featureCard} aria-label={t('arcadeLabel', { level })}>
+      <LevelBadge level={level} className="size-9 text-sm max-[359px]:size-8" />
+      <span className="flex w-full min-w-0 flex-col items-center">
+        <span className="text-sm font-semibold">{t('arcade')}</span>
+        <span className="w-full truncate text-xs text-ink-faint">{t('level', { level })}</span>
       </span>
     </Link>
   );
@@ -262,6 +309,7 @@ function JourneyCard() {
 
 /** Today's puzzle, and whether the streak is alive. */
 function DailyCard() {
+  const t = useT(homeMessages);
   const daily = useProgressStore((state) => state.daily);
   const today = dayNumber();
   const puzzle = dailyPuzzle(today);
@@ -272,29 +320,32 @@ function DailyCard() {
     <>
       <span
         className={cx(
-          'flex size-11 shrink-0 items-center justify-center rounded-full text-2xl max-[359px]:size-8',
+          'flex size-9 shrink-0 items-center justify-center rounded-full text-xl max-[359px]:size-8',
           'transition-transform duration-300 ease-spring group-hover:scale-110 group-hover:rotate-12',
           solved ? 'bg-ok/15 text-ok' : 'bg-sunken text-ink',
         )}
       >
         {solved ? <CheckIcon className="size-5" /> : <TargetIcon />}
       </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-sm font-semibold">Daily puzzle</span>
-        <span className="truncate text-xs text-ink-faint">
-          {solved ? 'Solved today' : puzzle ? `Win in ${puzzle.mateIn}` : 'All puzzles'}
-        </span>
-        <span className="mt-0.5 flex items-center gap-1 text-xs whitespace-nowrap text-ink-muted">
-          <SparkIcon
-            className={cx('size-3.5 shrink-0', streak > 0 ? 'text-warn' : 'text-ink-faint')}
-          />
-          <span className="truncate">{streak > 0 ? `${streak}-day streak` : 'Start a streak'}</span>
+      <span className="flex w-full min-w-0 flex-col items-center">
+        <span className="text-sm font-semibold whitespace-nowrap">{t('dailyPuzzle')}</span>
+        <span className="flex w-full min-w-0 items-center justify-center gap-1 text-xs text-ink-muted">
+          {streak > 0 ? <SparkIcon className="size-3.5 shrink-0 text-warn" /> : null}
+          <span className="truncate">
+            {streak > 0
+              ? t('streak', { count: streak })
+              : solved
+                ? t('solvedToday')
+                : puzzle
+                  ? t('winIn', { count: puzzle.mateIn })
+                  : t('allPuzzles')}
+          </span>
         </span>
       </span>
       {!solved && puzzle ? (
         <span
           aria-hidden="true"
-          className="absolute top-2 right-2 size-2 animate-pulse-soft rounded-full bg-warn"
+          className="absolute end-2 top-2 size-2 animate-pulse-soft rounded-full bg-warn"
         />
       ) : null}
     </>
@@ -355,6 +406,7 @@ function ModeSheet({
 }) {
   const { closing, close } = useClosing(onClose);
   const panelRef = useDialog<HTMLDivElement>(close);
+  const t = useT(homeMessages);
 
   return (
     <div
@@ -383,10 +435,10 @@ function ModeSheet({
         <span aria-hidden="true" className="mx-auto h-1 w-10 shrink-0 rounded-full bg-ink/25" />
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stroke-soft pb-4">
           <h2 id="mode-sheet-title" className="font-display text-xl">
-            Choose a mode
+            {t('chooseMode')}
           </h2>
           <Button variant="ghost" size="small" className="w-auto" onClick={close}>
-            Done
+            {t('done')}
           </Button>
         </div>
         <div className="min-h-0 overflow-y-auto pb-1">

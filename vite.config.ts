@@ -56,8 +56,40 @@ export default defineConfig(({ mode }) => {
                 theme_color: '#232599',
                 background_color: '#232599',
                 display: 'standalone',
+                // Browsers that cannot install a standalone app still get one
+                // without the address bar rather than a plain tab.
+                display_override: ['standalone', 'minimal-ui'],
                 orientation: 'portrait',
+                id: '/',
                 start_url: '/',
+                scope: '/',
+                categories: ['games', 'entertainment'],
+                // An invite link or a shortcut opened while the app is already
+                // running reuses that window instead of starting a second game.
+                launch_handler: { client_mode: ['navigate-existing', 'auto'] },
+                // The long-press menu on the home-screen icon (and the taskbar
+                // jump list on desktop): straight to the three things people
+                // come back for.
+                shortcuts: [
+                  {
+                    name: 'Play the bot',
+                    short_name: 'Bot',
+                    url: '/play/bot',
+                    icons: [{ src: 'brand/icon-192.png', sizes: '192x192', type: 'image/png' }],
+                  },
+                  {
+                    name: 'Daily puzzle',
+                    short_name: 'Puzzle',
+                    url: '/puzzles',
+                    icons: [{ src: 'brand/icon-192.png', sizes: '192x192', type: 'image/png' }],
+                  },
+                  {
+                    name: 'Play online',
+                    short_name: 'Online',
+                    url: '/play/online',
+                    icons: [{ src: 'brand/icon-192.png', sizes: '192x192', type: 'image/png' }],
+                  },
+                ],
                 icons: [
                   {
                     src: 'brand/icon-192.png',
@@ -83,6 +115,10 @@ export default defineConfig(({ mode }) => {
                 globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
                 // Source/export artwork is not needed to play offline.
                 globIgnores: ['brand/*1024.png', 'brand/mark.svg', 'brand/app-icon.svg'],
+                // Push and notification-click handlers live in their own file
+                // (public/push-sw.js) and are pulled into the generated worker,
+                // so Workbox still owns precaching and offline play.
+                importScripts: ['push-sw.js'],
               },
             }),
           ]),

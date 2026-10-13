@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   applyMove,
+  type BotDifficulty,
   clockForConfig,
   configKey,
   createGame,
@@ -12,7 +13,9 @@ import {
   opponentOf,
   type Player,
   randomStartingPlayer,
+  replay,
   startingPlayerOf,
+  withSeed,
   X,
 } from '@/game/engine';
 import {
@@ -34,8 +37,23 @@ import { MatchClock } from './clock.js';
 import type { Accounts, AccountRow } from './db/accounts.js';
 import { toPublicProfile } from './db/accounts.js';
 import type { Matches } from './db/matches.js';
+import type {
+  Activity,
+  ArrangedMatch,
+  BotBackfillOptions,
+  LiveGame,
+  LobbyExtension,
+} from './lobby-hooks.js';
 import { log } from './log.js';
-import { PLACEMENT_GAMES, updateRatings } from './rating.js';
+import { Matchmaker, type QueueEntry } from './matchmaker.js';
+import type { PersistedRoom, SocialHooks } from './social-hooks.js';
+import {
+  type GlickoInput,
+  isProvisional,
+  PLACEMENT_GAMES,
+  type RatingOutcome,
+  updateRatings,
+} from './rating.js';
 import type { Outcome, Room, Seat, Session, Transport } from './types.js';
 
 export interface LobbyOptions {
@@ -58,6 +76,8 @@ export interface LobbyOptions {
   maxSpectatorsPerRoom?: number;
   /** Turn timers off entirely, which private rooms may want. */
   clocksEnabled?: boolean;
+  /** Offer a server bot to a player who has waited too long. Off when absent. */
+  bots?: BotBackfillOptions;
 }
 
 const DEFAULT_RECONNECT_GRACE_MS = 45_000;
@@ -68,28 +88,28 @@ const DEFAULT_MESSAGES_PER_SECOND = 10;
 const DEFAULT_MAX_SESSIONS = 5000;
 const DEFAULT_MAX_ROOMS = 2000;
 const DEFAULT_MAX_SPECTATORS = 50;
+/** Plies a spectator of a rated game is kept behind the live position. See `watcherSnapshot`. */
+export const SPECTATOR_LAG_PLIES = 2;
 
 /** Emotes get their own, far tighter bucket than ordinary messages. */
 const EMOTE_BURST = 3;
 const EMOTES_PER_SECOND = 0.34;
 
-/**
- * Ranked matchmaking band, in rating points, after waiting `waitedMs`.
- *
- * It starts narrow enough that the first match is a fair one and widens until
- * it stops mattering, because a perfectly fair match that never happens is
- * worse than a slightly lopsided one that does.
- */
-export function ratingBand(waitedMs: number): number {
-  if (waitedMs >= 45_000) return Number.POSITIVE_INFINITY;
-  return 120 + Math.floor(waitedMs / 6000) * 130;
-}
+export { ratingBand } from './matchmaker.js';
 
-interface QueueEntry {
-  sessionId: string;
-  accountId: string;
-  rating: number;
-  joinedAt: number;
+/** Glicko-2 input from a stored row. */
+function glickoOf(stats: {
+  ratingExact: number;
+  rd: number;
+  volatility: number;
+  ratedAt: number | null;
+}): GlickoInput {
+  return {
+    rating: stats.ratingExact,
+    rd: stats.rd,
+    volatility: stats.volatility,
+    ratedAt: stats.ratedAt,
+  };
 }
 
 /**
@@ -109,8 +129,13 @@ export class Lobby {
   /** Connection currently held by an account, for one-session-per-account. */
   private readonly byAccount = new Map<string, string>();
   private readonly rooms = new Map<string, Room>();
-  /** Waiting players, keyed by config plus whether they asked for a ranked game. */
-  private readonly queues = new Map<string, QueueEntry[]>();
+  /** Waiting players, by rule set and ladder, indexed by rating. */
+  private readonly matchmaker = new Matchmaker();
+  /** Seasons, bots, tournaments, anti-cheat: whatever has been plugged in. */
+  private readonly extensions: LobbyExtension[] = [];
+  /** Moderation, friends and live-room persistence plug in here (`social-hooks.ts`). */
+  social: SocialHooks = {};
+  private readonly bots: BotBackfillOptions | null;
 
   private readonly now: () => number;
   private readonly random: () => number;
@@ -142,6 +167,12 @@ export class Lobby {
     this.maxRooms = options.maxRooms ?? DEFAULT_MAX_ROOMS;
     this.maxSpectators = options.maxSpectatorsPerRoom ?? DEFAULT_MAX_SPECTATORS;
     this.clocksEnabled = options.clocksEnabled ?? true;
+    this.bots = options.bots ?? null;
+  }
+
+  /** Plug in a competitive system. See `lobby-hooks.ts`. */
+  use(extension: LobbyExtension): void {
+    this.extensions.push(extension);
   }
 
   get atCapacity(): boolean {
@@ -157,9 +188,7 @@ export class Lobby {
   }
 
   get queuedCount(): number {
-    let total = 0;
-    for (const queue of this.queues.values()) total += queue.length;
-    return total;
+    return this.matchmaker.size;
   }
 
   connect(transport: Transport): Session {
@@ -220,7 +249,8 @@ export class Lobby {
 
     // The seat is held rather than freed, so a dropped connection (a phone
     // locking its screen, a tunnel switching networks) does not end the game.
-    if (room.seats.every((candidate) => !candidate.connected)) {
+    // A bot is always there, so it never keeps a room open on its own.
+    if (room.seats.every((candidate) => !candidate.connected || candidate.bot)) {
       room.vacantSince = this.now();
     }
     this.announceSeats(room);
@@ -240,6 +270,14 @@ export class Lobby {
     this.checkClocks();
     this.checkAbandoned();
     this.sweepRooms();
+    const now = this.now();
+    for (const extension of this.extensions) {
+      try {
+        extension.tick?.(now);
+      } catch (error) {
+        log.exception('lobby.extension.tick', error);
+      }
+    }
   }
 
   handle(session: Session, message: ClientMessage): void {
@@ -261,7 +299,7 @@ export class Lobby {
         this.onHello(session, message);
         return;
       case 'queue':
-        this.onQueue(session, message.config, message.ranked);
+        this.onQueue(session, message.config, message.ranked, message.bots ?? true);
         return;
       case 'createRoom':
         this.onCreateRoom(session, message.config);
@@ -299,6 +337,20 @@ export class Lobby {
       case 'ping':
         session.transport.send({ type: 'pong' });
         return;
+      case 'challenge':
+        if (this.social.challenge)
+          this.social.challenge(session, message.accountId, message.config);
+        else this.fail(session, 'forbidden', 'Challenges are not available here.');
+        return;
+      case 'berserk':
+        this.onBerserk(session);
+        return;
+      case 'tournamentJoin':
+      case 'tournamentLeave':
+      case 'tournamentCreate':
+      case 'tournamentStart':
+        this.delegate(session, message);
+        return;
     }
   }
 
@@ -325,6 +377,16 @@ export class Lobby {
     if (!account) {
       log.warn('auth.failed', { sessionId: session.id, accountId: message.accountId });
       this.fail(session, 'unauthorized', 'Those credentials are not valid.');
+      session.transport.close();
+      return;
+    }
+
+    // A suspended account is told why and closed. Checked only after the
+    // credentials, so the answer says nothing to someone who does not hold them.
+    const refusal = this.social.refuse?.(account.id) ?? null;
+    if (refusal) {
+      log.warn('auth.refused', { sessionId: session.id, accountId: account.id });
+      this.fail(session, 'banned', refusal);
       session.transport.close();
       return;
     }
@@ -428,7 +490,7 @@ export class Lobby {
   // Matchmaking
   // ---------------------------------------------------------------------------
 
-  private onQueue(session: Session, config: GameConfig, ranked: boolean): void {
+  private onQueue(session: Session, config: GameConfig, ranked: boolean, bots = true): void {
     if (!session.accountId || !session.account) return;
     if (!isGameConfig(config)) {
       this.fail(session, 'badMessage', 'That is not a game we know how to run.');
@@ -443,10 +505,6 @@ export class Lobby {
 
     this.onLeave(session, { silent: true });
 
-    const key = this.queueKey(config, ranked);
-    const queue = this.queues.get(key) ?? [];
-    this.queues.set(key, queue);
-
     const modeKey = this.modeKeyFor(config);
     const rating = this.accounts.statsFor(session.accountId, modeKey).rating;
     const entry: QueueEntry = {
@@ -454,93 +512,142 @@ export class Lobby {
       accountId: session.accountId,
       rating,
       joinedAt: this.now(),
+      bots,
     };
 
-    const opponent = this.findOpponent(queue, entry, ranked);
+    const opponent = this.matchmaker.find(config, ranked, entry, this.now(), (candidate) =>
+      this.waiting(candidate),
+    );
     if (!opponent) {
-      queue.push(entry);
+      this.matchmaker.add(config, ranked, entry);
+      const waiting = this.matchmaker.poolSize(config, ranked);
       session.transport.send({
         type: 'searching',
         config,
         ranked,
-        queued: queue.length,
+        queued: waiting,
+        botAt: this.botAt(entry, ranked),
       });
       log.info('queue.join', {
         accountId: session.accountId,
         mode: modeKey,
         ranked,
         rating,
-        waiting: queue.length,
+        waiting,
       });
       return;
     }
 
+    this.matchmaker.remove(opponent.sessionId);
     this.pair(config, ranked, opponent, entry);
   }
 
-  /**
-   * Somebody in `queue` this entry may be matched with, removed from it.
-   *
-   * A casual game matches the longest waiter outright. A ranked one only
-   * matches inside a band that widens with whichever of the two has waited
-   * longer, so a player who has been waiting is not held up by a newcomer's
-   * narrow band.
-   */
-  private findOpponent(queue: QueueEntry[], entry: QueueEntry, ranked: boolean): QueueEntry | null {
-    for (let index = 0; index < queue.length; index++) {
-      const candidate = queue[index]!;
-      if (candidate.accountId === entry.accountId) continue;
-
-      const session = this.sessions.get(candidate.sessionId);
-      if (!session?.connected) {
-        // Dropped while waiting. Drop the entry and keep looking.
-        queue.splice(index, 1);
-        index--;
-        continue;
-      }
-
-      if (ranked) {
-        const waited = Math.max(this.now() - candidate.joinedAt, this.now() - entry.joinedAt);
-        if (Math.abs(candidate.rating - entry.rating) > ratingBand(waited)) continue;
-      }
-
-      queue.splice(index, 1);
-      return candidate;
-    }
-    return null;
+  /** Whether a queue entry's connection is still there to be matched. */
+  private waiting(entry: QueueEntry): boolean {
+    return this.sessions.get(entry.sessionId)?.connected === true;
   }
 
-  /** Re-run matchmaking for everyone waiting, now that the bands have widened. */
+  /** When a bot will be offered to `entry`, or `null` if never. */
+  private botAt(entry: QueueEntry, ranked: boolean): number | null {
+    if (!this.bots || !entry.bots) return null;
+    const after = ranked ? this.bots.rankedAfterMs : this.bots.casualAfterMs;
+    return after === null ? null : entry.joinedAt + after;
+  }
+
+  /**
+   * Re-run matchmaking for everyone waiting, now that the bands have widened,
+   * and offer a bot to whoever has waited past the backfill time.
+   *
+   * The longest waiter in each queue is matched first: a casual game takes
+   * them outright, a ranked one only inside a band that widens with whichever
+   * of the two has waited longer (see `Matchmaker`).
+   */
   private flushQueues(): void {
-    for (const [key, queue] of this.queues) {
-      const ranked = key.endsWith(':ranked');
-      let index = 0;
-
-      while (index < queue.length) {
-        const entry = queue[index]!;
-        const session = this.sessions.get(entry.sessionId);
-        if (!session?.connected) {
-          queue.splice(index, 1);
+    const now = this.now();
+    for (const pool of this.matchmaker.allPools()) {
+      // A snapshot: pairing removes entries, and a bot that could not be
+      // given puts one back.
+      for (const entry of Array.from(pool.order)) {
+        // Paired, or dropped, earlier in this same sweep.
+        if (!this.matchmaker.has(entry.sessionId)) continue;
+        if (!this.waiting(entry)) {
+          this.matchmaker.remove(entry.sessionId);
           continue;
         }
 
-        const rest = queue.slice(index + 1);
-        const partner = this.findOpponent(rest, entry, ranked);
-        if (!partner) {
-          index++;
+        const partner = this.matchmaker.find(pool.config, pool.ranked, entry, now, (candidate) =>
+          this.waiting(candidate),
+        );
+        if (partner) {
+          this.matchmaker.remove(entry.sessionId);
+          this.matchmaker.remove(partner.sessionId);
+          this.pair(pool.config, pool.ranked, partner, entry);
           continue;
         }
 
-        // `findOpponent` spliced out of the copy, so remove both from the real
-        // queue before pairing them.
-        queue.splice(index, 1);
-        const partnerAt = queue.findIndex((item) => item.sessionId === partner.sessionId);
-        if (partnerAt >= 0) queue.splice(partnerAt, 1);
-
-        const config = this.configFromQueueKey(key);
-        if (config) this.pair(config, ranked, partner, entry);
+        const botAt = this.botAt(entry, pool.ranked);
+        if (botAt !== null && now >= botAt) {
+          this.matchmaker.remove(entry.sessionId);
+          this.pairWithBot(pool.config, pool.ranked, entry);
+        }
       }
     }
+  }
+
+  /**
+   * Seat a player who has waited long enough opposite a server bot.
+   *
+   * Always unrated, whichever queue it came from, and the bot's seat says what
+   * it is: nobody should find out afterwards that the opponent they thought
+   * they had beaten was a program.
+   */
+  private pairWithBot(config: GameConfig, ranked: boolean, entry: QueueEntry): void {
+    const session = this.sessions.get(entry.sessionId);
+    if (!session) return;
+
+    const pick = this.bots?.provider.pick(entry.rating, config) ?? null;
+    if (!pick) {
+      // No bot to give. Keep waiting for a person, without asking again.
+      this.matchmaker.add(config, ranked, { ...entry, bots: false });
+      return;
+    }
+
+    const room = this.openRoom(config, 'casual');
+    if (!room) {
+      this.fail(session, 'serverFull', 'The server is busy. Try again in a moment.');
+      return;
+    }
+
+    this.seat(room, session);
+    this.seatBot(room, pick.account, pick.difficulty, pick.rating);
+    this.beginGame(room);
+    log.info('match.bot', {
+      room: room.code,
+      mode: room.mode,
+      fromRanked: ranked,
+      difficulty: pick.difficulty,
+      waitedMs: this.now() - entry.joinedAt,
+    });
+  }
+
+  private seatBot(
+    room: Room,
+    account: AccountRow,
+    difficulty: BotDifficulty,
+    rating: number,
+  ): void {
+    room.seats.push({
+      accountId: account.id,
+      player: room.seats.length === 0 ? X : O,
+      account,
+      connected: true,
+      wantsRematch: false,
+      offeredDraw: false,
+      mayOfferDraw: false,
+      ratingBefore: rating,
+      disconnectedAt: null,
+      bot: difficulty,
+    });
   }
 
   private pair(config: GameConfig, ranked: boolean, first: QueueEntry, second: QueueEntry): void {
@@ -566,6 +673,7 @@ export class Lobby {
 
     this.seat(room, firstSession);
     this.seat(room, secondSession);
+    this.matchmaker.recordPairing(first.accountId, second.accountId);
     this.beginGame(room);
     log.info('match.start', {
       room: room.code,
@@ -576,10 +684,8 @@ export class Lobby {
   }
 
   private requeue(config: GameConfig, ranked: boolean, entry: QueueEntry): void {
-    const key = this.queueKey(config, ranked);
-    const queue = this.queues.get(key) ?? [];
-    this.queues.set(key, queue);
-    if (!queue.some((item) => item.sessionId === entry.sessionId)) queue.unshift(entry);
+    // The entry keeps its original `joinedAt`, so the wait already put in counts.
+    if (!this.matchmaker.has(entry.sessionId)) this.matchmaker.add(config, ranked, entry);
   }
 
   private onCreateRoom(session: Session, config: GameConfig): void {
@@ -718,38 +824,52 @@ export class Lobby {
       this.fail(session, 'notInRoom', 'You are not in a game.');
       return;
     }
-    const { room, seat } = found;
+    this.applySeatMove(found.room, found.seat, index, session);
+  }
 
-    if (room.seats.length < 2) {
-      this.fail(session, 'notInRoom', 'You are not in a game.');
-      return;
-    }
+  /**
+   * Play a move for a bot seat, if the game is still the one it was computed
+   * for. `game` is the state the bot was shown: any move or new game since
+   * replaces the room's state object, so a stale answer is simply dropped.
+   */
+  playFor(code: string, accountId: string, index: number, game: GameState): boolean {
+    const room = this.rooms.get(code);
+    const seat = room?.seats.find(
+      (candidate) => candidate.accountId === accountId && candidate.bot,
+    );
+    if (!room || !seat || room.game !== game) return false;
+    return this.applySeatMove(room, seat, index, null);
+  }
+
+  /** The move itself, for a person (`session`) or a bot (`null`). */
+  private applySeatMove(room: Room, seat: Seat, index: number, session: Session | null): boolean {
+    const fail = (code: ErrorCode, message: string) => {
+      if (session) this.fail(session, code, message);
+      return false;
+    };
+
+    if (room.seats.length < 2) return fail('notInRoom', 'You are not in a game.');
 
     // `settled` and a finished board are not the same thing: a match decided on
     // time, by resignation or by abandonment leaves a board that is still
     // mid-game. Without this check those boards would keep accepting moves
     // after the result had already been recorded.
     if (room.settled || room.game.status !== 'playing') {
-      this.fail(session, 'notYourTurn', 'This match is over.');
-      return;
+      return fail('notYourTurn', 'This match is over.');
     }
     if (room.game.currentPlayer !== seat.player) {
-      this.fail(session, 'notYourTurn', 'It is not your turn.');
-      return;
+      return fail('notYourTurn', 'It is not your turn.');
     }
 
     // The clock is checked before the move, not after: a move that arrives
     // after the flag has fallen is too late, however legal it is.
     if (room.clock?.flagged() === seat.player) {
       this.settle(room, { winner: opponentOf(seat.player), reason: 'timeout' });
-      return;
+      return false;
     }
 
     const next = applyMove(room.game, index);
-    if (!next) {
-      this.fail(session, 'illegalMove', 'That move is not allowed here.');
-      return;
-    }
+    if (!next) return fail('illegalMove', 'That move is not allowed here.');
 
     const at = this.now();
     room.moveTimesMs.push(Math.max(0, at - room.lastMoveAt));
@@ -764,7 +884,8 @@ export class Lobby {
     if (next.status === 'playing') {
       room.clock?.moved(seat.player, next.currentPlayer);
       this.broadcastState(room);
-      return;
+      this.turn(room);
+      return true;
     }
 
     room.clock?.stop();
@@ -773,6 +894,50 @@ export class Lobby {
       winner: next.winner,
       reason: next.status === 'draw' ? 'draw' : 'line',
     });
+    return true;
+  }
+
+  /** Tell the extensions a position is waiting for a move. */
+  private turn(room: Room): void {
+    for (const extension of this.extensions) {
+      try {
+        extension.turn?.(room);
+      } catch (error) {
+        log.exception('lobby.extension.turn', error, { room: room.code });
+      }
+    }
+  }
+
+  /** Hand a message the lobby does not handle itself to whichever extension does. */
+  private delegate(session: Session, message: ClientMessage): void {
+    for (const extension of this.extensions) {
+      if (extension.message?.(session, message)) return;
+    }
+    this.fail(session, 'tournamentUnavailable', 'Tournaments are not running on this server.');
+  }
+
+  /**
+   * Berserk, in an arena game that allows it: before your first move, give up
+   * half your clock and your increment for a bonus point if you win.
+   */
+  private onBerserk(session: Session): void {
+    const found = this.seatOf(session);
+    if (!found) return;
+    const { room, seat } = found;
+    if (!room.tournament?.berserk || !this.isLive(room) || !room.clock) return;
+
+    room.berserk ??= new Set();
+    if (room.berserk.has(seat.player)) return;
+    const starter = startingPlayerOf(room.game);
+    const own = Math.floor((room.game.moves.length + (starter === seat.player ? 1 : 0)) / 2);
+    if (own > 0) return;
+
+    room.clock.halve(seat.player);
+    room.berserk.add(seat.player);
+    const message: ServerMessage = { type: 'berserk', player: seat.player };
+    this.broadcast(room, message);
+    for (const id of room.spectators) this.sessions.get(id)?.transport.send(message);
+    this.broadcastState(room);
   }
 
   private onResign(session: Session): void {
@@ -792,6 +957,14 @@ export class Lobby {
     // playing any more can put the banner back on their opponent's screen as
     // fast as the rate limiter allows, which is often enough to be a weapon.
     if (!found.seat.mayOfferDraw || found.seat.offeredDraw) return;
+
+    // A bot plays on. It answers at once, rather than leaving the offer
+    // hanging over a game whose other side will never read it.
+    if (found.room.seats.some((candidate) => candidate.bot)) {
+      found.seat.mayOfferDraw = false;
+      session.transport.send({ type: 'drawDeclined' });
+      return;
+    }
 
     found.seat.offeredDraw = true;
     this.broadcast(found.room, { type: 'drawOffered' }, found.seat.accountId);
@@ -827,8 +1000,12 @@ export class Lobby {
     // board alone cannot say which that is: a game decided by resignation, on
     // time, by abandonment or by agreement leaves it mid-game for good.
     if (this.isLive(room)) return;
+    // A tournament decides who plays whom next, not the two players.
+    if (room.tournament) return;
 
     seat.wantsRematch = true;
+    // A bot is always up for another game.
+    for (const candidate of room.seats) if (candidate.bot) candidate.wantsRematch = true;
     if (!room.seats.every((candidate) => candidate.wantsRematch)) {
       this.broadcast(room, { type: 'rematchOffered' }, seat.accountId);
       this.announceSeats(room);
@@ -847,6 +1024,9 @@ export class Lobby {
     const found = this.seatOf(session);
     if (!found) return;
     if (!this.consumeEmoteToken(session)) return;
+    // A muted account's emotes go nowhere. The sender is not told, for the same
+    // reason a player muted by their opponent is not.
+    if (this.social.isMuted?.(found.seat.accountId)) return;
 
     for (const seat of found.room.seats) {
       if (seat.accountId === found.seat.accountId) continue;
@@ -984,22 +1164,20 @@ export class Lobby {
 
     const ranked = room.kind === 'ranked';
     const score = outcome.winner === null ? 0.5 : outcome.winner === X ? 1 : 0;
+    const seasonId = this.seasonId();
 
     const xStats = this.accounts.statsFor(x.accountId, room.mode);
     const oStats = this.accounts.statsFor(o.accountId, room.mode);
 
     let rating: MatchResult['rating'] = null;
+    let next: RatingOutcome | null = null;
     if (ranked) {
-      // The K-factor follows ranked games only. A hundred casual games say
-      // nothing about how settled a ladder rating is.
-      const next = updateRatings(
-        { rating: xStats.rating, played: xStats.rankedPlayed },
-        { rating: oStats.rating, played: oStats.rankedPlayed },
-        score,
-      );
+      // Glicko-2: each side's uncertainty - grown by any time away - decides
+      // how far this one result moves it.
+      next = updateRatings(glickoOf(xStats), glickoOf(oStats), score, this.now());
       rating = {
-        x: { before: xStats.rating, after: next.x },
-        o: { before: oStats.rating, after: next.o },
+        x: { before: xStats.rating, after: Math.round(next.x.rating) },
+        o: { before: oStats.rating, after: Math.round(next.o.rating) },
       };
     }
 
@@ -1012,25 +1190,39 @@ export class Lobby {
     // One transaction for every row the result touches. A failure part-way
     // through rolls all of it back and leaves the room unsettled, rather than
     // marking it decided with half a result written - or none at all.
-    const matchId = this.accounts.transaction(() => {
-      const xAfter = this.accounts.recordResult(
-        x.accountId,
-        room.mode,
-        xOutcome,
-        rating?.x.after ?? xStats.rating,
-        ranked,
-      );
-      const oAfter = this.accounts.recordResult(
-        o.accountId,
-        room.mode,
-        oOutcome,
-        rating?.o.after ?? oStats.rating,
-        ranked,
-      );
+    // A bot's own record is not kept: its strength is set by hand, and a bot
+    // collecting wins and achievements would only be noise in the tables.
+    const {
+      id: matchId,
+      xAfter,
+      oAfter,
+    } = this.accounts.transaction(() => {
+      const xRecorded = x.bot
+        ? xStats
+        : this.accounts.recordResult(
+            x.accountId,
+            room.mode,
+            xOutcome,
+            next ? next.x : xStats.rating,
+            ranked,
+            seasonId,
+          );
+      const oRecorded = o.bot
+        ? oStats
+        : this.accounts.recordResult(
+            o.accountId,
+            room.mode,
+            oOutcome,
+            next ? next.o : oStats.rating,
+            ranked,
+            seasonId,
+          );
 
       const id = this.matches.record({
         mode: room.mode,
-        config: room.config,
+        // The game's config, not the room's: it carries the seed a replay
+        // needs to rebuild the same board.
+        config: room.game.config,
         kind: room.kind,
         xId: x.accountId,
         oId: o.accountId,
@@ -1044,13 +1236,34 @@ export class Lobby {
         rating,
       });
 
-      this.grantAchievements(x.accountId, xAfter, xOutcome === 'win', room, outcome);
-      this.grantAchievements(o.accountId, oAfter, oOutcome === 'win', room, outcome);
-      return id;
+      if (!x.bot) this.grantAchievements(x.accountId, xRecorded, xOutcome === 'win', room, outcome);
+      if (!o.bot) this.grantAchievements(o.accountId, oRecorded, oOutcome === 'win', room, outcome);
+      return { id, xAfter: xRecorded, oAfter: oRecorded };
     });
 
     room.settled = true;
     room.clock?.stop();
+
+    // What the result screen needs for a placement counter and a "still
+    // settling" note, on top of the bare before and after.
+    if (rating && next) {
+      rating = {
+        x: {
+          ...rating.x,
+          rd: Math.round(next.x.rd),
+          provisional: isProvisional(next.x.rd),
+          seasonPlayed: xAfter.seasonPlayed,
+          placementGames: PLACEMENT_GAMES,
+        },
+        o: {
+          ...rating.o,
+          rd: Math.round(next.o.rd),
+          provisional: isProvisional(next.o.rd),
+          seasonPlayed: oAfter.seasonPlayed,
+          placementGames: PLACEMENT_GAMES,
+        },
+      };
+    }
 
     const result: MatchResult = {
       matchId,
@@ -1077,6 +1290,23 @@ export class Lobby {
       moves: room.game.moves.length,
       durationMs: Math.max(0, this.now() - room.startedAt),
     });
+
+    for (const extension of this.extensions) {
+      try {
+        extension.settled?.({ matchId, room, outcome, x, o, result });
+      } catch (error) {
+        log.exception('lobby.extension.settled', error, { room: room.code, matchId });
+      }
+    }
+  }
+
+  /** The season ranked games currently count towards, if seasons are running. */
+  private seasonId(): number | undefined {
+    for (const extension of this.extensions) {
+      const id = extension.seasonId?.();
+      if (id !== undefined) return id;
+    }
+    return undefined;
   }
 
   private grantAchievements(
@@ -1116,16 +1346,18 @@ export class Lobby {
   // Room plumbing
   // ---------------------------------------------------------------------------
 
-  private openRoom(config: GameConfig, kind: MatchKind): Room | null {
+  private openRoom(config: GameConfig, kind: MatchKind, code?: string): Room | null {
     if (this.rooms.size >= this.maxRooms) return null;
 
     const room: Room = {
-      code: this.generateCode(),
+      code: code ?? this.generateCode(),
       config,
       mode: this.modeKeyFor(config),
       kind,
       seats: [],
-      game: createGame(config, randomStartingPlayer(this.random)),
+      // Seeded rule sets lay out their board from the game's own seed, so each
+      // game gets a fresh one; the room keeps the mode's unseeded config.
+      game: createGame(withSeed(config, this.random), randomStartingPlayer(this.random)),
       clock: null,
       spectators: new Set(),
       vacantSince: null,
@@ -1155,18 +1387,20 @@ export class Lobby {
   private beginGame(room: Room): void {
     if (room.seats.length < 2) return;
 
-    room.game = createGame(room.config, randomStartingPlayer(this.random));
+    room.game = createGame(withSeed(room.config, this.random), randomStartingPlayer(this.random));
     room.startedAt = this.now();
     room.lastMoveAt = this.now();
     room.moveTimesMs = [];
     room.settled = false;
     room.result = null;
 
+    room.berserk = new Set();
     for (const seat of room.seats) {
-      seat.ratingBefore = this.accounts.statsFor(seat.accountId, room.mode).rating;
+      // A bot shows the nominal rating of its level, which never changes.
+      if (!seat.bot) seat.ratingBefore = this.accounts.statsFor(seat.accountId, room.mode).rating;
       seat.wantsRematch = false;
       seat.offeredDraw = false;
-      seat.mayOfferDraw = true;
+      seat.mayOfferDraw = !seat.bot;
     }
 
     if (this.clocksEnabled) {
@@ -1183,6 +1417,7 @@ export class Lobby {
       const session = this.sessions.get(id);
       if (session) this.sendMatched(room, session);
     }
+    this.turn(room);
   }
 
   private seat(room: Room, session: Session): Seat | null {
@@ -1219,9 +1454,11 @@ export class Lobby {
       kind: room.kind,
       you: seat?.player ?? null,
       seats: this.wireSeats(room),
-      snapshot: toSnapshot(room.game),
+      snapshot: seat ? toSnapshot(room.game) : this.watcherSnapshot(room),
       clock: room.clock?.snapshot() ?? null,
       spectators: room.spectators.size,
+      tournament: room.tournament ?? null,
+      berserk: [...(room.berserk ?? [])],
     });
   }
 
@@ -1235,13 +1472,33 @@ export class Lobby {
   }
 
   private broadcastState(room: Room, exceptAccountId?: string): void {
-    const message: ServerMessage = {
-      type: 'state',
-      snapshot: toSnapshot(room.game),
-      clock: room.clock?.snapshot() ?? null,
-    };
+    const clock = room.clock?.snapshot() ?? null;
+    const message: ServerMessage = { type: 'state', snapshot: toSnapshot(room.game), clock };
     this.broadcast(room, message, exceptAccountId);
-    for (const id of room.spectators) this.sessions.get(id)?.transport.send(message);
+    if (room.spectators.size === 0) return;
+    const watched: ServerMessage = { type: 'state', snapshot: this.watcherSnapshot(room), clock };
+    for (const id of room.spectators) this.sessions.get(id)?.transport.send(watched);
+  }
+
+  /**
+   * The position a spectator is shown.
+   *
+   * A watcher of a rated game could otherwise run an engine on the live
+   * position and pass its answer to a player. Showing rated games a couple of
+   * plies behind makes any such answer one for a position that no longer
+   * exists, at no cost to anyone watching for fun. Casual and private games,
+   * and every finished game, are shown as they are.
+   */
+  private watcherSnapshot(room: Room): Snapshot {
+    const rated = room.kind === 'ranked' || Boolean(room.tournament);
+    const moves = room.game.moves;
+    if (!rated || !this.isLive(room) || moves.length === 0) return toSnapshot(room.game);
+    const shown = replay(
+      room.game.config,
+      startingPlayerOf(room.game),
+      moves.slice(0, Math.max(0, moves.length - SPECTATOR_LAG_PLIES)),
+    );
+    return toSnapshot(shown ?? room.game);
   }
 
   private announceSeats(room: Room): void {
@@ -1312,24 +1569,229 @@ export class Lobby {
   }
 
   private removeFromQueues(sessionId: string): void {
-    for (const queue of this.queues.values()) {
-      const at = queue.findIndex((entry) => entry.sessionId === sessionId);
-      if (at >= 0) queue.splice(at, 1);
+    this.matchmaker.remove(sessionId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // For the competitive extensions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Seat two connected players in a game neither queued for - a tournament
+   * pairing. Returns the room code, or `null` if either is not free to play.
+   *
+   * A player still sitting in a finished room is moved out of it; a player in
+   * a game that is still going is never pulled out of it.
+   */
+  arrange(request: ArrangedMatch): string | null {
+    if (!isGameConfig(request.config)) return null;
+    const sessions: Session[] = [];
+    for (const accountId of request.accountIds) {
+      const session = this.sessionFor(accountId);
+      if (!session?.connected || !session.account) return null;
+      const current = session.roomCode ? this.rooms.get(session.roomCode) : undefined;
+      if (current && this.isLive(current)) return null;
+      sessions.push(session);
+    }
+    if (sessions.length !== 2 || sessions[0] === sessions[1]) return null;
+
+    const room = this.openRoom(request.config, request.kind);
+    if (!room) return null;
+    for (const session of sessions) this.onLeave(session, { silent: true });
+
+    room.tournament = request.tournament ?? null;
+    for (const session of sessions) this.seat(room, session);
+    this.beginGame(room);
+    log.info('match.arranged', { room: room.code, tournament: room.tournament?.id ?? null });
+    return room.code;
+  }
+
+  /** Where an account is right now. */
+  activity(accountId: string): Activity {
+    const session = this.sessionFor(accountId);
+    const room = session?.roomCode ? this.rooms.get(session.roomCode) : undefined;
+    return {
+      online: session?.connected === true,
+      queued: session ? this.matchmaker.has(session.id) : false,
+      room: room?.code ?? null,
+      live: room ? this.isLive(room) : false,
+      finishedAt: room?.settled && room.result ? room.lastMoveAt : null,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // For the social and operations layers (see social-hooks.ts)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Open a private room with `session` seated in it, exactly as `createRoom`
+   * does, and return its code - or `null` if it could not be opened, in which
+   * case the session has already been told why.
+   */
+  openPrivateRoom(session: Session, config: GameConfig): string | null {
+    this.onCreateRoom(session, config);
+    const room = session.roomCode ? this.rooms.get(session.roomCode) : undefined;
+    return room?.kind === 'private' && room.seats.length === 1 ? room.code : null;
+  }
+
+  /**
+   * Take an account off the server: resign the game it is in (a ban or a
+   * deletion must not leave an opponent waiting out an abandon timer), drop
+   * its queue place, and close its connection with `message`.
+   */
+  evict(accountId: string, code: 'banned' | 'unauthorized', message: string): void {
+    const session = this.sessionFor(accountId);
+    if (session) {
+      this.fail(session, code, message);
+      this.onLeave(session, { silent: true });
+      session.transport.close();
+      this.disconnect(session);
+      return;
+    }
+
+    // No connection, but perhaps a seat still held open for a reconnect.
+    // Closing a room while iterating is safe: a Map visits each entry once.
+    for (const room of this.rooms.values()) {
+      const seat = room.seats.find((candidate) => candidate.accountId === accountId);
+      if (!seat) continue;
+      if (this.isLive(room)) {
+        this.settle(room, { winner: opponentOf(seat.player), reason: 'resign' }, accountId);
+      }
+      room.seats = room.seats.filter((candidate) => candidate.accountId !== accountId);
+      if (room.seats.length > 0) {
+        this.broadcast(room, { type: 'opponentLeft' });
+        for (const other of room.seats) {
+          const otherSession = this.sessionFor(other.accountId);
+          if (otherSession) otherSession.roomCode = null;
+        }
+      }
+      this.closeRoom(room);
     }
   }
 
-  private queueKey(config: GameConfig, ranked: boolean): string {
-    return `${configKey(config)}:${ranked ? 'ranked' : 'casual'}`;
+  /**
+   * Every room worth carrying across a restart, as plain data: games between
+   * two people in progress, and private rooms whose host is still waiting.
+   * Decided games are already in the match records. Rooms with a bot seat or
+   * a tournament pairing are left out: the bot driver and the tournament
+   * clock that run them do not survive the restart either.
+   */
+  exportRooms(): PersistedRoom[] {
+    const saved: PersistedRoom[] = [];
+    for (const room of this.rooms.values()) {
+      const waiting = room.kind === 'private' && room.seats.length === 1;
+      if (!waiting && !this.isLive(room)) continue;
+      if (room.tournament || room.seats.some((seat) => seat.bot !== undefined)) continue;
+      saved.push({
+        code: room.code,
+        config: room.config,
+        gameConfig: room.game.config,
+        kind: room.kind,
+        startingPlayer: startingPlayerOf(room.game),
+        moves: [...room.game.moves],
+        moveTimesMs: [...room.moveTimesMs],
+        startedAt: room.startedAt,
+        seats: room.seats.map((seat) => ({
+          accountId: seat.accountId,
+          player: seat.player,
+          ratingBefore: seat.ratingBefore,
+          mayOfferDraw: seat.mayOfferDraw,
+        })),
+        clock: room.clock?.toJSON() ?? null,
+      });
+    }
+    return saved;
   }
 
-  private configFromQueueKey(key: string): GameConfig | null {
-    const [variant, size, winLength] = key.split(':');
-    const config = {
-      variant,
-      size: Number(size),
-      winLength: Number(winLength),
-    };
-    return isGameConfig(config) ? config : null;
+  /**
+   * Put a room written down by `exportRooms` back.
+   *
+   * Every seat comes back disconnected, so the ordinary reconnect flow does the
+   * rest: a client's `hello` finds its seat and is put straight back into the
+   * game, and a player who never returns is dealt with by the same abandon
+   * and sweep rules as any other dropped connection. Refuses anything that
+   * does not replay into a real game or names an account that no longer exists.
+   */
+  importRoom(saved: PersistedRoom): boolean {
+    if (this.rooms.has(saved.code) || this.rooms.size >= this.maxRooms) return false;
+    if (!isGameConfig(saved.config) || !isGameConfig(saved.gameConfig)) return false;
+    if (saved.seats.length < 1 || saved.seats.length > 2) return false;
+
+    const live = saved.seats.length === 2;
+    const game = replay(saved.gameConfig, saved.startingPlayer, saved.moves);
+    if (!game || (live && game.status !== 'playing')) return false;
+
+    const accounts = saved.seats.map((seat) => this.accounts.get(seat.accountId));
+    if (accounts.some((account) => account === null)) return false;
+    for (const room of this.rooms.values()) {
+      if (room.seats.some((seat) => saved.seats.some((s) => s.accountId === seat.accountId))) {
+        return false;
+      }
+    }
+
+    const room = this.openRoom(saved.config, saved.kind, saved.code);
+    if (!room) return false;
+
+    const at = this.now();
+    room.game = game;
+    room.startedAt = saved.startedAt;
+    room.lastMoveAt = at;
+    room.moveTimesMs = [...saved.moveTimesMs];
+    room.settled = !live;
+    room.vacantSince = at;
+    room.clock =
+      live && saved.clock && this.clocksEnabled ? MatchClock.restore(saved.clock, this.now) : null;
+    room.seats = saved.seats.map((seat, index) => ({
+      accountId: seat.accountId,
+      player: seat.player,
+      account: accounts[index]!,
+      connected: false,
+      wantsRematch: false,
+      offeredDraw: false,
+      mayOfferDraw: seat.mayOfferDraw,
+      ratingBefore: seat.ratingBefore,
+      disconnectedAt: at,
+    }));
+    return true;
+  }
+
+  /** Send a message to an account, if it is connected. */
+  notify(accountId: string, message: ServerMessage): boolean {
+    const session = this.sessionFor(accountId);
+    if (!session?.connected) return false;
+    session.transport.send(message);
+    return true;
+  }
+
+  /**
+   * Public games in progress, strongest first, for the "watch live" list.
+   * Private rooms are never listed: their code is the invitation.
+   */
+  liveGames(limit = 30): LiveGame[] {
+    const games: (LiveGame & { strength: number })[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.kind === 'private' || !this.isLive(room)) continue;
+      const x = room.seats.find((seat) => seat.player === X);
+      const o = room.seats.find((seat) => seat.player === O);
+      if (!x || !o) continue;
+      games.push({
+        code: room.code,
+        mode: room.mode,
+        kind: room.kind,
+        config: room.config,
+        x: toPublicProfile(x.account, x.ratingBefore),
+        o: toPublicProfile(o.account, o.ratingBefore),
+        moves: room.game.moves.length,
+        spectators: room.spectators.size,
+        startedAt: room.startedAt,
+        tournament: room.tournament?.name ?? null,
+        // Ranked first, then by the stronger player, so the list leads with
+        // the games most worth watching.
+        strength: (room.kind === 'ranked' ? 10_000 : 0) + Math.max(x.ratingBefore, o.ratingBefore),
+      });
+    }
+    games.sort((a, b) => b.strength - a.strength || a.startedAt - b.startedAt);
+    return games.slice(0, Math.max(0, limit)).map(({ strength: _strength, ...game }) => game);
   }
 
   /** Ratings and statistics are keyed by mode id, or by config for a custom game. */
@@ -1399,6 +1861,9 @@ export function toSnapshot(game: GameState): Snapshot {
             : null,
         }
       : null,
+    // Per-variant state travels as it is: it is plain data, already derived
+    // from the moves, and the schema checks its shape on the way out.
+    ...(game.extra ? { extra: structuredClone(game.extra) as Snapshot['extra'] } : {}),
   };
 }
 

@@ -1,4 +1,4 @@
-import { type Board, Empty, type Player, opponentOf } from '../types.js';
+import { Blocked, type Board, Empty, type Player, opponentOf } from '../types.js';
 import { forEachWindowOf, windowTable, type WindowTable } from './windows.js';
 
 export const WIN_SCORE = 1_000_000;
@@ -69,6 +69,12 @@ function windowScore(own: number, open: number, winLength: number): number {
 }
 
 /**
+ * How much more the opponent's threats count than our own: the side to move
+ * gets a tempo. A bot style may lean further either way, through `defence`.
+ */
+const TEMPO = 1.08;
+
+/**
  * Static score of `board` from `player`'s point of view.
  *
  * Attack and defence are evaluated independently and then combined, with the
@@ -76,7 +82,14 @@ function windowScore(own: number, open: number, winLength: number): number {
  * gets a tempo, so a threat we have not yet answered is more dangerous than one
  * we have not yet made.
  */
-export function evaluate(board: Board, size: number, player: Player, winLength: number): number {
+export function evaluate(
+  board: Board,
+  size: number,
+  player: Player,
+  winLength: number,
+  exact = false,
+  defence = TEMPO,
+): number {
   const table = windowTable(size, winLength);
   const rival = opponentOf(player);
   const { cells, count } = table;
@@ -88,23 +101,29 @@ export function evaluate(board: Board, size: number, player: Player, winLength: 
     const base = w * winLength;
     let own = 0;
     let other = 0;
+    let blocked = false;
 
     for (let k = 0; k < winLength; k++) {
       const value = board[cells[base + k] ?? 0];
       if (value === Empty) continue;
       if (value === player) own++;
+      else if (value === Blocked) blocked = true;
       else other++;
     }
 
     // A window holding both marks is dead ground: neither side can ever
-    // complete it, so it is worth exactly nothing to either of them.
-    if (own > 0 && other > 0) continue;
+    // complete it, so it is worth exactly nothing to either of them. One
+    // crossing a blocked square is dead for both from the start.
+    if (blocked || (own > 0 && other > 0)) continue;
     if (own === 0 && other === 0) continue;
 
     // An end is open when it is on the board and either free or already ours:
     // a flank held by the other side closes the run exactly as the board edge
     // does, while one of our own marks lets it keep growing through.
     const occupant = own > 0 ? player : rival;
+    // Under the exact rule the same flank kills the window outright: filling
+    // it would make an overline, which does not win.
+    if (exact && overlined(board, table, w, occupant)) continue;
     const open = openEnds(board, table, w, occupant);
 
     const score = windowScore(own > 0 ? own : other, open, winLength);
@@ -119,7 +138,7 @@ export function evaluate(board: Board, size: number, player: Player, winLength: 
     else if (value === rival) theirs += weights[cell] ?? 0;
   }
 
-  const score = Math.round(mine - theirs * 1.08);
+  const score = Math.round(mine - theirs * defence);
   return score > EVAL_CAP ? EVAL_CAP : score < -EVAL_CAP ? -EVAL_CAP : score;
 }
 
@@ -138,6 +157,7 @@ export function moveHeuristic(
   index: number,
   player: Player,
   winLength: number,
+  exact = false,
 ): number {
   const table = windowTable(size, winLength);
   const rival = opponentOf(player);
@@ -150,19 +170,33 @@ export function moveHeuristic(
     for (let k = 0; k < winLength; k++) {
       const value = board[table.cells[base + k] ?? 0];
       if (value === Empty) continue;
+      if (value === Blocked) return;
       if (value === player) own++;
       else other++;
     }
 
     const open = openEnds(board, table, w, own > 0 ? player : rival);
 
+    // Under the exact rule a window flanked by the side's own mark can only
+    // ever make an overline, so it is worth nothing to build or to block.
     // Building: what this window becomes worth once the mark lands in it.
-    if (other === 0) score += gain(own, open, winLength);
+    if (other === 0 && !(exact && overlined(board, table, w, player))) {
+      score += gain(own, open, winLength);
+    }
     // Blocking: what the opponent loses when this window stops being theirs.
-    if (own === 0 && other > 0) score += windowScore(other, open, winLength);
+    if (own === 0 && other > 0 && !(exact && overlined(board, table, w, rival))) {
+      score += windowScore(other, open, winLength);
+    }
   });
 
   return score;
+}
+
+/** Whether a flank of window `w` already holds `occupant`'s mark. */
+function overlined(board: Board, table: WindowTable, w: number, occupant: Player): boolean {
+  const before = table.flanks[w * 2] ?? -1;
+  const after = table.flanks[w * 2 + 1] ?? -1;
+  return (before >= 0 && board[before] === occupant) || (after >= 0 && board[after] === occupant);
 }
 
 function openEnds(board: Board, table: WindowTable, w: number, occupant: Player): number {

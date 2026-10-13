@@ -1,9 +1,12 @@
 # dooz
 
-An in-a-row strategy game. Nine modes across six rule sets — classic Tic Tac
-Toe, larger boards, Gomoku, Misère, Gravity, Vanish and Ultimate — against a
-six-level AI, a journey of rivals, a daily puzzle, a friend on the same device,
-or a stranger on a rated ladder.
+An in-a-row strategy game. Nineteen modes across fourteen rule sets — classic
+Tic Tac Toe, larger boards, Gomoku and Gomoku Pro, Misère, Gravity, Connect
+Four, Vanish, Ultimate, Wild, Order & Chaos, Obstacles, Powers, Pente, Qubic
+and Quantum — against a six-level AI with six rival personalities, a journey,
+an arcade of daily challenges, gauntlets and roguelite runs, puzzles and
+lessons, a friend on the same device (or a 2v2 table), or a stranger on a
+seasonal rated ladder.
 
 One codebase runs everywhere: as a web app, as an installable PWA, as a desktop
 app on Windows, macOS and Linux, and as a native app on iOS and Android.
@@ -12,14 +15,17 @@ app on Windows, macOS and Linux, and as a native app on iOS and Android.
 
 ## What it is
 
-|                    |                                                                                                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Modes**          | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13 · Gomoku 15 · Misère · Vanish · Gravity · Ultimate                                                                       |
-| **Play**           | Pass-and-play series with names and a running score · vs AI (6 levels) · practice with hints and engine suggestions · ranked · casual · private rooms · spectating |
-| **Solo**           | A journey of six rivals and eighteen stages with star ratings · a pack of proven win-in-N puzzles with a daily puzzle and streaks                                  |
-| **Feel**           | Synthesised sound on every move, an optional generative score, haptics, four piece sets to unlock, gravity drops, vanishing marks, win ripples                     |
-| **Competitive**    | Accounts, Elo per mode, expanding-band matchmaking, clocks with increment, resign, draw offers, leaderboards                                                       |
-| **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics                                                                       |
+| Area               | What there is                                                                                                                                                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Modes**          | Classic 3×3 · Grid 6 · Grid 9 · Gomoku 13/15 · Gomoku Pro (exact five, swap) · Misère · Gravity · Connect Four · Vanish · Ultimate · Wild · Wild 4 · Order & Chaos · Obstacles · Powers · Pente · Qubic 4×4×4 · Quantum                 |
+| **Play**           | Pass-and-play series, solo or 2v2 teams · vs AI (6 levels, blitz clocks, handicap starts) · practice with hints and engine suggestions · ranked · casual · private rooms · games by mail                                                |
+| **Solo**           | A journey of six rivals with their own play styles, 42 stages and boss fights · hundreds of proven win-in-N puzzles, a daily puzzle and Puzzle Rush · 18 interactive lessons · the Arcade: daily challenge, gauntlet, roguelite runs    |
+| **Progress**       | XP and levels, 32 solo achievements, an earned collection of piece sets, win effects, frames, titles and victory lines, all synced to the cloud once you have an account                                                                |
+| **Look and feel**  | Six art styles (Pastel, Tabletop, Neon Arcade, Paper Craft, Ink & Zen, Chalkboard) in light and dark · particle effects, slow-motion wins and tactical callouts · adaptive generative music · rival worlds · Low/Balanced/High graphics |
+| **Competitive**    | Glicko-2 per mode, seasons with tiers and divisions, arenas and brackets, bot backfill, live games to watch, fair-play analysis                                                                                                         |
+| **Social**         | Friends, presence and direct challenges, games by mail, web push notifications                                                                                                                                                          |
+| **Languages**      | English, Español, Français, Deutsch and فارسی (right-to-left)                                                                                                                                                                           |
+| **After the game** | Match history, deterministic replays you can step through, achievements, per-mode statistics                                                                                                                                            |
 
 ## Offline use
 
@@ -28,6 +34,13 @@ and unfinished local/bot games are stored on the device. They work without a
 server account. Profile edits for an existing online account are queued and
 synced when the connection returns. A server account is created when online
 play or password setup needs one.
+
+Once a device has an account, its solo progress is also kept in the cloud: the
+whole progress blob is uploaded and merged with what other devices uploaded,
+by rules that only ever keep the better value (the larger count, the union of
+solved puzzles, the later streak), so signing in on a second device merges both
+and nothing is lost. Changes made offline are queued and sent when the
+connection returns ([`features/cloud`](src/features/cloud/merge.ts)).
 
 Previously downloaded online history, replays, and leaderboard snapshots are
 cached locally. Current rankings, multiplayer, password setup, sign-in, and
@@ -124,6 +137,34 @@ always the last three each player played, so the move list says which leaves
 next. `ultimate` is the one with state beyond the board, and it carries it in a
 field the others leave null.
 
+A square can also be **blocked** — nobody's, never empty, and the end of every
+line through it. Connect Four is gravity on a 7×7 board whose top row is
+blocked (the board draws it as 7×6), and Obstacles lays a point-symmetric
+handful of rocks out from `config.seed`, which every new game draws fresh
+(`withSeed`) and every replay reads back. Moves are integers, but not always
+squares: Wild and Order & Chaos let the mover place either mark, coded
+`cell + cells * mark`; Powers codes its one-time bomb and wall above the cell
+range the same way and keeps the charges left in `GameState.extra`; and an
+opening rule — `pro` or the pie-rule `swap` — wraps any placement variant
+without it knowing. Gomoku Pro (exact five, swap) carries the gomoku ladder;
+the solved boards — 3×3 classic, misère and vanish — are casual only.
+
+Three more rule sets bring state or geometry of their own. **Pente** (13×13,
+five in a row) captures: a placed mark that flanks exactly two opposing marks in
+a line takes them off the board, only the mover captures, and five captured
+pairs also win; the counts ride in `GameState.extra` and the board sees the
+taken pair off. **Qubic** is four in a row in a 4×4×4 cube, stored as an 8×8
+board whose quadrants are the four layers, with its own table of 76 lines.
+**Quantum** tic-tac-toe follows Goff: each move is a spooky mark in two squares,
+and a move that closes a cycle of entanglement obliges the other player to
+measure it. To keep turns strictly alternating, that choice is the first half
+of the measurer's own move code (`91 × (1 + choice) + follow-up`); the
+follow-up is a spooky pair, the forced ninth mark, or nothing when the collapse
+ended the game. When one collapse completes lines for both players, the line
+whose newest mark has the lower subscript wins — Goff's full point — and since
+subscripts are unique that tie-break is always decisive. Per-variant `extra`
+crosses the wire in the snapshot, validated per kind.
+
 Because nothing in the rules reads a clock or a random number, a match is stored
 as its config, its opener and its move list. That is what makes replays exact
 rather than approximate: the client re-runs the same engine over the same moves.
@@ -143,6 +184,16 @@ to one engine:
   uniformly among the root moves within a score window, so they play a
   defensible move that is simply not the strongest. A forced win is never
   subject to it.
+
+On top of a level sits an optional **style** (`bot/style.ts`): which of the
+moves the level allows it prefers. Weights on building and on blocking, a pull
+to the centre or the rim, an appetite for moves that bring two lines to the
+brink at once, an opening book per mode, a copycat's mirror. A level with slack
+lets its style choose inside the window instead of a coin; a level without
+slack only between moves its search scored exactly alike, plus a defensive
+leaning damped into the evaluation itself. Wins and blocks are taken before a
+style is asked, so the journey's rivals sit on the same rungs as the bare
+levels — `BENCH_RIVALS=1 npm run bench` runs the ladder with their styles.
 
 Under that sits an iterative-deepening alpha-beta search with a transposition
 table (Zobrist-hashed, with a second hash verified on lookup), killer moves,
@@ -168,6 +219,28 @@ hold.) Levels are weakened by how far down that distance they may see, the same
 principle as the search's depth limit. Because draws exist and neither side is
 forced to end one, a game with no line is drawn after fifty plies.
 
+The mark-choice games get a search of their own (`bot/marks.ts`): a window
+there matters by whether its marks agree, not whose they are, and every square
+is two moves. Wild's 3×3 board is searched to the end — a first-player win —
+and Order & Chaos scores Order's still-live windows, with Chaos's forced spoils
+found exactly. Blocked squares are dead ground to the line evaluation; under
+the exact rule a window flanked by its owner's mark is worth nothing, because
+it can only make an overline. Under the swap rule the bot takes an opening mark
+near the middle and offers one just outside that zone, and in Powers it spends
+the bomb only to stop a double threat or to break through into one.
+
+Pente, Qubic and Quantum each have a search of their own, sharing only how a
+difficulty becomes a move (`bot/rule-searches.ts`). Pente's board undoes
+captures as well as placements and scores captures, capture threats and
+exposed pairs alongside its five-windows; when the opponent can win next move,
+the root narrows to the moves that stop it — capturing out of the line counts.
+Qubic keeps a running count per line, wins on any open three, answers a single
+threat without spending a ply, and calls two threats lost. Quantum searches
+shallowly through the rules engine itself, and every level refuses a move that
+lets the opponent win at once. Practice hints cover Pente and Qubic exactly;
+Quantum has none, since a quantum move is a pair of squares and often a
+collapse, and no single square wins on its own.
+
 ```bash
 npm run bench    # the full strength ladder
 npm run bench:speed
@@ -176,25 +249,42 @@ npm run bench:speed
 ## Playing alone
 
 - **The journey.** Six rivals — Pip, Mo, Sage, Bruno, Vex and Nyx, one per bot
-  level — with three stages each across every mode. The player always moves
-  first, so the stars measure the player rather than a coin toss: one for a
-  win, more for winning inside each stage's par. Every stage is winnable; none
-  of them puts the player against a level that plays 3×3 perfectly. The rivals
-  talk: a taunt when they make a threat, a worry when you do, read off the same
-  exact threat check the hints use.
-- **Puzzles.** A pack of win-in-N positions from real bot games, each one proved
+  level — each with a chapter of seven stages across the modes, ending in a boss
+  stage with a twist. Each plays in a style of their own and has a signature
+  habit to learn and punish: Pip copies your moves, Mo blocks lines before they
+  are threats, Sage holds the centre, Bruno rushes his longest line, Vex sets
+  quiet traps, Nyx announces a forced win when it sees one. Some stages let the
+  rival open, start with marks on the board, or ask for something besides a
+  fast win for the third star — a double threat, no hints, never facing a
+  threat. Every stage is winnable; none of them puts the player against a level
+  that plays 3×3 perfectly. The rivals talk, from pools of thirty-odd lines
+  each, dealt so none repeats until the pool is spent: greetings per mode,
+  their first threat, a block, a fork, a comeback, the end coming — all read
+  off the same exact threat check the hints use. Stage ids are what stars are
+  saved under, so the original eighteen kept theirs.
+- **Puzzles.** A pack of 580 win-in-N positions from real bot games, each one proved
   by the generator in [`scripts/bench/puzzles.ts`](scripts/bench/puzzles.ts)
   against every defence, with a unique solution and the most stubborn defence
   recorded — so the client plays it back without searching. One of them is the
   daily puzzle, the same for everyone on the same day, with a streak for solving
-  on consecutive days and a spoiler-free result to share.
+  on consecutive days and a spoiler-free result to share; each pass through the
+  pack turns every puzzle by another symmetry of the board, so a daily never
+  comes round the same way twice. A wrong answer is not just refused: the
+  defence that beats it is played and named before it is lifted. The pack's
+  index ships with the app and its positions load on demand.
+- **Puzzle Rush.** Three minutes, five strikes, one try per puzzle, with the
+  puzzles climbing in rating as the score does. The best run is kept.
+- **Lessons.** Short interactive lessons per mode — open and closed threes,
+  forks, both ends, the four-three, sending in Ultimate, gravity's floors,
+  misère's mirror, vanish timing — each step a position where the move to find
+  is checked by the engine in the test suite.
 - **Progress.** Records against each bot level, streaks, stars and solved
   puzzles are kept on the device (`features/progress`). They unlock three piece
   sets — Neon, Chalk and Candy — alongside the original Classic set. Nothing
   here is trusted by the server; it is cosmetics and a profile card.
 
 ```bash
-npm run puzzles  # regenerate the pack: ~5 minutes, byte-identical every run
+npm run puzzles  # regenerate the 580-puzzle pack and its index: ~35 minutes, byte-identical every run
 ```
 
 ## Sound
@@ -232,6 +322,30 @@ and [`server/.env.example`](server/.env.example).
 The server creates its SQLite database on first run (`./data/dooz.sqlite` by
 default). It is the only thing that needs to persist between deploys.
 
+### Deploying the server
+
+```bash
+docker build -t dooz-server .
+docker run -d -p 8787:8787 -v dooz-data:/data --env-file server/.env dooz-server
+```
+
+The image runs the TypeScript server with `tsx`, keeps the database and its
+backups in the `/data` volume, and has a health check on `/health`, which also
+reports uptime, memory, database size, push, notice, telemetry and backup
+counters. Serve the web build (`npm run build:web`) from any static host or the
+same reverse proxy, and set `ALLOWED_ORIGINS` and, behind a proxy,
+`TRUST_PROXY=1`.
+
+- **Backups.** An online SQLite backup (consistent while the server runs) is
+  taken every `BACKUP_INTERVAL_HOURS` into `BACKUP_DIR`, keeping the newest
+  `BACKUP_KEEP`; `POST /admin/backups` takes one on demand. To restore, stop
+  the server and copy a backup over `DATA_FILE`.
+- **Deploys do not drop games.** On `SIGTERM` the server writes every game in
+  progress (rules, moves, clocks, seats) to the database before closing the
+  sockets, and the next process seats everyone back in it; clients reconnect
+  through the ordinary resume flow and the downtime is charged to nobody's
+  clock. Games by mail live in the database anyway.
+
 ### Desktop and mobile
 
 These need a [Rust toolchain](https://rustup.rs); everything else does not.
@@ -255,10 +369,43 @@ icons` fixes it without a re-init.
 
 The mobile and desktop builds **must** be given `VITE_SERVER_URL`: they are
 served from `tauri://localhost` and have no origin to infer a server from. The
-webview's content security policy is a static file rather than an environment
-variable, so
-[`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json)
-has to point at the same server.
+`dev:*`/`build:*` Tauri scripts run through
+[`scripts/tauri.mjs`](scripts/tauri.mjs), which adds that server to the
+webview's content security policy (`connect-src`) and passes the result to the
+Tauri CLI with `--config`, so the static
+[`tauri.conf.json`](src-tauri/tauri.conf.json) never names a deployment.
+`npm run tauri:config` prints what a build will use.
+
+Native features live behind [`src/platform`](src/platform), which works - or
+quietly does nothing - on every target:
+
+- **Haptics**: the platform's own feedback styles on phones
+  (`tauri-plugin-haptics`), `navigator.vibrate` in browsers, nothing on desktops.
+- **Notifications**: `tauri-plugin-notification` natively, the Notification API
+  on the web.
+- **Deep links**: `dooz://play/online?code=ABCD` (or `dooz://join/ABCD`) opens
+  the app at that room, both on launch and while it runs; on Windows and Linux
+  `tauri-plugin-single-instance` hands the link to the open window. Invite
+  links on `https://` open the app on phones once App Links / Universal Links
+  are set up: set `TAURI_APP_LINK_HOST` to the host of `VITE_PUBLIC_URL`, serve
+  `/.well-known/assetlinks.json` (Android package `games.bazimazi.dooz` and the
+  release key's SHA-256) and `/.well-known/apple-app-site-association`
+  (`<TeamID>.games.bazimazi.dooz`, path `/play/online*`) from that host, and
+  enable Associated Domains for the App ID.
+- **Desktop updates**: `tauri-plugin-updater`, off unless
+  `TAURI_UPDATER_ENDPOINTS` and `TAURI_UPDATER_PUBKEY` are set (see
+  [`.env.example`](.env.example)). When an update exists the game offers it in
+  a small card; nothing installs until the player taps it.
+- **Windows**: size and position are remembered (`tauri-plugin-window-state`)
+  and a second launch focuses the first.
+- **Store services**: achievements, leaderboards and purchases have interfaces
+  with no-op implementations in
+  [`game-services.ts`](src/platform/game-services.ts); Steamworks, Game Center
+  and Google Play Games need the owner's accounts and are marked as TODOs.
+
+The [Desktop workflow](.github/workflows/desktop.yml) builds Windows, macOS and
+Linux installers when run by hand or on a `v*` tag (which also drafts a GitHub
+release). Signing and updater secrets are optional and listed at its top.
 
 ### Game artwork
 
@@ -323,7 +470,115 @@ predictable.
 
 Ranked matchmaking pairs players inside a rating band that widens the longer
 either has waited, because a perfectly fair match that never happens is worse
-than a slightly lopsided one that does.
+than a slightly lopsided one that does. Queues are indexed by rating bucket,
+so a search looks at its neighbours rather than everybody, and somebody you
+have just played is passed over for a few seconds while anyone else will do.
+
+### Ratings, seasons and tiers
+
+Ratings are [Glicko-2](server/rating.ts): each carries a deviation that shrinks
+as you play and grows while you are away, so a new or returning player moves
+quickly and a settled one does not. A deviation above 110 is shown as
+provisional. Ratings from before the switch were kept as they were, with a
+deviation estimated from how many ranked games stood behind them.
+
+[Seasons](server/seasons.ts) run eight weeks (`SEASON_LENGTH_DAYS`). Each has
+its own record and ladder; at the end the standings are archived, everyone who
+placed gets a title for the tier they finished in, and ratings are pulled a
+quarter of the way back to the start with their deviation raised, so the five
+placement matches of the next season count for a lot. Tiers run Bronze to
+Diamond in three divisions each, then Master; both ends draw the lines from
+[one shared table](src/protocol/tiers.ts).
+
+The ladder lists players who finished their placements and whose rating has
+been tested recently (current deviation at most 150), ordered by rating. A
+conservative "rating minus two deviations" was the alternative; it was turned
+down because the ladder would then show a different number from the profile.
+
+### Bots, tournaments and watching
+
+A casual search that finds nobody in 20 seconds (`BOT_BACKFILL_SECONDS`) is
+offered a [server bot](server/bots.ts) near the player's rating. Bots are
+accounts flagged as such, labelled on every seat, never rated, and think on
+[worker threads](server/engine/pool.ts) - a bounded pool with a queue limit
+and a per-job timeout - so a search never stalls the event loop.
+
+[Arenas](server/tournaments.ts) run on a schedule (every three hours for
+thirty minutes by default): join any time, get paired again as soon as a game
+ends, 2 points a win, double while on a two-win streak, +1 for winning
+berserk. Private single-elimination brackets for 4, 8 or 16 are shared by
+code. Ranked and casual games in progress are listed publicly to watch;
+private ones never are. Watchers of a rated game - ranked or tournament - see
+it [two plies behind](server/lobby.ts) until it ends, so an engine run on what
+they see always answers a position that no longer exists.
+
+### Fair play
+
+After every ranked game on a board large enough to have real choices, a worker
+replays it and compares each non-trivial move with the strongest engine's
+first choice, alongside how evenly the moves were timed. Repeated games
+between one pair with one-sided results, and ranked games thrown in the first
+few moves, are recorded too. [None of it bans anyone](server/anticheat.ts): an
+open high-severity flag keeps the account off ladders and out of rewards until
+a moderator clears or confirms it.
+
+### Friends, challenges and games by mail
+
+Every account has a friend code (`XXXX-XXXX`, from the room-code alphabet);
+friends can also be found by name prefix. A request needs accepting, and a block
+is one-sided and silent - the blocked player simply cannot find, ask, challenge
+or invite the blocker again. Friends see each other's presence: online, looking
+for a game, or in one.
+
+A **challenge** opens a private room for the challenger and sends the friend a
+notice with its code; accepting is joining the room. A **game by mail**
+(correspondence) gives each move one, two or three days, lives entirely in
+SQLite - so it survives restarts and deploys - and is always casual: a game
+played over days invites outside help nobody can rule out. Running out of time
+on a move loses; a reminder goes out half a day before.
+
+Notices travel over the game socket when one is open, through a small inbox
+the app polls while it is on screen, and as **Web Push** to players who turned
+notifications on in Settings. Push is implemented on `node:crypto` (VAPID
+signing and RFC 8291 payload encryption, checked against the RFC's worked
+example); `node scripts/generate-vapid-keys.mjs` makes the key pair. Push
+endpoints arrive from clients, so the server only ever posts to an allow-list
+of the browsers' push services (`PUSH_HOSTS`).
+
+### Moderation
+
+Reports from players land in a queue read through an admin API (`/admin/*`,
+`Authorization: Bearer $ADMIN_TOKEN`, compared in constant time; the API does
+not exist without a token of at least 24 characters). A moderator can see the
+match a report is about, the reported account's history and its anti-cheat
+flags, and mute (no emotes, requests, challenges or invitations), suspend
+(refused at `hello` and on every API route but data export and deletion) or
+rename it; sanctions can be temporary and are revocable. Display names pass a
+small built-in filter on the way in that undoes leetspeak, accents and
+separators, and checks short words only as whole words, so "Scunthorpe" and
+"Dickens" are fine.
+
+### Your account and data
+
+Recovery codes (eight, shown once, stored hashed, each single-use) get a player
+back into an account without a password, and using one signs out every other
+device. Profile → Account and data downloads everything the server holds about
+the account as JSON (tables are discovered by their foreign key to the account,
+credentials stripped), or deletes it: live and correspondence games are
+resigned first so opponents get a result, then every row keyed to the account
+goes. Opponents keep their match history, with the deleted side shown as a
+former player.
+
+### Telemetry
+
+The app sends anonymous usage events (session start, game start and finish
+with the mode, onboarding complete, screens) and crash reports (window errors,
+unhandled rejections, the route error screen) to the game's own server, in
+batches. No account id, name, device id or address is sent or stored, URLs lose
+their query strings, and nothing is sent when the player turns it off in
+Settings or the browser sends Do Not Track / Global Privacy Control. The server
+keeps raw events for `TELEMETRY_RETENTION_DAYS`, a daily rollup indefinitely,
+and groups crashes by fingerprint; `/admin/telemetry` reads them.
 
 ### What the server assumes about clients
 
@@ -419,6 +674,21 @@ arrow keys, the grid structure, the focus trap, and the roles and names of every
 composite control. Contrast, target size and "is every control named" need
 layout and colour, so they are checked against a real browser by
 `npm run audit:a11y`.
+
+## Languages
+
+The interface is translated with a small library-free layer in
+[`src/i18n`](src/i18n/index.ts). Each area of the app has its own catalog in
+[`src/i18n/messages`](src/i18n/messages); English is the source and fixes the
+keys, every other language is a partial copy that falls back to English, and a
+test checks each translation has the same keys, placeholders and plural forms.
+Plurals use the locale's own rules and numbers its own digits. Persian sets
+`dir="rtl"` on the document, so layouts use logical properties; boards and
+other coordinate drawings are pinned to left-to-right. The language follows
+the device until the player picks one in Settings.
+
+To add a language, add it to [`locales.ts`](src/i18n/locales.ts) and give each
+catalog a translation; untranslated messages show in English meanwhile.
 
 ## The earlier versions
 

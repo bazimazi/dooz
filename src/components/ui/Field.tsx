@@ -92,14 +92,20 @@ export function Segmented<T extends string>({
   );
 
   // Arrow keys choose the neighbouring option and only the chosen one is a
-  // tab stop, as the radio group pattern expects.
+  // tab stop, as the radio group pattern expects. Left and right follow the
+  // reading direction, so in right-to-left text the left arrow moves on.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const forward = getComputedStyle(event.currentTarget).direction === 'rtl' ? -1 : 1;
     const step =
-      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+      event.key === 'ArrowDown'
         ? 1
-        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+        : event.key === 'ArrowUp'
           ? -1
-          : 0;
+          : event.key === 'ArrowRight'
+            ? forward
+            : event.key === 'ArrowLeft'
+              ? -forward
+              : 0;
     if (step === 0) return;
     event.preventDefault();
     const next = (index + step + options.length) % options.length;
@@ -119,10 +125,12 @@ export function Segmented<T extends string>({
     >
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-1 left-1 rounded-xl bg-stroke transition-transform duration-300 ease-spring"
+        // Anchored at the start edge and slid along the reading direction, so
+        // in right-to-left text it starts on the right and moves left.
+        className="pointer-events-none absolute inset-y-1 start-1 rounded-xl bg-stroke transition-transform duration-300 ease-spring [--segment-dir:1] rtl:[--segment-dir:-1]"
         style={{
           width: `calc((100% - 0.5rem) / ${options.length})`,
-          transform: `translateX(${index * 100}%)`,
+          transform: `translateX(calc(${index * 100}% * var(--segment-dir)))`,
         }}
       />
 
@@ -171,7 +179,7 @@ export function Toggle({
       aria-describedby={description ? descriptionId : undefined}
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-tile px-1 py-2 text-left"
+      className="flex w-full items-center justify-between gap-4 rounded-tile px-1 py-2 text-start"
     >
       <span className="flex flex-col">
         <span className="text-base">{label}</span>
@@ -191,8 +199,8 @@ export function Toggle({
       >
         <span
           className={cx(
-            'absolute top-0.5 left-0.5 size-5 rounded-full bg-ink transition-transform duration-200 ease-spring',
-            checked && 'translate-x-5',
+            'absolute start-0.5 top-0.5 size-5 rounded-full bg-ink transition-transform duration-200 ease-spring',
+            checked && 'translate-x-5 rtl:-translate-x-5',
           )}
         />
       </span>

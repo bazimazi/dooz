@@ -3,7 +3,7 @@ import type { ComponentProps, MouseEvent } from 'react';
 import { returnEntry } from '@/lib/navigation';
 import { consumeDialogHistory } from '@/lib/useDialog';
 
-type ReturnDestination = '/' | '/profile' | '/puzzles' | '/journey';
+type ReturnDestination = '/' | '/profile' | '/puzzles' | '/journey' | '/arcade' | '/collection';
 
 /** Return actions reuse a visited page; deep links fall back to a replacement. */
 export function useReturnTo() {

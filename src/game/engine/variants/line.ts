@@ -7,6 +7,7 @@ import {
 } from '../board.js';
 import { findWinLineFrom } from '../rules.js';
 import {
+  Blocked,
   Empty,
   type GameConfig,
   type GameState,
@@ -14,29 +15,46 @@ import {
   type Player,
   type VariantId,
 } from '../types.js';
+import { obstacleCells } from './obstacles.js';
 import type { Variant } from './variant.js';
 
 /**
- * The rule set behind `classic`, `gomoku`, `misere` and `gravity`.
+ * The rule set behind `classic`, `gomoku`, `misere`, `gravity`, `connect4` and
+ * `obstacles`.
  *
- * All four place a mark on an empty square and look for a run through it. They
- * differ only in the board they are played on, in which empty squares are open
- * - gravity allows only the lowest free square of each column - and, for
- * misere, in who the completed run belongs to. So they share one implementation
- * rather than four copies of the same line scan.
+ * All of them place a mark on an empty square and look for a run through it.
+ * They differ only in the board they are played on - Connect Four's and
+ * Obstacles' start with squares blocked - in which empty squares are open
+ * (gravity allows only the lowest free square of each column) and, for misere,
+ * in who the completed run belongs to. So they share one implementation rather
+ * than six copies of the same line scan.
  */
 interface LineRules {
   readonly id: VariantId;
+  readonly name: string;
   /** Completing a run loses rather than wins. */
   readonly misere: boolean;
   /** Marks fall to the lowest free square of their column. */
   readonly gravity: boolean;
+  readonly supports: Variant['supports'];
+  readonly validate: Variant['validate'];
+  /**
+   * Squares that start the game blocked: Connect Four's missing top row, or
+   * the obstacles a seeded board scatters. Absent means a clear board.
+   */
+  readonly blocked?: (config: GameConfig) => readonly number[];
 }
 
-function create(config: GameConfig, startingPlayer: Player): GameState {
+function createWith(
+  config: GameConfig,
+  startingPlayer: Player,
+  blocked: readonly number[] = [],
+): GameState {
+  const board = createBoard(config.size);
+  for (const cell of blocked) board[cell] = Blocked;
   return {
     config,
-    board: createBoard(config.size),
+    board,
     currentPlayer: startingPlayer,
     status: 'playing',
     winner: null,
@@ -72,7 +90,8 @@ function lineVariant(rules: LineRules): Variant {
     const board = state.board.slice();
     board[index] = state.currentPlayer;
 
-    const winLine = findWinLineFrom(board, state.config.size, index, state.config.winLength);
+    const { size, winLength, exact } = state.config;
+    const winLine = findWinLineFrom(board, size, index, winLength, exact);
     const moves = [...state.moves, index];
 
     if (winLine) {
@@ -103,10 +122,94 @@ function lineVariant(rules: LineRules): Variant {
     };
   }
 
-  return { id: rules.id, create, canPlay, legalMoves, apply };
+  function create(config: GameConfig, startingPlayer: Player): GameState {
+    return createWith(config, startingPlayer, rules.blocked?.(config));
+  }
+
+  return {
+    id: rules.id,
+    name: rules.name,
+    supports: rules.supports,
+    validate: rules.validate,
+    create,
+    canPlay,
+    legalMoves,
+    apply,
+  };
 }
 
-export const classicVariant = lineVariant({ id: 'classic', misere: false, gravity: false });
-export const gomokuVariant = lineVariant({ id: 'gomoku', misere: false, gravity: false });
-export const misereVariant = lineVariant({ id: 'misere', misere: true, gravity: false });
-export const gravityVariant = lineVariant({ id: 'gravity', misere: false, gravity: true });
+const anyBoard = (): boolean => true;
+const PLACEMENT_OPTIONS = { exact: true, openings: ['pro', 'swap'] } as const;
+
+export const classicVariant = lineVariant({
+  id: 'classic',
+  name: 'Custom',
+  misere: false,
+  gravity: false,
+  supports: PLACEMENT_OPTIONS,
+  validate: anyBoard,
+});
+export const gomokuVariant = lineVariant({
+  id: 'gomoku',
+  name: 'Gomoku',
+  misere: false,
+  gravity: false,
+  supports: PLACEMENT_OPTIONS,
+  validate: anyBoard,
+});
+export const misereVariant = lineVariant({
+  id: 'misere',
+  name: 'Misère',
+  misere: true,
+  gravity: false,
+  validate: anyBoard,
+  supports: undefined,
+});
+export const gravityVariant = lineVariant({
+  id: 'gravity',
+  name: 'Gravity',
+  misere: false,
+  gravity: true,
+  supports: { openings: ['swap'] },
+  // A column needs room to stack a run in it, or gravity is just a smaller board.
+  validate: (config) => config.size >= 4,
+});
+
+/**
+ * Connect Four: seven columns of six under gravity, four in a row.
+ *
+ * Played on the 7x7 board every square-board tool already understands, with
+ * its top row blocked so each column holds six. Gravity then needs nothing
+ * new - a column whose six squares are full has only the blocked one left, so
+ * it simply stops being a landing - and the boards the renderer crops are the
+ * only place the seventh row shows.
+ */
+export const CONNECT4_SIZE = 7;
+
+export function connect4Blocked(config: GameConfig): number[] {
+  return Array.from({ length: config.size }, (_, col) => col);
+}
+
+export const connect4Variant = lineVariant({
+  id: 'connect4',
+  name: 'Connect Four',
+  misere: false,
+  gravity: true,
+  supports: { openings: ['swap'] },
+  validate: (config) => config.size === CONNECT4_SIZE && config.winLength === 4,
+  blocked: connect4Blocked,
+});
+
+/**
+ * Five in a row around obstacles: a handful of squares, placed from the game's
+ * seed, that nobody can play on and no line can pass through.
+ */
+export const obstaclesVariant = lineVariant({
+  id: 'obstacles',
+  name: 'Obstacles',
+  misere: false,
+  gravity: false,
+  supports: { seeded: true },
+  validate: (config) => config.size >= 7 && config.size <= 11 && config.winLength === 5,
+  blocked: obstacleCells,
+});

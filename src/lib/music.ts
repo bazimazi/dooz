@@ -1,6 +1,9 @@
 import { loadPreferences, subscribePreferences } from './preferences';
 import { onAudioUnlocked, soundEngine } from './sound';
-import { createMusicScore, MUSIC_BAR, MUSIC_BEAT } from './music-score';
+import { createMusicScore, MOTIFS, type Mood, MUSIC_BAR, MUSIC_BEAT } from './music-score';
+
+/** Where the score sits when nothing is pulling it either way: the original groove. */
+export const RESTING_INTENSITY = 0.3;
 
 /** A warm, gently swung mallet groove. Generated on-device and available offline. */
 class Music {
@@ -11,6 +14,10 @@ class Music {
   private score: ReturnType<typeof createMusicScore> | null = null;
   private nodes: AudioNode[] = [];
   private wanted = loadPreferences().music;
+  private filter: BiquadFilterNode | null = null;
+  /** What the game asked for, and what the score is actually playing - eased per bar. */
+  private target = RESTING_INTENSITY;
+  private mood: Mood = { intensity: RESTING_INTENSITY, motif: null };
 
   constructor() {
     subscribePreferences((next) => {
@@ -37,7 +44,7 @@ class Music {
     const input = context.createGain();
     const filter = context.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 2800;
+    filter.frequency.value = cutoff(this.mood.intensity);
     filter.Q.value = 0.5;
     const output = context.createGain();
     output.gain.setValueAtTime(0.0001, context.currentTime);
@@ -55,6 +62,7 @@ class Music {
     echo.connect(echoLevel);
     echoLevel.connect(output);
     this.nodes = [input, filter, echo, echoLevel, output];
+    this.filter = filter;
     this.output = output;
     this.score = createMusicScore(context, input);
     this.nextBarAt = context.currentTime + 0.08;
@@ -70,6 +78,7 @@ class Music {
     const context = soundEngine.audio();
     const nodes = this.nodes;
     this.output = null;
+    this.filter = null;
     this.score = null;
     this.nodes = [];
     if (!output || !context) return;
@@ -79,18 +88,69 @@ class Music {
     setTimeout(() => nodes.forEach((node) => node.disconnect()), (fade + 0.6) * 1000);
   }
 
+  /** Ask for a calmer or tenser score, 0 to 1. It moves there over a bar or two. */
+  setIntensity(value: number) {
+    this.target = Math.min(1, Math.max(0, Number.isFinite(value) ? value : RESTING_INTENSITY));
+  }
+
+  /** Play a rival's theme instead of the house tune, or `null` for the house tune. */
+  setMotif(id: string | null) {
+    this.mood = { ...this.mood, motif: id ? (MOTIFS[id] ?? null) : null };
+  }
+
   private schedule() {
     const context = soundEngine.audio();
     if (!context || !this.output || !this.score) return;
     if (this.nextBarAt < context.currentTime) this.nextBarAt = context.currentTime + 0.03;
     while (this.nextBarAt < context.currentTime + 0.3) {
-      this.score(this.bar++, this.nextBarAt);
+      // Tension rises faster than it falls: a threat is heard at once, and
+      // the room calms down over a few bars once it has passed.
+      const step = this.target > this.mood.intensity ? 0.5 : 0.25;
+      const intensity = this.mood.intensity + (this.target - this.mood.intensity) * step;
+      this.mood = { ...this.mood, intensity };
+      this.filter?.frequency.setTargetAtTime(cutoff(intensity), this.nextBarAt, MUSIC_BEAT);
+      this.score(this.bar++, this.nextBarAt, this.mood);
       this.nextBarAt += MUSIC_BAR;
     }
   }
 }
+/** The score opens up - more top end - as the game gets tense. */
+function cutoff(intensity: number): number {
+  return 1900 + intensity * 3600;
+}
+
 let music: Music | null = null;
+// Asked for before the score exists - a game screen mounts before the first
+// gesture - so remembered and handed over when it starts.
+let pendingIntensity = RESTING_INTENSITY;
+let pendingMotif: string | null = null;
+
 /** Listen for the music toggle and the first audio-unlocking gesture. */
 export function initMusic(): void {
-  music ??= new Music();
+  if (music) return;
+  music = new Music();
+  music.setIntensity(pendingIntensity);
+  music.setMotif(pendingMotif);
+}
+
+/**
+ * How tense the game on screen is, from 0 (calm) to 1 (one move from the end).
+ * Game screens drive this; see `useMusicTension`. Leaving a game should hand
+ * it back with `resetMusicMood`.
+ */
+export function setMusicIntensity(value: number): void {
+  pendingIntensity = value;
+  music?.setIntensity(value);
+}
+
+/** A journey rival's theme by rival id, or `null` for the house tune. */
+export function setMusicMotif(id: string | null): void {
+  pendingMotif = id;
+  music?.setMotif(id);
+}
+
+/** Back to the house tune at its resting intensity. */
+export function resetMusicMood(): void {
+  setMusicIntensity(RESTING_INTENSITY);
+  setMusicMotif(null);
 }

@@ -19,6 +19,22 @@ export interface SearchOptions {
   readonly branchLimit?: number;
   /** Completing a run loses rather than wins. */
   readonly misere?: boolean;
+  /** Only a run of exactly `winLength` wins; an overline does not. */
+  readonly exact?: boolean;
+  /**
+   * How heavily the searching side weighs the opponent's threats against its
+   * own - a bot style's defensive leaning. Absent, the evaluation's usual
+   * tempo weighting applies to whoever is to move at each leaf. Set, every
+   * leaf is scored from `me`'s side with this weight, so the leaning belongs
+   * to the bot and not to whichever side happens to move last.
+   */
+  readonly evalDefence?: number;
+  /**
+   * The moves to consider at the root, when the rules allow fewer (or other)
+   * moves than the neighbourhood rule would pick - the pro opening's
+   * distance rule, say. Absent means the usual candidates.
+   */
+  readonly rootMoves?: readonly number[];
   /**
    * Marks fall to the lowest free square of their column, so the only moves are
    * one per column - which replaces the neighbourhood rule outright. It is
@@ -136,7 +152,7 @@ interface Entry {
  * in hand whenever time runs out.
  */
 export function search(board: Board, me: Player, options: SearchOptions): SearchResult {
-  const { size, winLength, misere = false } = options;
+  const { size, winLength, misere = false, exact = false } = options;
   const now = options.now ?? Date.now;
   const table = zobristFor(board.length);
   const transpositions = new Map<number, Entry>();
@@ -188,7 +204,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
       orderScore[move] =
         (move === preferred ? 1e12 : 0) +
         (move === killer ? 1e9 : 0) +
-        moveHeuristic(working, size, move, player, winLength);
+        moveHeuristic(working, size, move, player, winLength, exact);
     }
     moves.sort((a, b) => (orderScore[b] ?? 0) - (orderScore[a] ?? 0));
     return Number.isFinite(branchLimit) && moves.length > branchLimit
@@ -218,7 +234,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
   ): number => {
     nodes++;
 
-    if (lastMove !== null && hasWinFrom(working, size, lastMove, winLength)) {
+    if (lastMove !== null && hasWinFrom(working, size, lastMove, winLength, exact)) {
       return terminalScore(ply);
     }
     if (isBoardFull(working)) return 0;
@@ -244,11 +260,11 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
       const here = candidates();
 
       // Side to move has a win on the board: the position is won, exactly.
-      if (findImmediateWin(working, size, player, winLength, here) !== null) {
+      if (findImmediateWin(working, size, player, winLength, here, exact) !== null) {
         return WIN_SCORE - ply - 1;
       }
 
-      const threats = winningMoves(working, size, opponentOf(player), winLength, here, 2);
+      const threats = winningMoves(working, size, opponentOf(player), winLength, here, 2, exact);
       // Two threats at once cannot both be answered, so this is lost, exactly.
       if (threats.length >= 2) return -(WIN_SCORE - ply - 2);
       if (threats.length === 0) return evalHere(player);
@@ -320,13 +336,19 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
   };
 
   function evalHere(player: Player): number {
-    const score = evaluate(working, size, player, winLength);
+    const leaning = options.evalDefence;
+    const score =
+      leaning === undefined
+        ? evaluate(working, size, player, winLength, exact)
+        : player === me
+          ? evaluate(working, size, me, winLength, exact, leaning)
+          : -evaluate(working, size, me, winLength, exact, leaning);
     // Under misere every threat is a liability: the same position is worth the
     // opposite to the same player.
     return misere ? -score : score;
   }
 
-  const rootMoves = candidates();
+  const rootMoves = options.rootMoves ? [...options.rootMoves] : candidates();
   let bestMove = rootMoves[0] ?? -1;
   let bestScore = 0;
   let completedDepth = 0;

@@ -154,6 +154,10 @@ function apply(state: GameState, index: number): GameState | null {
 
 export const ultimateVariant: Variant = {
   id: 'ultimate',
+  name: 'Ultimate',
+  // Ultimate is nine 3x3 boards and nothing else: the sub-board geometry is
+  // what the variant *is*, so there is no other size it could mean.
+  validate: (config) => config.size === 9 && config.winLength === 3,
   create,
   canPlay,
   legalMoves,

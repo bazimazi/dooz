@@ -1,9 +1,12 @@
+import { useT } from '@/i18n';
+import { gameUiMessages } from '@/i18n/messages/gameUi';
 import type { BoardHint } from './Board';
 
-const LABELS = { win: 'Win here', threat: 'Block here', best: 'Suggested move' } as const;
+const LABELS = { win: 'hintWin', threat: 'hintThreat', best: 'hintBest' } as const;
 
 /** The same shapes as the board, with words so a colour is never the explanation. */
 export function HintLegend({ hints }: { hints: readonly BoardHint[] }) {
+  const t = useT(gameUiMessages);
   const kinds = (['win', 'threat', 'best'] as const).filter((kind) =>
     hints.some((hint) => hint.kind === kind),
   );
@@ -27,7 +30,7 @@ export function HintLegend({ hints }: { hints: readonly BoardHint[] }) {
           >
             {kind === 'threat' ? '!' : null}
           </span>
-          <span>{LABELS[kind]}</span>
+          <span>{t(LABELS[kind])}</span>
         </span>
       ))}
     </p>

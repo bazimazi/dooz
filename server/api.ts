@@ -17,8 +17,11 @@ import type { Accounts, AccountRow } from './db/accounts.js';
 import { nameKey, toPublicProfile } from './db/accounts.js';
 import type { Db } from './db/database.js';
 import type { Matches } from './db/matches.js';
+import { ladder } from './competitive-api.js';
+import type { Seasons } from './seasons.js';
 import { log } from './log.js';
-import { PLACEMENT_GAMES, rankFor } from './rating.js';
+import { isNameAllowed } from './name-filter.js';
+import { PLACEMENT_GAMES, placementFor } from './rating.js';
 
 /**
  * The HTTP half of the server.
@@ -45,7 +48,18 @@ export interface ApiOptions {
    * anywhere else it is whatever the client chose to write in it.
    */
   readonly trustProxy?: boolean;
-  readonly health: () => { sessions: number; rooms: number; queued: number };
+  /**
+   * Seasons, for season-scoped ladders. Without it the leaderboard is the
+   * all-time one it always was.
+   */
+  readonly seasons?: Seasons;
+  /** Live counters for `/health`; anything beyond the three core numbers is passed through. */
+  readonly health: () => {
+    sessions: number;
+    rooms: number;
+    queued: number;
+    [metric: string]: unknown;
+  };
 }
 
 const MAX_LEADERBOARD = 100;
@@ -142,6 +156,23 @@ export function createApi(options: ApiOptions): Hono {
   );
 
   app.get('/api/leaderboard', (c) => {
+    if (options.seasons) {
+      const viewer = authenticate(c.req.header('authorization'));
+      const page = ladder(
+        options.seasons,
+        {
+          mode: c.req.query('mode'),
+          season: c.req.query('season'),
+          limit: c.req.query('limit'),
+          offset: c.req.query('offset'),
+          around: c.req.query('around'),
+        },
+        viewer?.id ?? null,
+      );
+      if (!page) return c.json({ error: 'No such season' }, 404);
+      return c.json(page);
+    }
+
     const mode = c.req.query('mode') ?? RANKED_MODES[0]?.id ?? 'classic';
     const requested = Number(c.req.query('limit') ?? 25);
     const limit = Number.isFinite(requested)
@@ -188,7 +219,13 @@ export function createApi(options: ApiOptions): Hono {
     const parsed = createAccountRequestSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
 
-    const { account, token } = accounts.create(parsed.data.displayName, parsed.data.avatar);
+    // A refused name on first launch is quietly replaced with a generated one
+    // rather than failing: the player has not done anything yet but open the app.
+    const requested = parsed.data.displayName;
+    const { account, token } = accounts.create(
+      requested !== undefined && isNameAllowed(requested) ? requested : undefined,
+      parsed.data.avatar,
+    );
     log.info('account.create', { accountId: account.id });
     return c.json({ accountId: account.id, token, profile: fullProfile(account) }, 201);
   });
@@ -244,10 +281,14 @@ export function createApi(options: ApiOptions): Hono {
     if (!account) return c.json({ error: 'Unauthorized' }, 401);
 
     const profile = fullProfile(account);
+    const season = options.seasons?.seasonId();
     const ranks = profile.stats.map((entry) => ({
       mode: entry.mode,
-      rank: accounts.rankOf(account.id, entry.mode, PLACEMENT_GAMES),
-      division: rankFor(entry.rating).name,
+      rank:
+        season === undefined
+          ? accounts.rankOf(account.id, entry.mode, PLACEMENT_GAMES)
+          : options.seasons!.rankOf(account.id, entry.mode, season),
+      division: placementFor(entry.rating).label,
     }));
     return c.json({ profile, ranks });
   });
@@ -259,6 +300,9 @@ export function createApi(options: ApiOptions): Hono {
     const parsed = updateProfileRequestSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
 
+    if (parsed.data.displayName !== undefined && !isNameAllowed(parsed.data.displayName)) {
+      return c.json({ error: 'That name is not allowed. Please choose another.' }, 400);
+    }
     const updated = accounts.update(account.id, parsed.data);
     if (!updated) return c.json({ error: 'That name is already taken' }, 409);
     return c.json({ profile: fullProfile(updated) });
@@ -347,7 +391,7 @@ export function createApi(options: ApiOptions): Hono {
  * Keys whose window has closed are pruned as time passes, so a stream of
  * one-off addresses cannot grow the map without bound.
  */
-class FixedWindowLimiter {
+export class FixedWindowLimiter {
   private readonly entries = new Map<string, { count: number; windowStart: number }>();
   private lastPrune: number;
 
@@ -408,7 +452,7 @@ class FixedWindowLimiter {
  * A request that did not come through the Node server (a test calling the app
  * directly) has no socket, and shares one bucket with every other such request.
  */
-function addressOf(c: Context, trustProxy: boolean): string {
+export function addressOf(c: Context, trustProxy: boolean): string {
   if (trustProxy) {
     const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim();
     if (forwarded) return forwarded;
@@ -419,7 +463,7 @@ function addressOf(c: Context, trustProxy: boolean): string {
 }
 
 /** Parse a JSON body without throwing on an empty or malformed one. */
-async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {

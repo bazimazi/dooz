@@ -5,6 +5,8 @@ import { TurnCaret, WifiOffIcon } from '@/components/art/icons';
 import { Mark } from '@/components/art/marks';
 import { useAccountStore } from '@/features/account/store';
 import { cx } from '@/lib/cx';
+import { useT } from '@/i18n';
+import { gameUiMessages } from '@/i18n/messages/gameUi';
 import { MatchClock } from './MatchClock';
 
 export interface SeatInfo {
@@ -19,6 +21,8 @@ export interface SeatInfo {
   busy?: boolean;
   /** Shown under the name in ranked play. */
   rating?: number | null;
+  /** A short line under the name when there is no rating: a teammate, say. */
+  detail?: string;
   /** Milliseconds left, when this game is timed. */
   timeMs?: number | null;
   /** True while this seat's clock is the one running down. */
@@ -52,9 +56,11 @@ export function PlayerCard({
   isYou = false,
   busy = false,
   rating = null,
+  detail,
   timeMs = null,
   ticking = false,
 }: PlayerCardProps) {
+  const t = useT(gameUiMessages);
   const accent = player === X ? 'var(--color-mark-x)' : 'var(--color-mark-o)';
   const glow = player === X ? 'var(--color-glow-x)' : 'var(--color-glow-o)';
   const offline = connected === false;
@@ -144,6 +150,16 @@ export function PlayerCard({
             <span className={cx('tnum text-xs', active ? 'text-on-raised/70' : 'text-ink-faint')}>
               {rating}
             </span>
+          ) : detail ? (
+            <span
+              className={cx(
+                'max-w-[5.25rem] truncate text-[0.6875rem] leading-3',
+                active ? 'text-on-raised/70' : 'text-ink-faint',
+              )}
+              title={detail}
+            >
+              {detail}
+            </span>
           ) : null}
         </div>
 
@@ -161,7 +177,7 @@ export function PlayerCard({
 
       {isYou ? (
         <span className="absolute -top-2 left-1/2 -translate-x-1/2 animate-badge-in rounded-full border border-stroke-soft bg-seat-idle px-2 py-0.5 text-[0.6875rem] tracking-wide text-ink uppercase">
-          you
+          {t('you')}
         </span>
       ) : null}
 

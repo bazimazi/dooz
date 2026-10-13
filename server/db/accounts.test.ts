@@ -3,7 +3,7 @@ import { PLACEMENT_GAMES, STARTING_RATING } from '../rating.js';
 import { Accounts } from './accounts.js';
 import { type Db, openDatabase } from './database.js';
 import { Matches } from './matches.js';
-import { migrate } from './schema.js';
+import { MIGRATIONS } from './schema.js';
 
 let db: Db;
 let accounts: Accounts;
@@ -286,10 +286,11 @@ describe('migrations', () => {
       accounts.recordResult(bob.id, 'classic', 'loss', 1200, kind === 'ranked');
     }
 
-    // Wind the database back to before the column existed, then forward again.
+    // Wind the database back to before the column existed, then run that one
+    // step again. Re-running every later migration as well would fail on the
+    // tables they created the first time round.
     db.exec('ALTER TABLE stats DROP COLUMN ranked_played');
-    db.pragma('user_version = 1');
-    migrate(db);
+    MIGRATIONS[1]!(db);
 
     expect(accounts.statsFor(ada.id, 'classic')).toMatchObject({ played: 3, rankedPlayed: 2 });
     expect(accounts.statsFor(bob.id, 'classic')).toMatchObject({ played: 3, rankedPlayed: 2 });

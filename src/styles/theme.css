@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+/* Visual styles and the game's effects. Imported here so they are emitted
+   after Tailwind's layers; both are unlayered and lean on the tokens below. */
+@import './art-styles.css';
+@import './effects.css';
 
 /* Graphics quality is an explicit in-game choice. Ignore system and
    legacy reduced-motion settings; never infer graphics quality from them.
@@ -306,6 +310,15 @@
   --color-backdrop-glow: var(--color-b5);
   --color-face: var(--color-g9);
   --color-face-ink: var(--color-b8);
+
+  /* The board's own material, separate from the panels so a style can make
+     it wood, slate or paper while the cards around it stay cards. In the
+     original look the board simply is the surface. `accent` is the
+     highlight a style lights things with - a hovered square, the board an
+     Ultimate move must go to. */
+  --color-board: var(--color-surface);
+  --color-board-edge: var(--color-stroke);
+  --color-accent: var(--color-b8);
 }
 
 /**

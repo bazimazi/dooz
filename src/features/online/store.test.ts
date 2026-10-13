@@ -426,3 +426,79 @@ describe('a reconnect with nothing to resume', () => {
     expect(FakeSocket.latest.sent.some((sent) => sent.type === 'queue')).toBe(false);
   });
 });
+
+describe('competitive play', () => {
+  const arena = {
+    id: 'ARENA2',
+    kind: 'arena' as const,
+    name: 'Grid Arena',
+    mode: 'grid-6',
+    config: modeById('grid-6').config,
+    status: 'running' as const,
+    startsAt: 0,
+    endsAt: 1_800_000,
+    players: 2,
+    maxPlayers: 300,
+    berserk: true,
+    joined: true,
+    hostId: null,
+    standings: [],
+    bracket: null,
+  };
+
+  it('says when a bot will be offered while searching', () => {
+    connect();
+    FakeSocket.latest.deliver({
+      type: 'searching',
+      config: CLASSIC,
+      ranked: false,
+      queued: 1,
+      botAt: 20_000,
+    });
+    expect(useOnlineStore.getState().botAt).toBe(20_000);
+    FakeSocket.latest.deliver(matched());
+    expect(useOnlineStore.getState().botAt).toBeNull();
+  });
+
+  it('joins a tournament and follows its updates, ignoring others', () => {
+    connect();
+    useOnlineStore.getState().joinTournament('ARENA2');
+    expect(FakeSocket.latest.sent.at(-1)).toEqual({ type: 'tournamentJoin', id: 'ARENA2' });
+
+    FakeSocket.latest.deliver({ type: 'tournament', tournament: arena });
+    FakeSocket.latest.deliver({
+      type: 'tournament',
+      tournament: { ...arena, id: 'OTHER2', name: 'Other' },
+    });
+    expect(useOnlineStore.getState().tournament?.name).toBe('Grid Arena');
+  });
+
+  it('marks a tournament game and records berserk', () => {
+    connect();
+    FakeSocket.latest.deliver({
+      ...matched(),
+      kind: 'casual',
+      tournament: { id: 'ARENA2', name: 'Grid Arena', berserk: true },
+      berserk: [],
+    });
+    expect(useOnlineStore.getState().tournamentGame?.berserk).toBe(true);
+
+    useOnlineStore.getState().goBerserk();
+    expect(FakeSocket.latest.sent.at(-1)).toEqual({ type: 'berserk' });
+    FakeSocket.latest.deliver({ type: 'berserk', player: 1 });
+    FakeSocket.latest.deliver({ type: 'berserk', player: 1 });
+    expect(useOnlineStore.getState().berserk).toEqual([1]);
+  });
+
+  it('creates and starts a private bracket', () => {
+    connect();
+    useOnlineStore.getState().createBracket(CLASSIC, 8);
+    expect(FakeSocket.latest.sent.at(-1)).toEqual({
+      type: 'tournamentCreate',
+      config: CLASSIC,
+      size: 8,
+    });
+    useOnlineStore.getState().startBracket('BRKT23');
+    expect(FakeSocket.latest.sent.at(-1)).toEqual({ type: 'tournamentStart', id: 'BRKT23' });
+  });
+});

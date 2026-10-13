@@ -4,7 +4,8 @@ import { findBestMove } from '../bot/index.js';
 import { applyMove, canPlay, createGame, legalMoves } from '../game.js';
 import { modeById } from '../modes.js';
 import { fromMoves, seeded } from '../testing.js';
-import { Empty, isGameConfig, O, type Player, X } from '../types.js';
+import { isGameConfig } from '../config.js';
+import { Empty, O, type Player, X } from '../types.js';
 
 const GRAVITY = modeById('gravity').config;
 const SIZE = GRAVITY.size;

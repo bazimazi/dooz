@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { cx } from '@/lib/cx';
 
 const SHOW_MS = 2600;
 
@@ -10,7 +11,7 @@ const SHOW_MS = 2600;
  * toss. It takes no pointer input and never covers anything for long; it is
  * there to give the opponent a voice, not to be read carefully.
  */
-export function RivalBubble({ text }: { text: string }) {
+export function RivalBubble({ text, accent = false }: { text: string; accent?: boolean }) {
   // Leaves on a timer as well as by its fade, which Low graphics does not play.
   const [shown, setShown] = useState(true);
   useEffect(() => {
@@ -22,14 +23,23 @@ export function RivalBubble({ text }: { text: string }) {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none absolute top-full right-0 z-30 mt-3 flex max-w-[12rem] animate-banner justify-end"
+      className="pointer-events-none absolute end-0 top-full z-30 mt-3 flex max-w-[12rem] animate-banner justify-end"
       style={{ animationDuration: `${SHOW_MS}ms` }}
     >
-      <span className="relative rounded-2xl rounded-tr-sm border border-stroke bg-surface px-3 py-1.5 text-sm shadow-[0_12px_28px_-14px_var(--color-shadow)]">
+      {/* A big moment - a fork, a signature move - gets the warm edge. */}
+      <span
+        className={cx(
+          'relative rounded-2xl rounded-se-sm border bg-surface px-3 py-1.5 text-sm shadow-[0_12px_28px_-14px_var(--color-shadow)]',
+          accent ? 'border-warn font-semibold' : 'border-stroke',
+        )}
+      >
         {/* The tail points up at the rival's card. */}
         <span
           aria-hidden="true"
-          className="absolute -top-1.5 right-6 size-3 rotate-45 border-t border-l border-stroke bg-surface"
+          className={cx(
+            'absolute end-6 -top-1.5 size-3 rotate-45 border-t border-l bg-surface',
+            accent ? 'border-warn' : 'border-stroke',
+          )}
         />
         <span className="relative">{text}</span>
       </span>

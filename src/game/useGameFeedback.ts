@@ -1,4 +1,4 @@
-import { Empty, type GameState, type Player, vanishedBy } from '@/game/engine';
+import { capturedBy, Empty, type GameState, isMark, type Player, vanishedBy } from '@/game/engine';
 import { useEffect, useRef } from 'react';
 import { haptics, sfx } from '@/lib/sound';
 
@@ -66,27 +66,38 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
 
     if (played < 0) {
       sfx.undo();
-      haptics.buzz(6);
+      haptics.buzz(6, 'selection');
       return;
     }
 
     if (played !== 1 || game.lastMove === null) return;
 
     const index = game.lastMove;
-    const mover = game.board[index];
-    if (mover === undefined || mover === Empty) return;
+    // A quantum move usually leaves its square empty - the mark is spooky -
+    // so the mover is read from the turn rather than the board.
+    const mover = game.config.variant === 'quantum' ? before.currentPlayer : game.board[index];
+    if (!isMark(mover)) return;
     const { size } = game.config;
 
-    if (game.config.variant === 'gravity') {
-      sfx.drop(mover, index, size, Math.floor(index / size) + 1);
+    if (game.config.variant === 'gravity' || game.config.variant === 'connect4') {
+      // Connect Four's top row is blocked and never drawn: a disc falls one less.
+      const hidden = game.config.variant === 'connect4' ? 1 : 0;
+      sfx.drop(mover, index, size, Math.floor(index / size) + 1 - hidden);
     } else {
       sfx.place(mover, index, size);
     }
-    haptics.buzz(8);
+    haptics.buzz(8, 'light');
 
     if (vanishedBy(game) !== null) sfx.vanish();
+    // A Pente capture lifts a pair off the board the way vanish lifts a mark.
+    if (capturedBy(game).length > 0) sfx.vanish();
 
     const timers = delayed.current;
+
+    // A quantum loop collapsing settles marks into squares: claimed, for good.
+    if (game.extra?.kind === 'quantum' && game.extra.collapsed.length > 1) {
+      timers.push(setTimeout(() => sfx.claim(mover), 140));
+    }
 
     // An Ultimate small board changing hands is an event of its own.
     const claimed = game.ultimate?.boards.findIndex(
@@ -100,18 +111,19 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
     if (before.status === 'playing' && game.status !== 'playing' && !replay) {
       const outcome =
         game.status === 'draw' ? 'draw' : you === null || game.winner === you ? 'win' : 'loss';
-      const delay = game.config.variant === 'gravity' ? RESULT_DELAY_MS + 250 : RESULT_DELAY_MS;
+      const drops = game.config.variant === 'gravity' || game.config.variant === 'connect4';
+      const delay = drops ? RESULT_DELAY_MS + 250 : RESULT_DELAY_MS;
       timers.push(
         setTimeout(() => {
           if (outcome === 'win') {
             sfx.win();
-            haptics.buzz([30, 50, 30, 50, 90]);
+            haptics.buzz([30, 50, 30, 50, 90], 'success');
           } else if (outcome === 'loss') {
             sfx.lose();
-            haptics.buzz(140);
+            haptics.buzz(140, 'warning');
           } else {
             sfx.draw();
-            haptics.buzz([20, 40, 20]);
+            haptics.buzz([20, 40, 20], 'impact');
           }
         }, delay),
       );

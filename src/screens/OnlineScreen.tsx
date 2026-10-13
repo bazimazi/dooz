@@ -1,5 +1,13 @@
 import { ReturnLink, useReturnTo } from '@/components/ui/ReturnLink';
-import { type GameState, modeById, type ModeId, O, type Player, X } from '@/game/engine';
+import {
+  type GameState,
+  modeById,
+  type ModeId,
+  O,
+  type Player,
+  startingPlayerOf,
+  X,
+} from '@/game/engine';
 import type { Avatar, Clock } from '@/protocol';
 import { ROOM_CODE_LENGTH } from '@/protocol';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -16,6 +24,9 @@ import { EyeIcon, FlagIcon, HandshakeIcon, TrophyIcon } from '@/components/art/u
 import { Board } from '@/game/components/Board';
 import { EmoteBar, EmoteToast } from '@/game/components/EmoteBar';
 import { GameHeader } from '@/game/components/GameHeader';
+import { VariantStatus } from '@/game/components/VariantStatus';
+import { RewardsPanel } from '@/features/progress/RewardsPanel';
+import { useOnlineXp } from '@/features/progress/useOnlineXp';
 import {
   describeReason,
   describeReasonFor,
@@ -24,15 +35,20 @@ import {
   revealDelayFor,
 } from '@/game/components/ResultModal';
 import { Button, buttonClasses, buttonStyle } from '@/components/ui/Button';
-import { StatTile } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
+import { DivisionProgress } from '@/features/competitive/DivisionProgress';
+import { TournamentPanel } from '@/features/competitive/TournamentPanel';
 import { useGameFeedback } from '@/game/useGameFeedback';
+import { useMusicTension } from '@/game/useMusicTension';
 import { useTurnTint } from '@/game/useTurnTint';
 import { seatsFor, useOnlineStore } from '@/features/online/store';
 import { cx } from '@/lib/cx';
-import { signed } from '@/lib/format';
+import { useT } from '@/i18n';
+import { onlineMessages } from '@/i18n/messages/online';
+import { useOnlineErrorText } from '@/i18n/messages/onlineErrors';
+import { useModeText } from '@/i18n/messages/modes';
 import { inviteUrl, shareOrCopy } from '@/lib/invite';
 import { sfx } from '@/lib/sound';
 import { useClosing } from '@/lib/useClosing';
@@ -47,9 +63,24 @@ export interface OnlineSearch {
   /** Watch a game rather than play one. */
   watch?: string;
   ranked?: boolean;
+  /** Join (or come back to) a tournament by id. */
+  tournament?: string;
+  /** Create a private bracket for this many players. */
+  bracket?: 4 | 8 | 16;
+  /** Open a private room and invite this friend (an account id) into it. */
+  challenge?: string;
 }
 
-export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) {
+export function OnlineScreen({
+  mode,
+  host,
+  code,
+  watch,
+  ranked,
+  tournament,
+  bracket,
+  challenge,
+}: OnlineSearch) {
   const router = useRouter();
   const store = useOnlineStore();
   const { connect, disconnect } = store;
@@ -88,11 +119,15 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
     intentSent.current = true;
 
     const config = modeById(mode).config;
-    if (watch) store.spectate(watch);
+    // A tournament pairs its own games, so joining one is the whole intent.
+    if (tournament) store.joinTournament(tournament);
+    else if (bracket) store.createBracket(config, bracket);
+    else if (watch) store.spectate(watch);
     else if (code) store.joinRoom(code);
+    else if (challenge) store.challenge(challenge, config);
     else if (host) store.createRoom(config);
     else store.queue(config, ranked === true);
-  }, [store, code, host, watch, ranked, mode]);
+  }, [store, code, host, watch, ranked, mode, tournament, bracket, challenge]);
 
   // The moment a search or a private room turns into a game gets its own
   // chime - it is often heard from another tab, while waiting.
@@ -108,7 +143,14 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
   if (store.phase === 'playing' || store.phase === 'watching' || store.phase === 'opponentLeft') {
     return <OnlineGame mode={mode} />;
   }
-  return <OnlineLobby mode={mode} ranked={ranked === true} />;
+  return (
+    <OnlineLobby
+      mode={mode}
+      ranked={ranked === true}
+      tournament={tournament ?? null}
+      competing={tournament !== undefined || bracket !== undefined}
+    />
+  );
 }
 
 /**
@@ -119,6 +161,8 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
 function OnlineFeedback({ game, you }: { game: GameState; you: Player | null }) {
   useGameFeedback(game, { you });
   useTurnTint(game);
+  // The score follows how far the game has gone, never where its threats are.
+  useMusicTension(game, { assist: false });
   return null;
 }
 
@@ -126,29 +170,45 @@ function OnlineFeedback({ game, you }: { game: GameState; you: Player | null }) 
 // Lobby
 // ---------------------------------------------------------------------------
 
-function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
+function OnlineLobby({
+  mode,
+  ranked,
+  tournament,
+  competing,
+}: {
+  mode: ModeId;
+  ranked: boolean;
+  tournament: string | null;
+  competing: boolean;
+}) {
   const accountError = useAccountStore((state) => state.syncError);
   const retryAccount = useAccountStore((state) => state.ensureOnline);
-  const { phase, reconnecting, error, roomCode, queued, queue } = useOnlineStore();
+  const { phase, reconnecting, error, errorCode, roomCode, queued, queue, botAt } =
+    useOnlineStore();
   const returnTo = useReturnTo();
   const detail = modeById(mode);
+  const modeName = useModeText(mode).name;
+  const t = useT(onlineMessages);
+  const errorText = useOnlineErrorText();
 
   const status =
     phase === 'connecting' || phase === 'offline'
-      ? 'Connecting…'
+      ? t('connecting')
       : phase === 'searching'
         ? ranked
-          ? 'Finding an opponent near your rating'
-          : 'Finding an opponent'
-        : 'Getting ready…';
+          ? t('findingRanked')
+          : t('finding')
+        : t('gettingReady');
 
   return (
     <Screen>
       <div className="flex w-full flex-1 flex-col items-center justify-center gap-5">
         <div className="w-full max-w-80 animate-panel-in rounded-[2rem] border border-stroke p-2 shadow-[0_30px_70px_-34px_var(--color-shadow)]">
           <div className="flex flex-col items-center gap-4 rounded-[1.5rem] bg-surface px-6 py-8 text-center">
-            {phase === 'hosting' && roomCode ? (
-              <InvitePanel code={roomCode} modeName={detail.name} />
+            {competing && phase !== 'hosting' && phase !== 'searching' ? (
+              <TournamentPanel fallbackId={tournament} />
+            ) : phase === 'hosting' && roomCode ? (
+              <InvitePanel code={roomCode} modeName={modeName} />
             ) : (
               <>
                 {/* The magnifier sweeps rather than blinks: a search that is
@@ -166,11 +226,16 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
                     {status}
                   </p>
                   <p className="text-sm text-ink-faint">
-                    {detail.name}
-                    {ranked ? ' · Ranked' : phase === 'searching' ? ' · Casual' : ''}
+                    {ranked
+                      ? t('modeRanked', { mode: modeName })
+                      : phase === 'searching'
+                        ? t('modeCasual', { mode: modeName })
+                        : modeName}
                   </p>
                   {phase === 'searching' && queued > 1 ? (
-                    <p className="text-xs text-ink-faint">{queued} players waiting</p>
+                    <p className="text-xs text-ink-faint">
+                      {t('playersWaiting', { count: queued })}
+                    </p>
                   ) : null}
                 </div>
 
@@ -178,9 +243,8 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
 
                 {phase === 'searching' ? (
                   <p className="max-w-64 text-xs text-ink-faint">
-                    {ranked
-                      ? 'The search widens the longer you wait, so a match always arrives.'
-                      : 'Anyone in this queue will do — this should be quick.'}
+                    {ranked ? t('searchRanked') : t('searchCasual')}
+                    {botAt !== null ? ` ${t('botNote')}` : ''}
                   </p>
                 ) : null}
               </>
@@ -188,18 +252,18 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
 
             {reconnecting ? (
               <p className="flex animate-rise items-center gap-2 text-sm text-ink-muted">
-                <WifiOffIcon className="size-4 animate-pulse-soft" /> Reconnecting…
+                <WifiOffIcon className="size-4 animate-pulse-soft" /> {t('reconnecting')}
               </p>
             ) : null}
 
             {accountError ? (
               <Button size="small" onClick={() => void retryAccount()}>
-                Retry connection
+                {t('retryConnection')}
               </Button>
             ) : null}
             {error || accountError ? (
               <p role="alert" className="animate-toast-in text-sm text-danger">
-                {error ?? accountError}
+                {error !== null ? errorText(errorCode, error) : accountError}
               </p>
             ) : null}
 
@@ -211,18 +275,18 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
                   className="w-auto px-3 whitespace-nowrap"
                   onClick={() => queue(detail.config, false)}
                 >
-                  Find anyone instead
+                  {t('findAnyone')}
                 </Button>
               ) : null}
 
               <IconButton
                 tone="solid"
-                label="Back to home"
+                label={t('backToHome')}
                 onClick={() => {
                   void returnTo('/');
                 }}
               >
-                <BackIcon />
+                <BackIcon className="rtl:-scale-x-100" />
               </IconButton>
             </div>
           </div>
@@ -241,11 +305,12 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
  * like a stutter every time it wraps.
  */
 function ProgressBar() {
+  const t = useT(onlineMessages);
   return (
     <div
       className="h-2 w-full overflow-hidden rounded-full bg-sunken"
       role="progressbar"
-      aria-label="Searching"
+      aria-label={t('searching')}
     >
       <div
         className="h-full w-1/3 animate-slide-track rounded-full"
@@ -262,13 +327,14 @@ function InvitePanel({ code, modeName }: { code: string; modeName: string }) {
   const [feedback, setFeedback] = useState<'idle' | 'shared' | 'copied' | 'failed'>('idle');
   const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const link = inviteUrl(code);
+  const t = useT(onlineMessages);
 
   // The share sheet can sit open longer than the screen lasts, so the timer it
   // schedules has to be cancellable.
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   async function share() {
-    const result = await shareOrCopy(link, 'Play dooz with me');
+    const result = await shareOrCopy(link, t('inviteTitle'));
     setFeedback(result);
     if (result !== 'failed') {
       clearTimeout(resetTimer.current);
@@ -277,12 +343,12 @@ function InvitePanel({ code, modeName }: { code: string; modeName: string }) {
   }
 
   const label =
-    feedback === 'copied' ? 'Link copied' : feedback === 'shared' ? 'Shared' : 'Share link';
+    feedback === 'copied' ? t('linkCopied') : feedback === 'shared' ? t('shared') : t('shareLink');
 
   return (
     <>
-      <p className="animate-rise text-lg">Waiting for your friend</p>
-      <p className="-mt-2 text-sm text-ink-faint">{modeName} · Private</p>
+      <p className="animate-rise text-lg">{t('waitingForFriend')}</p>
+      <p className="-mt-2 text-sm text-ink-faint">{t('modePrivate', { mode: modeName })}</p>
 
       {/* The code arrives a character at a time - it is the one thing on this
           screen the player has to read out or type, so it is worth the beat. */}
@@ -292,7 +358,7 @@ function InvitePanel({ code, modeName }: { code: string; modeName: string }) {
       >
         <span
           className="selectable flex justify-center font-mono text-3xl tracking-[0.3em]"
-          aria-label={`Room code ${code.split('').join(' ')}`}
+          aria-label={t('roomCodeSpelled', { code: code.split('').join(' ') })}
         >
           {code.split('').map((character, position) => (
             <span
@@ -324,9 +390,7 @@ function InvitePanel({ code, modeName }: { code: string; modeName: string }) {
       </Button>
 
       {feedback === 'failed' ? (
-        <p className="animate-toast-in text-sm text-danger">
-          Could not copy — read the code out instead
-        </p>
+        <p className="animate-toast-in text-sm text-danger">{t('copyFailed')}</p>
       ) : null}
     </>
   );
@@ -355,11 +419,16 @@ function OnlineGame({ mode }: { mode: ModeId }) {
     drawRequested,
     emotes,
     muted,
+    tournamentGame,
+    berserk,
   } = store;
   const returnTo = useReturnTo();
   const [confirmResign, setConfirmResign] = useState(false);
+  const t = useT(onlineMessages);
 
   const dismissEmote = useCallback((id: number) => useOnlineStore.getState().dismissEmote(id), []);
+  // The level is solo progress; an online match feeds it like any other game.
+  const award = useOnlineXp(result, you, mode);
 
   if (!game) return null;
 
@@ -379,30 +448,50 @@ function OnlineGame({ mode }: { mode: ModeId }) {
   const oSeat = seats.find((seat) => seat.player === O);
 
   const status = reconnecting
-    ? 'Reconnecting…'
+    ? t('reconnecting')
     : finished
       ? ''
       : watching
-        ? `${(game.currentPlayer === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} to move`
+        ? t('toMove', {
+            name: (game.currentPlayer === X ? xSeat : oSeat)?.profile.displayName ?? t('player'),
+          })
         : yourTurn
-          ? 'Your turn'
-          : `Waiting for ${theirs?.profile.displayName ?? 'your opponent'}`;
+          ? t('yourTurn')
+          : theirs
+            ? t('waitingFor', { name: theirs.profile.displayName })
+            : t('waitingForOpponent');
 
   const title =
     phase === 'opponentLeft' && !result
-      ? 'Opponent left'
+      ? t('opponentLeft')
       : watching
         ? winner === null
-          ? 'Draw'
-          : `${(winner === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} wins`
+          ? t('draw')
+          : t('wins', {
+              name: (winner === X ? xSeat : oSeat)?.profile.displayName ?? t('player'),
+            })
         : outcome === 'win'
-          ? 'You win!'
+          ? t('youWin')
           : outcome === 'loss'
-            ? 'You lose'
-            : 'Draw';
+            ? t('youLose')
+            : t('draw');
 
   const ratingChange =
     result?.rating && you !== null ? (you === X ? result.rating.x : result.rating.o) : null;
+  // Bots are labelled wherever they sit; the badge says so as well as the name.
+  const vsBot = seats.some((seat) => seat.profile.bot);
+  // Berserk is offered before your own first move, in an arena that allows it.
+  const ownMoves =
+    you === null
+      ? 0
+      : Math.floor((game.moves.length + (startingPlayerOf(game) === you ? 1 : 0)) / 2);
+  const mayBerserk =
+    !watching &&
+    !finished &&
+    you !== null &&
+    tournamentGame?.berserk === true &&
+    !berserk.includes(you) &&
+    ownMoves === 0;
 
   return (
     <Screen>
@@ -410,16 +499,22 @@ function OnlineGame({ mode }: { mode: ModeId }) {
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={seatInfo(xSeat, you, X, clock, game, reconnecting)}
-          right={seatInfo(oSeat, you, O, clock, game, reconnecting)}
+          left={seatInfo(xSeat, you, X, clock, game, reconnecting, t('opponent'))}
+          right={seatInfo(oSeat, you, O, clock, game, reconnecting, t('opponent'))}
           badge={
             watching
-              ? 'Watching'
-              : kind === 'ranked'
-                ? 'Ranked'
-                : kind === 'private'
-                  ? 'Private'
-                  : 'Casual'
+              ? t('badgeWatching')
+              : tournamentGame
+                ? berserk.length > 0
+                  ? t('badgeTournamentBerserk')
+                  : t('badgeTournament')
+                : vsBot
+                  ? t('badgeVsBot')
+                  : kind === 'ranked'
+                    ? t('badgeRanked')
+                    : kind === 'private'
+                      ? t('badgePrivate')
+                      : t('badgeCasual')
           }
         />
       </div>
@@ -434,6 +529,8 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           disabled={!yourTurn}
           readOnly={watching}
           finishTone={finished && !watching ? outcome : null}
+          // No callouts that point at a standing threat in online play.
+          assist={false}
         />
 
         {/* Keyed on the text so each change of turn arrives as its own line
@@ -443,6 +540,9 @@ function OnlineGame({ mode }: { mode: ModeId }) {
             {status}
           </span>
         </p>
+        {/* The rule set's own reminder - Order and Chaos's roles, the powers
+            each side has left - exactly as the local screens show it. */}
+        <VariantStatus game={game} />
 
         {emotes.length > 0 ? (
           <div className="flex w-full max-w-board flex-col gap-1.5">
@@ -455,13 +555,13 @@ function OnlineGame({ mode }: { mode: ModeId }) {
         {drawOffered && !finished ? (
           <div
             role="alertdialog"
-            aria-label="Draw offered"
+            aria-label={t('drawOffered')}
             className="flex w-full max-w-board items-center gap-2 rounded-tile border border-stroke bg-surface px-3 py-2"
           >
             <HandshakeIcon className="size-5 shrink-0 text-ink-muted" />
-            <span className="flex-1 text-sm">Draw offered</span>
+            <span className="flex-1 text-sm">{t('drawOffered')}</span>
             <Button size="small" className="w-auto px-3" onClick={() => store.respondDraw(true)}>
-              Accept
+              {t('accept')}
             </Button>
             <Button
               size="small"
@@ -469,7 +569,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
               className="w-auto px-3"
               onClick={() => store.respondDraw(false)}
             >
-              Decline
+              {t('decline')}
             </Button>
           </div>
         ) : null}
@@ -494,7 +594,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           {spectators > 0 ? (
             <span
               className="flex h-10 items-center gap-1.5 rounded-tile border border-stroke-soft px-3 text-xs text-ink-faint"
-              title={`${spectators} watching`}
+              title={t('watchingCount', { count: spectators })}
             >
               <EyeIcon className="size-4" /> {spectators}
             </span>
@@ -503,14 +603,14 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           {!watching && !finished ? (
             <>
               <IconButton
-                label="Offer a draw"
+                label={t('offerDraw')}
                 disabled={drawRequested || reconnecting}
                 onClick={store.offerDraw}
               >
                 <HandshakeIcon />
               </IconButton>
               <IconButton
-                label="Resign"
+                label={t('resign')}
                 disabled={reconnecting}
                 onClick={() => setConfirmResign(true)}
               >
@@ -520,19 +620,25 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           ) : null}
 
           <IconButton
-            label={watching ? 'Stop watching' : finished ? 'Back to home' : 'Leave game'}
+            label={watching ? t('stopWatching') : finished ? t('backToHome') : t('leaveGame')}
             onClick={() => {
               void returnTo('/');
             }}
           >
-            <BackIcon />
+            <BackIcon className="rtl:-scale-x-100" />
           </IconButton>
         </div>
 
         {drawRequested && !finished ? (
           <p className="text-xs text-ink-faint" aria-live="polite">
-            Draw offered — waiting for a reply
+            {t('drawPending')}
           </p>
+        ) : null}
+
+        {mayBerserk ? (
+          <Button size="small" variant="ghost" className="w-auto px-4" onClick={store.goBerserk}>
+            {t('berserk')}
+          </Button>
         ) : null}
       </footer>
 
@@ -557,33 +663,36 @@ function OnlineGame({ mode }: { mode: ModeId }) {
                 ? describeReasonFor(
                     result.reason,
                     {
-                      winner: (winner === O ? oSeat : xSeat)?.profile.displayName ?? 'Player',
-                      loser: (winner === O ? xSeat : oSeat)?.profile.displayName ?? 'Player',
+                      winner: (winner === O ? oSeat : xSeat)?.profile.displayName ?? t('player'),
+                      loser: (winner === O ? xSeat : oSeat)?.profile.displayName ?? t('player'),
                     },
                     misere,
                   )
                 : describeReason(result.reason, outcome, misere)
               : phase === 'opponentLeft'
-                ? 'They closed the game'
+                ? t('theyClosed')
                 : undefined
           }
+          tone={outcome}
+          game={game}
+          rating={ratingChange}
           detail={
-            ratingChange ? (
-              <div className="grid grid-cols-2 gap-2">
-                <StatTile label="Rating" value={ratingChange.after} hint={modeById(mode).name} />
-                <StatTile
-                  label="Change"
-                  value={signed(ratingChange.after - ratingChange.before)}
-                  tone={ratingChange.after >= ratingChange.before ? 'good' : 'bad'}
-                />
-              </div>
+            kind === 'ranked' && ratingChange ? (
+              <DivisionProgress change={ratingChange} />
             ) : undefined
           }
+          rewards={award ? <RewardsPanel award={award} won={outcome === 'win'} /> : null}
           celebrate={!watching && outcome === 'win'}
           revealDelay={revealDelayFor(game, result?.reason)}
           actions={
             <>
-              {!watching ? (
+              {!watching && tournamentGame ? (
+                <Button variant="primary" size="small" block onClick={() => store.leave()}>
+                  {t('backToTournament')}
+                </Button>
+              ) : null}
+
+              {!watching && !tournamentGame ? (
                 <Button
                   variant="primary"
                   size="small"
@@ -592,10 +701,10 @@ function OnlineGame({ mode }: { mode: ModeId }) {
                   onClick={store.rematch}
                 >
                   {rematchRequested
-                    ? 'Waiting for them…'
+                    ? t('waitingForThem')
                     : rematchOffered
-                      ? 'Accept rematch'
-                      : 'Play again'}
+                      ? t('acceptRematch')
+                      : t('playAgain')}
                 </Button>
               ) : null}
 
@@ -606,7 +715,7 @@ function OnlineGame({ mode }: { mode: ModeId }) {
                   className={buttonClasses({ size: 'small', variant: 'ghost', block: true })}
                   style={buttonStyle('ghost')}
                 >
-                  Watch the replay
+                  {t('watchReplay')}
                 </Link>
               ) : null}
 
@@ -619,12 +728,12 @@ function OnlineGame({ mode }: { mode: ModeId }) {
                   block
                   icon={<TrophyIcon />}
                 >
-                  Leaderboard
+                  {t('leaderboard')}
                 </Button>
               ) : null}
 
               <Button as={ReturnLink} to="/" size="small" variant="ghost" block>
-                Back to home
+                {t('backToHome')}
               </Button>
             </>
           }
@@ -646,10 +755,11 @@ function seatInfo(
   clock: Clock | null,
   game: { currentPlayer: number; status: string },
   reconnecting: boolean,
+  fallbackName: string,
 ) {
   const isYou = you === player;
   return {
-    name: seat?.profile.displayName ?? 'Opponent',
+    name: seat?.profile.displayName ?? fallbackName,
     avatar: seat?.profile.avatar,
     connected: isYou ? !reconnecting : (seat?.connected ?? true),
     isYou,
@@ -670,6 +780,7 @@ function ConfirmResign({
 }) {
   const { closing, close } = useClosing(onCancel);
   const panelRef = useDialog<HTMLDivElement>(close);
+  const t = useT(onlineMessages);
   return (
     <div
       className={cx(
@@ -681,25 +792,23 @@ function ConfirmResign({
         ref={panelRef}
         role="alertdialog"
         aria-modal="true"
-        aria-label="Resign this game?"
+        aria-label={t('resignTitle')}
         tabIndex={-1}
         className={cx(
           'max-h-[calc(100dvh-2.5rem)] w-full max-w-72 overflow-y-auto rounded-[1.75rem] border border-stroke bg-surface p-5 outline-none',
           closing ? 'animate-panel-out' : 'animate-panel-in',
         )}
       >
-        <h2 className="font-display text-lg">Resign this game?</h2>
+        <h2 className="font-display text-lg">{t('resignTitle')}</h2>
         <p className="mt-1.5 text-sm text-ink-muted">
-          {ranked
-            ? 'Your opponent wins and your rating will drop.'
-            : 'Your opponent wins the game.'}
+          {ranked ? t('resignRanked') : t('resignCasual')}
         </p>
         <div className="mt-4 flex gap-2">
           <Button size="small" variant="ghost" block onClick={close}>
-            Keep playing
+            {t('keepPlaying')}
           </Button>
           <Button size="small" variant="danger" block onClick={onConfirm}>
-            Resign
+            {t('resign')}
           </Button>
         </div>
       </div>
@@ -710,6 +819,7 @@ function ConfirmResign({
 function RoomCodeChip({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const t = useT(onlineMessages);
 
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
@@ -717,7 +827,7 @@ function RoomCodeChip({ code }: { code: string }) {
     <button
       type="button"
       onClick={async () => {
-        const result = await shareOrCopy(inviteUrl(code), 'Play dooz with me');
+        const result = await shareOrCopy(inviteUrl(code), t('inviteTitle'));
         if (result === 'failed') return;
         setCopied(true);
         clearTimeout(resetTimer.current);
@@ -728,7 +838,7 @@ function RoomCodeChip({ code }: { code: string }) {
         'transition-[transform,filter] duration-200 ease-soft',
         'hover:-translate-y-0.5 hover:brightness-115 active:translate-y-0 active:scale-95 active:duration-75',
       )}
-      aria-label={`Room ${code}. Copy the invite link.`}
+      aria-label={t('roomChip', { code })}
     >
       {code}
       {/* The tick replaces the copy glyph with a pop, which is the whole

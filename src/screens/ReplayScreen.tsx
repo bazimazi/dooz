@@ -1,5 +1,5 @@
 import { ReturnLink } from '@/components/ui/ReturnLink';
-import { describeConfig, type GameState, O, X } from '@/game/engine';
+import { type GameState, O, X } from '@/game/engine';
 import type { Avatar, MatchRecord } from '@/protocol';
 import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
@@ -13,6 +13,7 @@ import {
   TrophyIcon,
 } from '@/components/art/ui-icons';
 import { Board } from '@/game/components/Board';
+import { VariantStatus } from '@/game/components/VariantStatus';
 import { Button } from '@/components/ui/Button';
 import { Card, EmptyState, StatTile } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
@@ -25,8 +26,13 @@ import { cx } from '@/lib/cx';
 import { duration, fullDate, signed, timeAgo } from '@/lib/format';
 import { shareOrCopy } from '@/lib/invite';
 import { describeReason, describeReasonFor } from '@/game/components/ResultModal';
+import { formatNumber, useLocale, useT } from '@/i18n';
+import { describeConfigText } from '@/i18n/messages/modes';
+import { replayMessages } from '@/i18n/messages/replay';
 
 export function ReplayScreen({ matchId }: { matchId: string }) {
+  const t = useT(replayMessages);
+  const locale = useLocale();
   const credentials = useAccountStore((state) => state.credentials);
   const [record, setRecord] = useState<MatchRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,16 +58,18 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
       .then(setRecord)
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : 'Could not load this match');
+        setError(cause instanceof Error ? cause.message : t('loadFailed'));
       });
 
     return () => controller.abort();
-  }, [matchId, credentials]);
+  }, [matchId, credentials, t]);
 
   const replay = useReplay(record);
 
   // Left and right step through the game, space plays and pauses. A replay is
   // a player, and a player that cannot be driven from the keyboard is a toy.
+  // Playback runs left to right in every language, as media controls do, so
+  // the arrows keep their meaning in a right-to-left one.
   useEffect(() => {
     if (!replay) return;
     const onKey = (event: KeyboardEvent) => {
@@ -93,11 +101,11 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
         <Header />
         <Card className="w-full">
           <EmptyState
-            title="Match not found"
+            title={t('notFound')}
             body={error}
             action={
               <Button as={ReturnLink} to="/profile" size="small" className="w-auto px-4">
-                Your matches
+                {t('yourMatches')}
               </Button>
             }
           />
@@ -111,7 +119,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
       <Screen scroll>
         <Header />
         <Card className="w-full" padding="roomy">
-          <p className="text-center text-sm text-ink-faint">Loading the match…</p>
+          <p className="text-center text-sm text-ink-faint">{t('loading')}</p>
         </Card>
       </Screen>
     );
@@ -139,7 +147,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
         <Card className="w-full" padding="tight">
           <div className="flex items-center gap-2 px-1 py-1">
             <PlayerSide profile={record.players.x} mark="X" winner={record.winner === X} />
-            <span className="shrink-0 text-xs text-ink-faint">vs</span>
+            <span className="shrink-0 text-xs text-ink-faint">{t('versus')}</span>
             <PlayerSide
               profile={record.players.o}
               mark="O"
@@ -148,38 +156,42 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
             />
           </div>
           <p className="px-1 pb-1 text-center text-xs text-ink-faint">
-            {describeConfig(record.config)} · {record.kind} ·{' '}
+            {describeConfigText(record.config, locale)} · {t(`kind.${record.kind}`)} ·{' '}
             <span title={fullDate(record.playedAt)}>{timeAgo(record.playedAt)}</span>
           </p>
         </Card>
 
         <ReplayFeedback game={replay.current} />
         <Board game={replay.current} onPlay={() => undefined} readOnly />
+        {/* Pente's captures are half the story of a game; step through them too. */}
+        {replay.current.config.variant === 'pente' ? <VariantStatus game={replay.current} /> : null}
 
         {/* Transport. The scrubber is a real range input, so it is draggable,
-            keyboard-operable and announced as a slider without any extra work. */}
-        <div className="flex w-full max-w-board flex-col gap-2">
+            keyboard-operable and announced as a slider without any extra work.
+            Like any media player it does not mirror in a right-to-left
+            language: a timeline runs left to right everywhere. */}
+        <div dir="ltr" className="flex w-full max-w-board flex-col gap-2">
           <input
             type="range"
             min={0}
             max={total}
             value={replay.at}
             onChange={(event) => replay.seek(Number(event.target.value))}
-            aria-label="Move"
-            aria-valuetext={`Move ${replay.at} of ${total}`}
+            aria-label={t('move')}
+            aria-valuetext={t('moveOf', { move: replay.at, total })}
             className="h-2 w-full cursor-pointer appearance-none rounded-full bg-sunken accent-[var(--color-stroke)]"
           />
 
           <div className="flex items-center justify-between gap-2">
             <span className="tnum w-20 text-xs text-ink-faint">
-              Move {replay.at}/{total}
+              {t('moveShort', { move: replay.at, total })}
             </span>
 
             <div className="flex items-center gap-1.5">
               <IconButton
                 size="small"
                 tone="bare"
-                label="Previous move"
+                label={t('previousMove')}
                 disabled={replay.atStart}
                 onClick={replay.previous}
               >
@@ -187,7 +199,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
               </IconButton>
 
               <IconButton
-                label={replay.playing ? 'Pause' : 'Play'}
+                label={replay.playing ? t('pause') : t('play')}
                 disabled={total === 0}
                 onClick={replay.toggle}
               >
@@ -197,7 +209,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
               <IconButton
                 size="small"
                 tone="bare"
-                label="Next move"
+                label={t('nextMove')}
                 disabled={replay.atEnd}
                 onClick={replay.next}
               >
@@ -205,7 +217,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
               </IconButton>
             </div>
 
-            <span className="tnum w-20 text-right text-xs text-ink-faint">
+            <span className="tnum w-20 text-end text-xs text-ink-faint">
               {replay.moveTimeMs !== null ? duration(replay.moveTimeMs) : ''}
             </span>
           </div>
@@ -214,15 +226,19 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
         <div className="grid w-full max-w-board grid-cols-3 gap-2">
           {seat !== null ? (
             <StatTile
-              label="Result"
-              value={record.outcome === 'win' ? 'Win' : record.outcome === 'loss' ? 'Loss' : 'Draw'}
+              label={t('result')}
+              value={t(record.outcome)}
               tone={record.outcome === 'win' ? 'good' : record.outcome === 'loss' ? 'bad' : 'plain'}
               hint={describeReason(record.reason, record.outcome, misere)}
             />
           ) : (
             <StatTile
-              label="Result"
-              value={record.winner === null ? 'Draw' : `${record.winner === X ? 'X' : 'O'} won`}
+              label={t('result')}
+              value={
+                record.winner === null
+                  ? t('draw')
+                  : t('markWon', { mark: record.winner === X ? 'X' : 'O' })
+              }
               hint={describeReasonFor(
                 record.reason,
                 { winner: winnerName, loser: loserName },
@@ -230,13 +246,13 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
               )}
             />
           )}
-          <StatTile label="Moves" value={record.moves.length} />
+          <StatTile label={t('moves')} value={formatNumber(record.moves.length, locale)} />
           <StatTile
-            label="Length"
+            label={t('length')}
             value={duration(record.durationMs)}
             hint={
               seat !== null && record.ratingDelta !== null
-                ? `${signed(record.ratingDelta)} rating`
+                ? t('ratingChange', { change: signed(record.ratingDelta) })
                 : undefined
             }
           />
@@ -248,9 +264,9 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
             variant="ghost"
             className="w-auto px-4"
             icon={<ShareIcon />}
-            onClick={() => void shareOrCopy(window.location.href, 'A game of dooz')}
+            onClick={() => void shareOrCopy(window.location.href, t('shareTitle'))}
           >
-            Share
+            {t('share')}
           </Button>
 
           {credentials && seat !== null && !reported ? (
@@ -271,11 +287,11 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
                 }
               }}
             >
-              {reporting === 'failed' ? 'Report failed — retry' : 'Report'}
+              {reporting === 'failed' ? t('reportFailed') : t('report')}
             </Button>
           ) : reported ? (
             <span className="text-xs text-ink-faint" role="status">
-              Reported — thank you
+              {t('reported')}
             </span>
           ) : null}
         </div>
@@ -285,18 +301,13 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
 }
 
 function Header() {
+  const t = useT(replayMessages);
   return (
     <header className="flex w-full items-center gap-3 pt-2 pb-3">
-      <IconButton
-        as={ReturnLink}
-        to="/profile"
-        tone="bare"
-        size="small"
-        label="Back to your matches"
-      >
-        <BackIcon />
+      <IconButton as={ReturnLink} to="/profile" tone="bare" size="small" label={t('backToMatches')}>
+        <BackIcon className="rtl:-scale-x-100" />
       </IconButton>
-      <h1 className="font-display text-xl">Replay</h1>
+      <h1 className="font-display text-xl">{t('title')}</h1>
     </header>
   );
 }
@@ -312,11 +323,13 @@ function PlayerSide({
   winner: boolean;
   align?: 'start' | 'end';
 }) {
+  const t = useT(replayMessages);
+  const locale = useLocale();
   return (
     <div
       className={cx(
         'flex min-w-0 flex-1 items-center gap-2',
-        align === 'end' && 'flex-row-reverse text-right',
+        align === 'end' && 'flex-row-reverse text-end',
       )}
     >
       <AvatarBadge avatar={profile.avatar} className="size-9 shrink-0" />
@@ -325,13 +338,13 @@ function PlayerSide({
           {/* The crown sits outside the truncating name, or a long name eats
               the one thing on this row that says who won. */}
           {winner ? (
-            <TrophyIcon className="size-3.5 shrink-0 text-mark-o" aria-label="Winner" />
+            <TrophyIcon className="size-3.5 shrink-0 text-mark-o" aria-label={t('winner')} />
           ) : null}
           <span className="truncate text-sm">{profile.displayName}</span>
         </span>
         <span className="text-xs text-ink-muted">
           {mark}
-          {profile.rating !== null ? ` · ${profile.rating}` : ''}
+          {profile.rating !== null ? ` · ${formatNumber(profile.rating, locale)}` : ''}
         </span>
       </span>
     </div>

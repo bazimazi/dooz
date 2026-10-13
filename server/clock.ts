@@ -19,6 +19,8 @@ export class MatchClock {
   private remainingO: number;
   private running: Player | null = null;
   private since = 0;
+  /** Sides that gave up their increment by going berserk. */
+  private readonly noIncrement = new Set<Player>();
 
   constructor(
     initialMs: number,
@@ -59,10 +61,23 @@ export class MatchClock {
    */
   moved(player: Player, next: Player): void {
     this.settle();
-    if (player === X) this.remainingX += this.incrementMs;
-    else this.remainingO += this.incrementMs;
+    const increment = this.noIncrement.has(player) ? 0 : this.incrementMs;
+    if (player === X) this.remainingX += increment;
+    else this.remainingO += increment;
     this.running = next;
     this.since = this.now();
+  }
+
+  /**
+   * Berserk: halve what `player` has left and take away their increment for
+   * the rest of the game. Arena tournaments pay a bonus point for winning
+   * like that.
+   */
+  halve(player: Player): void {
+    this.settle();
+    if (player === X) this.remainingX = Math.floor(this.remainingX / 2);
+    else this.remainingO = Math.floor(this.remainingO / 2);
+    this.noIncrement.add(player);
   }
 
   /** The player whose time has run out, or `null`. */
@@ -79,6 +94,33 @@ export class MatchClock {
       incrementMs: this.incrementMs,
       asOf: this.now(),
     };
+  }
+
+  /** Both budgets as plain numbers, for writing a live game down at shutdown. */
+  toJSON(): { x: number; o: number; running: Player | null; incrementMs: number } {
+    return {
+      x: Math.round(this.remaining(X)),
+      o: Math.round(this.remaining(O)),
+      running: this.running,
+      incrementMs: this.incrementMs,
+    };
+  }
+
+  /**
+   * A clock picked up where `saved` left off.
+   *
+   * The running side's clock restarts from the moment of restoring, so the
+   * time the server spent down is nobody's loss.
+   */
+  static restore(
+    saved: { x: number; o: number; running: Player | null; incrementMs: number },
+    now: () => number = Date.now,
+  ): MatchClock {
+    const clock = new MatchClock(0, saved.incrementMs, now);
+    clock.remainingX = Math.max(0, saved.x);
+    clock.remainingO = Math.max(0, saved.o);
+    if (saved.running !== null) clock.start(saved.running);
+    return clock;
   }
 
   /** Move the elapsed time out of the running side's budget and into the past. */

@@ -6,6 +6,9 @@ import {
   updateProfileRequestSchema,
 } from '@/protocol';
 import { create } from 'zustand';
+import { currentLocale, translate } from '@/i18n';
+import { accountMessages } from '@/i18n/messages/onlineAccount';
+import { apiErrorMessage } from '@/i18n/messages/onlineApiErrors';
 import { api, ApiError, type Credentials } from '@/lib/api';
 
 const STORAGE_KEY = 'dooz.account';
@@ -91,6 +94,12 @@ interface AccountState {
   setAvatar: (avatar: Avatar) => Promise<void>;
   claim: (password: string) => Promise<boolean>;
   signIn: (displayName: string, password: string) => Promise<boolean>;
+  /**
+   * Switch to an account whose credentials were obtained some other way - a
+   * recovery code. The profile is fetched with them first, so credentials the
+   * server will not accept never replace working ones.
+   */
+  adopt: (credentials: Credentials) => Promise<boolean>;
   signOut: () => void;
   /**
    * The server no longer accepts the stored token - the account was signed in
@@ -213,7 +222,7 @@ export const useAccountStore = create<AccountState>((set, get) => {
     rename: async (name) => {
       const parsed = displayNameSchema.safeParse(name);
       if (!parsed.success) {
-        set({ error: parsed.error.issues[0]?.message ?? 'Invalid name' });
+        set({ error: nameIssueText(parsed.error.issues[0]) });
         return false;
       }
       edit({ displayName: parsed.data });
@@ -270,6 +279,34 @@ export const useAccountStore = create<AccountState>((set, get) => {
         return false;
       }
     },
+    adopt: async (credentials) => {
+      const ownGeneration = ++generation;
+      pending = null;
+      try {
+        const { profile } = await api.profile(credentials, undefined, true);
+        if (ownGeneration !== generation) return false;
+        saveCredentials(credentials);
+        saveLocal(profile, {});
+        set({
+          status: 'ready',
+          onlineStatus: 'ready',
+          credentials,
+          profile,
+          changes: {},
+          revision: 0,
+          error: null,
+          claimError: null,
+          signInError: null,
+          syncError: null,
+        });
+        return true;
+      } catch (error) {
+        if (ownGeneration === generation) {
+          set({ signInError: messageFor(error), onlineStatus: 'idle' });
+        }
+        return false;
+      }
+    },
     signOut: () => {
       ++generation;
       pending = null;
@@ -291,7 +328,7 @@ export const useAccountStore = create<AccountState>((set, get) => {
     },
     dropCredentials: async () => {
       if (Date.now() - droppedAt < 10_000) {
-        set({ onlineStatus: 'error', syncError: 'The server did not accept this account' });
+        set({ onlineStatus: 'error', syncError: translate(accountMessages, 'serverRejected') });
         return false;
       }
       droppedAt = Date.now();
@@ -309,7 +346,7 @@ export const useAccountStore = create<AccountState>((set, get) => {
           changes: {},
           revision: 0,
           onlineStatus: 'error',
-          syncError: 'You were signed out. Sign in again from your profile.',
+          syncError: translate(accountMessages, 'signedOut'),
         });
         return false;
       }
@@ -330,6 +367,25 @@ function isRejection(error: unknown): boolean {
     error.status !== 429
   );
 }
+/** Said in the interface language when it is set; English is the server's own words. */
 function messageFor(error: unknown): string {
-  return error instanceof ApiError ? error.message : 'Could not reach the server';
+  return apiErrorMessage(error);
+}
+
+/**
+ * Why a display name was refused. In English, the schema's own words; in any
+ * other language, the same reason from the catalog.
+ */
+function nameIssueText(issue: { code: string; message: string } | undefined): string {
+  if (!issue) return translate(accountMessages, 'invalidName');
+  if (currentLocale() === 'en') return issue.message;
+  if (issue.code === 'too_small') return translate(accountMessages, 'nameTooShort');
+  if (issue.code === 'too_big') return translate(accountMessages, 'nameTooLong');
+  if (issue.message === accountMessages.en.nameCharacters) {
+    return translate(accountMessages, 'nameCharacters');
+  }
+  if (issue.message === accountMessages.en.nameDoubleSpaces) {
+    return translate(accountMessages, 'nameDoubleSpaces');
+  }
+  return issue.message;
 }

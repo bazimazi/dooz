@@ -49,6 +49,14 @@ function create(config: GameConfig, startingPlayer: Player): GameState {
   };
 }
 
+/**
+ * Vanish caps each player at three marks, so it is only a game where three is
+ * also the run - and the board it is solved on is the one it is played on.
+ */
+function validate(config: GameConfig): boolean {
+  return config.size === 3 && config.winLength === 3;
+}
+
 function canPlay(state: GameState, index: number): boolean {
   return (
     state.status === 'playing' &&
@@ -138,6 +146,8 @@ export function vanishedBy(state: GameState): number | null {
 
 export const vanishVariant: Variant = {
   id: 'vanish',
+  name: 'Vanish',
+  validate,
   create,
   canPlay,
   legalMoves,

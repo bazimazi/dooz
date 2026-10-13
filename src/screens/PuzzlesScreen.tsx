@@ -1,10 +1,11 @@
 import { ReturnLink } from '@/components/ui/ReturnLink';
 import { modeById } from '@/game/engine';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 import { BackIcon, CheckIcon } from '@/components/art/icons';
-import { SparkIcon, TargetIcon } from '@/components/art/ui-icons';
+import { ClockIcon, SparkIcon, TargetIcon, TrophyIcon } from '@/components/art/ui-icons';
 import { MiniBoard } from '@/game/components/MiniBoard';
-import { buttonClasses, buttonStyle } from '@/components/ui/Button';
+import { Button, buttonClasses, buttonStyle } from '@/components/ui/Button';
 import { Card, EmptyState } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
@@ -13,13 +14,23 @@ import { dayNumber, liveDailyStreak, useProgressStore } from '@/features/progres
 import {
   dailyPuzzle,
   type Puzzle,
-  PUZZLES,
-  TIER_NAMES,
-  themeName,
+  PUZZLE_INDEX,
+  type PuzzleSummary,
 } from '@/features/puzzles/puzzles';
+import { RUSH_SECONDS, RUSH_STRIKES, useRushStore } from '@/features/puzzles/rush';
 import { cx } from '@/lib/cx';
+import { formatNumber, useLocale, useT } from '@/i18n';
+import { useModeTexts } from '@/i18n/messages/modes';
+import { puzzleMessages, themeName, tierName } from '@/i18n/messages/puzzles';
 
 type Filter = 'all' | '1' | '2' | '3';
+
+/**
+ * Tiles drawn at first, and added per "Show more". The pack runs to hundreds
+ * of puzzles, each tile with its own little board; drawing them all at once
+ * would make the list slow to open for no benefit.
+ */
+const PAGE = 48;
 
 /**
  * Every puzzle, with today's at the top.
@@ -32,6 +43,9 @@ type Filter = 'all' | '1' | '2' | '3';
  */
 export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
   const navigate = useNavigate();
+  const t = useT(puzzleMessages);
+  const locale = useLocale();
+  const modeText = useModeTexts();
   const solved = useProgressStore((state) => state.puzzles);
   const daily = useProgressStore((state) => state.daily);
 
@@ -39,25 +53,30 @@ export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
   const todays = dailyPuzzle(today);
   const solvedToday = daily.lastDay === today;
   const streak = liveDailyStreak(daily);
-  const shown =
-    filter === 'all' ? PUZZLES : PUZZLES.filter((puzzle) => String(puzzle.tier) === filter);
+  const rushBest = useRushStore((state) => state.best);
+  const [limit, setLimit] = useState(PAGE);
+  const matching =
+    filter === 'all'
+      ? PUZZLE_INDEX
+      : PUZZLE_INDEX.filter((puzzle) => String(puzzle.tier) === filter);
+  const shown = matching.slice(0, limit);
+  const solvedCount = solved.filter((id) => PUZZLE_INDEX.some((puzzle) => puzzle.id === id)).length;
 
   return (
     <Screen width="wide" scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-4">
-        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
-          <BackIcon />
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label={t('backHome')}>
+          <BackIcon className="rtl:-scale-x-100" />
         </IconButton>
-        <h1 className="font-display text-xl">Puzzles</h1>
-        <span className="tnum ml-auto text-sm text-ink-muted">
-          {solved.filter((id) => PUZZLES.some((puzzle) => puzzle.id === id)).length} /{' '}
-          {PUZZLES.length} solved
+        <h1 className="font-display text-xl">{t('puzzles')}</h1>
+        <span className="tnum ms-auto text-sm text-ink-muted">
+          {t('solvedCount', { solved: solvedCount, total: PUZZLE_INDEX.length })}
         </span>
       </header>
 
-      {PUZZLES.length === 0 || !todays ? (
+      {PUZZLE_INDEX.length === 0 || !todays ? (
         <Card className="w-full">
-          <EmptyState title="No puzzles here" body="The puzzle pack did not load. Try reloading." />
+          <EmptyState title={t('emptyTitle')} body={t('emptyBody')} />
         </Card>
       ) : (
         <div className="flex w-full flex-col gap-4 pb-6">
@@ -66,18 +85,19 @@ export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
               <MiniBoard config={modeById(todays.mode).config} active className="w-20 shrink-0" />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="text-xs tracking-wide text-ink-faint uppercase">
-                  Daily puzzle ·{' '}
-                  {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {t('dailyHeading', {
+                    date: new Date().toLocaleDateString(locale, { month: 'short', day: 'numeric' }),
+                  })}
                 </span>
                 <span className="font-display text-xl leading-tight">
-                  {modeById(todays.mode).name} · Win in {todays.mateIn}
+                  {t('modeWinIn', { mode: modeText(todays.mode).name, count: todays.mateIn })}
                 </span>
                 <span className="flex items-center gap-1.5 text-xs text-ink-muted">
                   <SparkIcon
                     className={cx('size-4', streak > 0 ? 'text-warn' : 'text-ink-faint')}
                   />
-                  {streak > 0 ? `${streak}-day streak` : 'Start a streak today'}
-                  {daily.best > 1 ? ` · best ${daily.best}` : ''}
+                  {streak > 0 ? t('streak', { count: streak }) : t('startStreak')}
+                  {daily.best > 1 ? t('bestStreak', { count: daily.best }) : ''}
                 </span>
               </div>
             </div>
@@ -95,13 +115,36 @@ export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
             >
               <span className="relative z-2 flex items-center gap-2">
                 {solvedToday ? <CheckIcon className="size-4" /> : <TargetIcon />}
-                {solvedToday ? 'Solved — play it again' : 'Solve today’s puzzle'}
+                {solvedToday ? t('solvedAgain') : t('solveToday')}
               </span>
             </Link>
           </Card>
 
+          <Link
+            to="/puzzles/rush"
+            className={cx(
+              'group flex items-center gap-3 rounded-2xl border border-stroke-soft bg-surface/85 p-3 no-underline',
+              'transition-[transform,border-color] duration-200 ease-spring hover:-translate-y-0.5 hover:border-stroke active:scale-[0.98]',
+            )}
+          >
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sunken text-2xl text-warn">
+              <ClockIcon />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="font-semibold">{t('rush')}</span>
+              <span className="truncate text-xs text-ink-faint">
+                {t('rushSummary', { minutes: RUSH_SECONDS / 60, strikes: RUSH_STRIKES })}
+              </span>
+            </span>
+            {rushBest > 0 ? (
+              <span className="tnum flex shrink-0 items-center gap-1 text-sm text-ink-muted">
+                <TrophyIcon className="size-4" /> {formatNumber(rushBest, locale)}
+              </span>
+            ) : null}
+          </Link>
+
           <Tabs<Filter>
-            label="Difficulty"
+            label={t('difficulty')}
             value={filter}
             onChange={(next) =>
               void navigate({
@@ -113,10 +156,10 @@ export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
               })
             }
             options={[
-              { value: 'all', label: 'All' },
-              { value: '1', label: TIER_NAMES[1] },
-              { value: '2', label: TIER_NAMES[2] },
-              { value: '3', label: TIER_NAMES[3] },
+              { value: 'all', label: t('all') },
+              { value: '1', label: tierName(1, locale) },
+              { value: '2', label: tierName(2, locale) },
+              { value: '3', label: tierName(3, locale) },
             ]}
           />
 
@@ -127,42 +170,63 @@ export function PuzzlesScreen({ filter = 'all' }: { filter?: Filter }) {
               </li>
             ))}
           </ul>
+          {matching.length > shown.length ? (
+            <Button
+              variant="ghost"
+              size="small"
+              className="w-auto self-center px-5"
+              onClick={() => setLimit((count) => count + PAGE)}
+            >
+              {t('showMore', { count: matching.length - shown.length })}
+            </Button>
+          ) : null}
         </div>
       )}
     </Screen>
   );
 }
 
-function PuzzleTile({ puzzle, solved }: { puzzle: Puzzle; solved: boolean }) {
+function PuzzleTile({ puzzle, solved }: { puzzle: PuzzleSummary; solved: boolean }) {
+  const t = useT(puzzleMessages);
+  const locale = useLocale();
   const mode = modeById(puzzle.mode);
-  const theme = themeName(puzzle.theme);
+  const modeName = useModeTexts()(puzzle.mode).name;
+  const theme = themeName(puzzle.theme, locale);
+  const labelValues = {
+    number: puzzle.number,
+    mode: modeName,
+    count: puzzle.mateIn,
+    tier: tierName(puzzle.tier, locale),
+  };
 
   return (
     <Link
       to="/puzzles/$id"
       params={{ id: puzzle.id }}
       className={cx(
-        'group flex items-center gap-2.5 rounded-2xl border p-2 text-left no-underline',
+        'group flex items-center gap-2.5 rounded-2xl border p-2 text-start no-underline',
         'transition-[transform,border-color,background-color] duration-200 ease-spring',
         'hover:-translate-y-0.5 active:scale-[0.98]',
         solved
           ? 'border-stroke-soft bg-surface/55'
           : 'border-stroke-soft bg-surface/85 hover:border-stroke',
       )}
-      aria-label={`Puzzle ${puzzle.number}: ${mode.name}, win in ${puzzle.mateIn}, ${TIER_NAMES[puzzle.tier]}${solved ? ', solved' : ''}`}
+      aria-label={t(solved ? 'tileLabelSolved' : 'tileLabel', labelValues)}
     >
       <span className="relative w-11 shrink-0">
         <MiniBoard config={mode.config} className="w-11" />
         {solved ? (
-          <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full bg-ok text-g10">
+          <span className="absolute -end-1 -bottom-1 flex size-5 items-center justify-center rounded-full bg-ok text-g10">
             <CheckIcon className="size-3" />
           </span>
         ) : null}
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className="truncate text-sm font-semibold">Win in {puzzle.mateIn}</span>
+        <span className="truncate text-sm font-semibold">
+          {t('winIn', { count: puzzle.mateIn })}
+        </span>
         <span className="truncate text-xs text-ink-faint">
-          #{puzzle.number} · {mode.name}
+          {t('numberMode', { number: puzzle.number, mode: modeName })}
         </span>
         {theme ? <span className="truncate text-xs text-ink-faint">{theme}</span> : null}
       </span>
@@ -174,7 +238,7 @@ function PuzzleTile({ puzzle, solved }: { puzzle: Puzzle; solved: boolean }) {
 /** One to three dots: difficulty at a glance, without a word to read. */
 export function TierDots({ tier }: { tier: Puzzle['tier'] }) {
   return (
-    <span className="ml-auto flex shrink-0 gap-0.5" aria-hidden="true">
+    <span className="ms-auto flex shrink-0 gap-0.5" aria-hidden="true">
       {[1, 2, 3].map((dot) => (
         <span
           key={dot}

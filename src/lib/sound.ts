@@ -1,3 +1,4 @@
+import { intentForPattern, playHaptic, type HapticIntent } from '@/platform/haptics';
 import { loadPreferences, subscribePreferences } from './preferences';
 
 /**
@@ -702,16 +703,18 @@ export const sfx = {
   },
 };
 
-/** Short buzzes on devices that can make them. */
+/**
+ * Short buzzes on devices that can make them.
+ *
+ * `pattern` is what the web's vibration API plays; `intent` is what the moment
+ * means, which a native phone turns into its own feedback style (see
+ * `@/platform/haptics`). Without an intent one is judged from the pattern.
+ */
 export const haptics = {
   enabled: loadPreferences().haptics,
-  buzz(pattern: number | number[]) {
-    if (!this.enabled || typeof navigator === 'undefined') return;
-    try {
-      navigator.vibrate?.(pattern);
-    } catch {
-      // Not every webview exposes it, and a missing buzz is not an error.
-    }
+  buzz(pattern: number | number[], intent: HapticIntent = intentForPattern(pattern)) {
+    if (!this.enabled) return;
+    playHaptic(intent, pattern);
   },
 };
 

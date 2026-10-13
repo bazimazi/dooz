@@ -1,6 +1,8 @@
+import { RIVALS } from '../../src/features/journey/rivals.js';
 import {
   BOT_DIFFICULTIES,
   type BotDifficulty,
+  type BotStyle,
   findBestMove,
   profileFor,
 } from '../../src/game/engine/bot/index.js';
@@ -20,6 +22,16 @@ import { type GameConfig, O, type Player, X } from '../../src/game/engine/types.
 const scale = Number(process.env['BENCH_SCALE'] ?? 1);
 const games = Number(process.env['BENCH_GAMES'] ?? 10);
 const modes = (process.env['BENCH_MODES'] ?? 'classic,grid-6,grid-9,ultimate').split(',');
+/**
+ * `BENCH_RIVALS=1` runs the journey's rivals instead of the bare levels: each
+ * level with its rival's style, which must not move it off its rung.
+ */
+const rivals = process.env['BENCH_RIVALS'] === '1';
+
+/** The style a level plays with in this run: its rival's, or none. */
+function styleOf(difficulty: BotDifficulty): BotStyle | undefined {
+  return rivals ? RIVALS.find((rival) => rival.difficulty === difficulty)?.style : undefined;
+}
 
 function budget(difficulty: BotDifficulty): number {
   return Math.max(8, Math.round(profileFor(difficulty).timeMs * scale));
@@ -43,7 +55,13 @@ function play(config: GameConfig, levels: Record<'X' | 'O', BotDifficulty>, rand
   let guard = 0;
   while (game.status === 'playing' && guard++ < 400) {
     const difficulty = levels[game.currentPlayer === X ? 'X' : 'O'];
-    const move = findBestMove(game, { difficulty, random, timeBudgetMs: budget(difficulty) });
+    const style = styleOf(difficulty);
+    const move = findBestMove(game, {
+      difficulty,
+      random,
+      timeBudgetMs: budget(difficulty),
+      ...(style ? { style } : {}),
+    });
     if (move === null) break;
     game = applyMove(game, move)!;
   }

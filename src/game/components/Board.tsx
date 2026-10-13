@@ -1,33 +1,46 @@
 import {
+  Blocked,
   type Cell,
+  choosesMark,
   colOf,
   Empty,
   type GameState,
   gravityLanding,
+  isMark,
   legalMoves,
   O,
   type Player,
+  type PowerKind,
   rowOf,
   ultimateBoardOf,
   ultimateCells,
   vanishedBy,
+  capturedBy,
   vanishingNext,
   X,
 } from '@/game/engine';
 import {
   type CSSProperties,
   type KeyboardEvent,
+  lazy,
   memo,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { BoardMaterial, isGoban } from '@/components/art/BoardMaterial';
 import { Mark } from '@/components/art/marks';
+import { dropTime } from '@/game/effects/timing';
 import { cx } from '@/lib/cx';
-import { useGraphics } from '@/lib/graphics';
+import { useArtStyle, useGraphics } from '@/lib/graphics';
 import { haptics, sfx } from '@/lib/sound';
+import { LOCALE_INFO, type Translator, useLocale, useT } from '@/i18n';
+import { gameBoardMessages } from '@/i18n/messages/gameBoard';
+import { BoardEffects } from './BoardEffects';
 import { UltimateOverlay } from './UltimateOverlay';
+import { hasVariantControls, moveFor, VariantControls } from './VariantControls';
 import { WinLine } from './WinLine';
 
 /** How the game ended, from the point of view of the person at this device. */
@@ -39,7 +52,7 @@ export interface BoardHint {
   kind: 'win' | 'threat' | 'best';
 }
 
-interface BoardProps {
+export interface BoardProps {
   game: GameState;
   onPlay: (index: number) => void;
   /** Blocks input while it is the bot's or the opponent's turn. */
@@ -53,6 +66,12 @@ interface BoardProps {
   hints?: readonly BoardHint[];
   /** Read-only: a replay, or a game being watched. */
   readOnly?: boolean;
+  /**
+   * Whether the effects layer's callouts may name a threat still standing on
+   * the board ("FORK!"). Defaults on; online play turns it off, for the same
+   * reason it has no hints.
+   */
+  assist?: boolean;
 }
 
 /**
@@ -75,23 +94,57 @@ function radiiFor(size: number): { frame: string; inner: string } {
  */
 const ANIMATION_CELL_LIMIT = 100;
 
-/** Seconds a gravity mark takes to fall `rows` squares. Grows like real falling: with the root. */
-function dropTime(rows: number): number {
-  return 0.22 + Math.sqrt(rows) * 0.13;
-}
+/**
+ * The board for any game.
+ *
+ * Most rule sets are a flat grid of squares and share {@link GridBoard}. Qubic's
+ * cube and Quantum's marks-in-two-places are drawn by boards of their own; they
+ * take the same props, so a screen never needs to know which it is showing.
+ */
+export const Board = memo(function Board(props: BoardProps) {
+  const { variant } = props.game.config;
+  if (variant === 'qubic' || variant === 'quantum') {
+    const Special = variant === 'qubic' ? QubicBoard : QuantumBoard;
+    return (
+      <Suspense fallback={<div className="aspect-square w-full" aria-busy="true" />}>
+        <Special {...props} />
+      </Suspense>
+    );
+  }
+  return <GridBoard {...props} />;
+});
 
-export const Board = memo(function Board({
+// The two boards with geometry of their own are loaded only when one of their
+// games is on screen, so every other game - and the home screen - starts
+// without them.
+const QubicBoard = lazy(async () => ({ default: (await import('./QubicBoard')).QubicBoard }));
+const QuantumBoard = lazy(async () => ({
+  default: (await import('./QuantumBoard')).QuantumBoard,
+}));
+
+const GridBoard = memo(function GridBoard({
   game,
   onPlay,
   disabled = false,
   finishTone = null,
   hints,
   readOnly = false,
+  assist = true,
 }: BoardProps) {
   const graphics = useGraphics();
+  const style = useArtStyle();
+  const t = useT(gameBoardMessages);
+  const pageDir = LOCALE_INFO[useLocale()].dir;
+  const frameRef = useRef<HTMLDivElement>(null);
   const { board, winLine, status, config } = game;
   const { size } = config;
-  const gravity = config.variant === 'gravity';
+  // Connect Four is gravity on a board whose top row is blocked; that row is
+  // never drawn, so the board reads as the seven-by-six grid it is.
+  const gravity = config.variant === 'gravity' || config.variant === 'connect4';
+  const hidden = config.variant === 'connect4' ? 1 : 0;
+  // Tabletop draws the larger boards as a goban. Ultimate keeps its squares:
+  // its nine small boards are the point of it.
+  const goban = style === 'tabletop' && isGoban(size) && config.variant !== 'ultimate';
   const radii = radiiFor(size);
   const gridRef = useRef<HTMLDivElement>(null);
   const [enlarged, setEnlarged] = useState(false);
@@ -111,13 +164,25 @@ export const Board = memo(function Board({
   // be left pointing past the end of a smaller board - which would leave the
   // grid with no tab stop at all. Falling back to the first cell keeps it
   // reachable without discarding the anchor when the size comes back.
-  const focus = focusIndex < board.length ? focusIndex : 0;
+  const focus =
+    focusIndex >= hidden * size && focusIndex < board.length ? focusIndex : hidden * size;
 
   // Under gravity the pointer picks a column, not a square, so the whole column
   // lights and the square the mark would land on previews it.
   const [hoverCol, setHoverCol] = useState<number | null>(null);
 
   const interactive = !readOnly && !disabled && status === 'playing';
+
+  // Wild and Order and Chaos: which mark a tap places. Powers: which action a
+  // tap takes - remembered only for the turn it was chosen in, so a power
+  // never carries over into a later turn by accident.
+  const [mark, setMark] = useState<Player>(X);
+  const [powerChoice, setPowerChoice] = useState<{ kind: PowerKind; ply: number }>({
+    kind: 'place',
+    ply: 0,
+  });
+  const power: PowerKind = powerChoice.ply === game.moves.length ? powerChoice.kind : 'place';
+  const choosePower = (kind: PowerKind) => setPowerChoice({ kind, ply: game.moves.length });
 
   /**
    * The moves the rules actually allow right now.
@@ -160,10 +225,20 @@ export const Board = memo(function Board({
 
   const fading = useMemo(() => vanishingNext(game), [game]);
   const lifted = useMemo(() => vanishedBy(game), [game]);
+  // Pente: the pair the last move took, seen off the board like a vanish mark.
+  const captured = useMemo(() => new Set(capturedBy(game)), [game]);
 
   const animate = board.length <= ANIMATION_CELL_LIMIT;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // X and O switch the mark to place without leaving the board.
+    const key = event.key.toLowerCase();
+    if (choosesMark(config.variant) && interactive && (key === 'x' || key === 'o')) {
+      event.preventDefault();
+      setMark(key === 'x' ? X : O);
+      return;
+    }
+
     const deltas: Record<string, number> = {
       ArrowRight: 1,
       ArrowLeft: -1,
@@ -182,7 +257,7 @@ export const Board = memo(function Board({
       const delta = deltas[event.key];
       if (delta === undefined) return;
       const candidate = focus + delta;
-      if (candidate < 0 || candidate >= board.length) return;
+      if (candidate < hidden * size || candidate >= board.length) return;
       // Left and right must not jump between rows.
       if (Math.abs(delta) === 1 && Math.floor(candidate / size) !== row) return;
       next = candidate;
@@ -199,8 +274,12 @@ export const Board = memo(function Board({
 
   return (
     <div
+      ref={frameRef}
+      // A board is a coordinate grid, not text: it never mirrors, whatever the
+      // language. The words drawn on it take the page's direction back.
+      dir="ltr"
       className={cx(
-        'glass-edge relative w-full max-w-board p-3 backdrop-blur-[3px]',
+        'board-frame glass-edge relative w-full max-w-board p-3 backdrop-blur-[3px]',
         // The radius is part of the transition because it changes with the
         // board size, which happens in place: the frame eases to the new
         // rounding instead of snapping to it.
@@ -216,11 +295,12 @@ export const Board = memo(function Board({
       style={{ borderRadius: radii.frame }}
     >
       {canEnlarge ? (
-        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-ink-muted">
+        <div
+          dir={pageDir}
+          className="mb-2 flex items-center justify-between gap-2 text-xs text-ink-muted"
+        >
           <span>
-            {zoomed
-              ? 'Scroll to explore the board'
-              : `${size} × ${size} · ${config.winLength} in a row`}
+            {zoomed ? t('scrollExplore') : t('boardSummary', { size, length: config.winLength })}
           </span>
           <button
             type="button"
@@ -228,25 +308,49 @@ export const Board = memo(function Board({
             onClick={() => setEnlarged((value) => !value)}
             className="min-h-8 shrink-0 rounded-lg border border-stroke px-2 text-ink hover:bg-stroke-soft"
           >
-            {zoomed ? 'Fit board' : 'Enlarge board'}
+            {t(zoomed ? 'fitBoard' : 'enlargeBoard')}
           </button>
         </div>
+      ) : null}
+      {!readOnly && hasVariantControls(game) ? (
+        <VariantControls
+          game={game}
+          interactive={interactive}
+          playable={playable}
+          mark={mark}
+          onMark={setMark}
+          power={power}
+          onPower={choosePower}
+          onPlay={onPlay}
+        />
       ) : null}
       <div
         className="w-full overflow-auto overscroll-contain"
         style={{ borderRadius: radii.inner, maxHeight: zoomed ? 'min(60dvh, 26rem)' : undefined }}
         role={canEnlarge ? 'region' : undefined}
-        aria-label={canEnlarge ? 'Scrollable game board' : undefined}
+        aria-label={canEnlarge ? t('scrollable') : undefined}
       >
         <div
-          className="relative aspect-square w-full overflow-hidden bg-surface transition-[border-radius] duration-500 ease-soft"
-          style={{ borderRadius: radii.inner, minWidth: zoomed ? `${size * 36}px` : undefined }}
+          className="board-surface relative aspect-square w-full overflow-hidden transition-[border-radius] duration-500 ease-soft"
+          // `data-goban` moves the rules onto the squares' centres; `data-dense`
+          // turns off the per-mark filters a style uses on smaller boards.
+          data-goban={goban || undefined}
+          data-dense={size > 9 || undefined}
+          style={
+            {
+              borderRadius: radii.inner,
+              minWidth: zoomed ? `${size * 36}px` : undefined,
+              '--board-size': size,
+              ...(hidden > 0 ? { aspectRatio: `${size} / ${size - hidden}` } : {}),
+            } as CSSProperties
+          }
           onPointerLeave={gravity ? () => setHoverCol(null) : undefined}
         >
+          <BoardMaterial style={style} size={size} goban={goban} />
           <div
             ref={gridRef}
             role="grid"
-            aria-label={boardLabel(game)}
+            aria-label={boardLabel(game, t)}
             aria-busy={disabled && status === 'playing'}
             aria-readonly={readOnly || undefined}
             onKeyDown={handleKeyDown}
@@ -257,35 +361,58 @@ export const Board = memo(function Board({
               // columns, which keeps the layout to plain `1fr` tracks: with auto
               // sizing the row holding a mark grows to the mark and steals height
               // from the others.
-              gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${size - hidden}, minmax(0, 1fr))`,
             }}
           >
-            {Array.from({ length: size }, (_row, row) => (
+            {Array.from({ length: size - hidden }, (_row, shown) => shown + hidden).map((row) => (
               <div
                 key={row}
                 role="row"
-                className="grid"
-                style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+                // Rows rise in one after another as the board first appears.
+                className="board-row grid"
+                style={
+                  {
+                    gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
+                    '--row': Math.abs(row - (size - 1) / 2),
+                  } as CSSProperties
+                }
               >
                 {Array.from({ length: size }, (_col, col) => {
                   const index = row * size + col;
                   const drop = landing ? (landing[col] ?? -1) : -1;
                   // Under gravity every square of a column plays the column; the
                   // mark goes wherever it lands.
-                  const target = gravity ? (drop >= 0 ? drop : null) : index;
+                  const square = gravity ? (drop >= 0 ? drop : null) : index;
+                  // What the tap plays: the square, or - where the rules ask for a
+                  // mark or an action as well - the move code for both.
+                  const target = square === null ? null : moveFor(game, square, mark, power);
                   const canPlay = interactive && target !== null && playable.has(target);
                   return (
                     <BoardCell
                       key={index}
                       index={index}
-                      row={row}
+                      row={row - hidden}
                       col={col}
                       size={size}
                       cell={board[index] ?? Empty}
                       currentPlayer={
-                        board[index] === Empty ? game.currentPlayer : (board[index]! as Player)
+                        board[index] === Empty
+                          ? choosesMark(config.variant)
+                            ? mark
+                            : game.currentPlayer
+                          : (board[index]! as Player)
                       }
                       target={canPlay ? target : null}
+                      aim={canPlay && power !== 'place' ? power : null}
+                      restricted={
+                        // The pro opening's off-limits squares, shaded while
+                        // they are: the first mark's whole board but the
+                        // centre, and the second's ring around it.
+                        config.opening === 'pro' &&
+                        status === 'playing' &&
+                        board[index] === Empty &&
+                        !playable.has(index)
+                      }
                       interactive={interactive}
                       isLastMove={game.lastMove === index}
                       tabStop={index === focus}
@@ -304,19 +431,19 @@ export const Board = memo(function Board({
                             ? 'waiting'
                             : null
                       }
-                      ghost={graphics !== 'low' && lifted === index ? ghostOf(game) : null}
-                      ghostKey={lifted === index ? game.moves.length : 0}
+                      ghost={
+                        graphics === 'low'
+                          ? null
+                          : lifted === index
+                            ? ghostOf(game)
+                            : captured.has(index)
+                              ? capturedOf(game)
+                              : null
+                      }
+                      ghostKey={lifted === index || captured.has(index) ? game.moves.length : 0}
                       ripple={ripple?.get(index)}
                       rippleColour={glow}
-                      label={`${describeCell(game, index, drop)}${
-                        hintFor.has(index)
-                          ? hintFor.get(index) === 'win'
-                            ? ', winning move'
-                            : hintFor.get(index) === 'threat'
-                              ? ', block opponent’s winning move'
-                              : ', suggested move'
-                          : ''
-                      }`}
+                      label={describeCell(game, index, drop, hintFor.get(index), t)}
                       onFocus={setFocusIndex}
                       onHover={gravity ? setHoverCol : undefined}
                       onPlay={onPlay}
@@ -339,18 +466,37 @@ export const Board = memo(function Board({
             <WinLine
               line={winLine}
               size={size}
+              top={hidden}
               winner={winner}
-              delay={gravity ? dropTime(Math.floor((game.lastMove ?? 0) / size) + 1) * 0.66 : 0}
+              delay={
+                gravity ? dropTime(Math.floor((game.lastMove ?? 0) / size) + 1 - hidden) * 0.66 : 0
+              }
             />
           ) : null}
           {game.ultimate?.winBoards ? (
             <WinLine line={game.ultimate.winBoards} size={3} winner={winner} delay={0.15} />
+          ) : null}
+          {graphics !== 'low' ? (
+            <BoardEffects
+              game={game}
+              quality={graphics}
+              style={style}
+              assist={assist}
+              frameRef={frameRef}
+              hiddenRows={hidden}
+            />
           ) : null}
         </div>
       </div>
     </div>
   );
 });
+
+/** The marks a Pente capture just took: the last mover's opponent's. */
+function capturedOf(game: GameState): Player | null {
+  const mover = ghostOf(game);
+  return mover === null ? null : mover === X ? O : X;
+}
 
 /** The mark that just left a vanish board: the one the last mover owned. */
 function ghostOf(game: GameState): Player | null {
@@ -401,8 +547,12 @@ interface BoardCellProps {
   size: number;
   cell: Cell;
   currentPlayer: GameState['currentPlayer'];
-  /** The square a tap here plays, or `null` when a tap here plays nothing. */
+  /** The move a tap here plays, or `null` when a tap here plays nothing. */
   target: number | null;
+  /** Powers: a tap here spends this power rather than placing a mark. */
+  aim: 'bomb' | 'wall' | null;
+  /** The opening rule keeps this empty square off limits for now. */
+  restricted: boolean;
   /** The board as a whole is taking input, whether or not this square is. */
   interactive: boolean;
   isLastMove: boolean;
@@ -466,6 +616,8 @@ const BoardCell = memo(function BoardCell({
   cell,
   currentPlayer,
   target,
+  aim,
+  restricted,
   interactive,
   isLastMove,
   tabStop,
@@ -532,7 +684,7 @@ const BoardCell = memo(function BoardCell({
           // tap the game missed.
           if (motion) setRejected(true);
           sfx.invalid();
-          haptics.buzz([10, 30, 10]);
+          haptics.buzz([10, 30, 10], 'warning');
         }
       }}
       onAnimationEnd={(event) => {
@@ -540,7 +692,7 @@ const BoardCell = memo(function BoardCell({
       }}
       aria-label={label}
       className={cx(
-        'group relative flex items-center justify-center',
+        'board-cell group relative flex items-center justify-center',
         // Dashed rules between cells only - the outer edge is the frame, so the
         // first row and last column stay clean.
         'border-t border-r border-dashed border-grid/85',
@@ -561,7 +713,38 @@ const BoardCell = memo(function BoardCell({
           : undefined
       }
     >
-      {cell !== Empty ? (
+      {/* A blocked square: an obstacle, or a wall somebody built. It sits in
+          the square like a stone set into the board. */}
+      {cell === Blocked ? (
+        <span
+          aria-hidden="true"
+          className={cx(
+            'pointer-events-none absolute inset-[13%] rounded-[32%] bg-ink/18',
+            'shadow-[inset_0_-3px_0_rgb(0_0_0/0.2),inset_0_2px_0_rgb(255_255_255/0.14)]',
+            isLastMove && motion && 'animate-fade-in',
+          )}
+        />
+      ) : null}
+
+      {/* Squares the opening rule keeps closed for now. */}
+      {restricted ? (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-ink/7" />
+      ) : null}
+
+      {/* Powers: what a tap here would do, drawn where it would do it. */}
+      {aim !== null ? (
+        <span
+          aria-hidden="true"
+          className={cx(
+            'pointer-events-none absolute border-2 transition-opacity duration-150',
+            aim === 'bomb'
+              ? 'inset-[8%] rounded-full border-warn opacity-80 group-hover:opacity-100'
+              : 'inset-[13%] rounded-[32%] border-dashed border-ink/50 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100',
+          )}
+        />
+      ) : null}
+
+      {isMark(cell) ? (
         <>
           {/* The ring that expands out from under a piece as it lands. It only
               ever plays once, on mount, and not at all on a board big enough
@@ -600,8 +783,9 @@ const BoardCell = memo(function BoardCell({
             }
           >
             <span
+              data-player={cell === X ? 'x' : 'o'}
               className={cx(
-                'relative flex w-[68%] items-center justify-center transition-opacity duration-300',
+                'board-mark relative flex w-[68%] items-center justify-center transition-opacity duration-300',
                 // The throb lives on the wrapper, the entrance on the mark
                 // itself: two animations, two `transform`s, no fight over which
                 // one owns the element.
@@ -609,7 +793,14 @@ const BoardCell = memo(function BoardCell({
                 fade === 'mover' && 'animate-fading',
                 fade === 'waiting' && 'opacity-70',
               )}
-              style={winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : undefined}
+              style={
+                {
+                  // A cut-paper style lays each piece slightly askew; the angle
+                  // is a hash of the square, so it never changes under a mark.
+                  '--tilt': `${((index * 37) % 7) - 3}deg`,
+                  ...(winOrder !== undefined ? { animationDelay: `${winOrder * 0.11}s` } : {}),
+                } as CSSProperties
+              }
             >
               {animate && effects && !gravity ? (
                 <svg
@@ -633,10 +824,12 @@ const BoardCell = memo(function BoardCell({
               ) : null}
               <Mark
                 player={cell}
-                hole="var(--color-surface)"
+                hole="var(--color-board)"
                 className={cx(
                   'w-full origin-center',
                   animate && !gravity && (cell === X ? 'animate-mark-x' : 'animate-mark-o'),
+                  // The move that wins lands in slow motion.
+                  animate && effects && isLastMove && winOrder !== undefined && 'fx-slowmo',
                 )}
               />
             </span>
@@ -701,13 +894,31 @@ const BoardCell = memo(function BoardCell({
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
         >
           <span className="flex w-[68%] animate-vanish-out">
-            <Mark player={ghost} hole="var(--color-surface)" className="w-full" />
+            <Mark player={ghost} hole="var(--color-board)" className="w-full" />
           </span>
         </span>
       ) : null}
 
       {/* Practice hints: where the game is won, where it must be saved, and
           - when asked - the move the engine would play. */}
+      {/* A pool of light under the hint ring on High, so a square that
+          decides the game glows rather than just being outlined. */}
+      {hint && cell === Empty && effects ? (
+        <span
+          aria-hidden="true"
+          className="hint-halo pointer-events-none absolute inset-[4%] rounded-full"
+          style={
+            {
+              '--halo':
+                hint === 'win'
+                  ? 'var(--color-ok)'
+                  : hint === 'threat'
+                    ? 'var(--color-warn)'
+                    : 'var(--color-accent)',
+            } as CSSProperties
+          }
+        />
+      ) : null}
       {hint && cell === Empty ? (
         <span
           aria-hidden="true"
@@ -725,12 +936,13 @@ const BoardCell = memo(function BoardCell({
       {/* Faint hint of the mark that would land here. Suppressed on a big
           board, where 225 hover previews is a lot of DOM for one pointer.
           Under gravity it shows only on the square the column would fill. */}
-      {playable && !big && preview && cell === Empty ? (
+      {playable && !big && preview && cell === Empty && aim === null ? (
         <Mark
           player={currentPlayer}
-          hole="var(--color-surface)"
+          hole="var(--color-board)"
           className={cx(
             'pointer-events-none absolute w-[68%]',
+            !gravity && 'hover-ghost',
             'transition-[opacity,transform] duration-200 ease-spring',
             gravity
               ? 'scale-100 opacity-30'
@@ -746,24 +958,33 @@ const BoardCell = memo(function BoardCell({
   );
 });
 
-function boardLabel(game: GameState): string {
+type BoardText = Translator<(typeof gameBoardMessages)['en']>;
+
+function boardLabel(game: GameState, t: BoardText): string {
   const { size, variant, winLength } = game.config;
-  if (variant === 'gravity') {
-    return `${size} by ${size} gravity board, ${winLength} in a row to win. Choose a column; your mark drops to its lowest empty square`;
-  }
-  if (variant === 'vanish') {
-    return `Vanish board, three in a row to win. Each player keeps only their three newest marks`;
-  }
-  if (variant !== 'ultimate') {
-    return `${size} by ${size} board, ${winLength} in a row to win`;
-  }
+  const values = { size, length: winLength };
+  if (variant === 'connect4') return t('labelConnect4');
+  if (variant === 'wild') return t('labelWild', values);
+  if (variant === 'order-chaos') return t('labelOrderChaos', values);
+  if (variant === 'obstacles') return t('labelObstacles', values);
+  if (variant === 'powers') return t('labelPowers', values);
+  if (variant === 'gravity') return t('labelGravity', values);
+  if (variant === 'pente') return t('labelPente', values);
+  if (variant === 'vanish') return t('labelVanish');
+  if (variant !== 'ultimate') return t('labelPlain', values);
 
   const active = game.ultimate?.activeBoard;
-  const where =
-    active === null || active === undefined
-      ? 'you may play in any unfinished small board'
-      : `you must play in small board ${active + 1}`;
-  return `Ultimate board, nine small boards. ${where}`;
+  return active === null || active === undefined
+    ? t('labelUltimateAny')
+    : t('labelUltimateMust', { n: active + 1 });
+}
+
+/** The words a hint adds to a square's description. */
+function hintWords(hint: BoardHint['kind'] | undefined, t: BoardText): string | null {
+  if (hint === 'win') return t('hintWin');
+  if (hint === 'threat') return t('hintThreat');
+  if (hint === 'best') return t('hintBest');
+  return null;
 }
 
 /**
@@ -775,38 +996,56 @@ function boardLabel(game: GameState): string {
  * where a mark played in its column would land; under vanish which mark is the
  * next to go.
  */
-function describeCell(game: GameState, index: number, landing: number): string {
+function describeCell(
+  game: GameState,
+  index: number,
+  landing: number,
+  hint: BoardHint['kind'] | undefined,
+  t: BoardText,
+): string {
+  const parts = cellParts(game, index, landing, t);
+  const extra = hintWords(hint, t);
+  return (extra ? [...parts, extra] : parts).join(t('sep'));
+}
+
+function cellParts(game: GameState, index: number, landing: number, t: BoardText): string[] {
   const { size } = game.config;
   const cell = game.board[index] ?? Empty;
-  const position = `row ${rowOf(size, index) + 1}, column ${colOf(size, index) + 1}`;
-  const contents = cell === X ? 'X' : cell === O ? 'O' : 'empty';
+  const position = t('position', { row: rowOf(size, index) + 1, col: colOf(size, index) + 1 });
+  const contents =
+    cell === X ? 'X' : cell === O ? 'O' : cell === Blocked ? t('blocked') : t('empty');
 
-  if (game.config.variant === 'gravity') {
-    if (cell !== Empty || game.status !== 'playing') return `${position}, ${contents}`;
-    return landing >= 0
-      ? `${position}, empty, plays column ${colOf(size, index) + 1} at row ${rowOf(size, landing) + 1}`
-      : `${position}, empty, column full`;
+  if (game.config.variant === 'gravity' || game.config.variant === 'connect4') {
+    if (cell !== Empty || game.status !== 'playing') return [position, contents];
+    return [
+      position,
+      t('empty'),
+      landing >= 0
+        ? t('dropsAt', { col: colOf(size, index) + 1, row: rowOf(size, landing) + 1 })
+        : t('columnFull'),
+    ];
   }
 
   if (game.config.variant === 'vanish') {
     const next = vanishingNext(game);
-    const leaving = next.mover === index || next.waiting === index ? ', vanishes next' : '';
-    return `${position}, ${contents}${leaving}`;
+    const leaving = next.mover === index || next.waiting === index;
+    return leaving ? [position, contents, t('vanishesNext')] : [position, contents];
   }
 
-  if (!game.ultimate) return `${position}, ${contents}`;
+  if (!game.ultimate) return [position, contents];
 
   const board = ultimateBoardOf(index);
   const owner = game.ultimate.boards[board] ?? Empty;
   const won =
     owner === X
-      ? ', board won by X'
+      ? t('boardWonBy', { mark: 'X' })
       : owner === O
-        ? ', board won by O'
+        ? t('boardWonBy', { mark: 'O' })
         : game.ultimate.drawn[board]
-          ? ', board drawn'
-          : '';
-  return `${position}, small board ${board + 1}${won}, ${contents}`;
+          ? t('boardDrawn')
+          : null;
+  const small = t('smallBoard', { n: board + 1 });
+  return won ? [position, small, won, contents] : [position, small, contents];
 }
 
 /** The cells of a sub-board, for callers that need to highlight one. */

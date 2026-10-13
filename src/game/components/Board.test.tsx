@@ -245,3 +245,10 @@ describe('Board under vanish', () => {
     expect(screen.getByRole('gridcell', { name: 'row 3, column 3, X' })).toBeInTheDocument();
   });
 });
+
+describe('boards with geometry of their own', () => {
+  it('loads the Qubic cube on demand behind the same props', async () => {
+    render(<Board game={createGame(modeById('qubic').config)} onPlay={vi.fn()} />);
+    expect(await screen.findByRole('grid')).toBeInTheDocument();
+  });
+});

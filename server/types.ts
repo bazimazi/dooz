@@ -1,4 +1,4 @@
-import type { GameConfig, GameState, Player } from '@/game/engine';
+import type { BotDifficulty, GameConfig, GameState, Player } from '@/game/engine';
 import type { EndReason, MatchKind, MatchResult, ServerMessage } from '@/protocol';
 import type { MatchClock } from './clock.js';
 import type { AccountRow } from './db/accounts.js';
@@ -57,6 +57,11 @@ export interface Seat {
   ratingBefore: number;
   /** When this seat's connection dropped, for the abandon timer. */
   disconnectedAt: number | null;
+  /**
+   * Set when a server bot holds this seat, at this strength. A bot seat has no
+   * session; its moves come from the engine pool, and it is always connected.
+   */
+  bot?: BotDifficulty;
 }
 
 export interface Room {
@@ -85,6 +90,10 @@ export interface Room {
    * board still in play.
    */
   result: MatchResult | null;
+  /** The tournament this room was paired for. Such rooms are never rematched. */
+  tournament?: { readonly id: string; readonly name: string; readonly berserk: boolean } | null;
+  /** Seats that went berserk this game: half the clock, no increment, a bonus point. */
+  berserk?: Set<Player>;
 }
 
 /** The outcome of a game, as the lobby decides it. */

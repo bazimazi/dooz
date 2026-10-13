@@ -1,5 +1,5 @@
 import { type GameConfig, type GameState, MAX_WIN_LENGTH, O, type Player, X } from './types.js';
-import { variantFor } from './variants/index.js';
+import { rulesFor } from './variants/index.js';
 
 /**
  * The run length a plain board of `size` should use.
@@ -33,17 +33,17 @@ export function randomStartingPlayer(random: () => number = Math.random): Player
  */
 export function createGame(config: GameConfig | number, startingPlayer: Player = X): GameState {
   const resolved = typeof config === 'number' ? configForSize(config) : config;
-  return variantFor(resolved.variant).create(resolved, startingPlayer);
+  return rulesFor(resolved).create(resolved, startingPlayer);
 }
 
-/** True when `index` is a legal move for the player to act in `state`. */
-export function canPlay(state: GameState, index: number): boolean {
-  return variantFor(state.config.variant).canPlay(state, index);
+/** True when `move` is a legal move for the player to act in `state`. */
+export function canPlay(state: GameState, move: number): boolean {
+  return rulesFor(state.config).canPlay(state, move);
 }
 
 /** Every legal move in `state`, ascending. Empty once the game is over. */
 export function legalMoves(state: GameState): number[] {
-  return variantFor(state.config.variant).legalMoves(state);
+  return rulesFor(state.config).legalMoves(state);
 }
 
 /**
@@ -53,8 +53,8 @@ export function legalMoves(state: GameState): number[] {
  * their input (the AI search, replaying a recorded game) can assert non-null;
  * the multiplayer server relies on the `null` to reject bad client moves.
  */
-export function applyMove(state: GameState, index: number): GameState | null {
-  return variantFor(state.config.variant).apply(state, index);
+export function applyMove(state: GameState, move: number): GameState | null {
+  return rulesFor(state.config).apply(state, move);
 }
 
 /**
@@ -136,7 +136,9 @@ export function fromRecord(record: GameRecord): GameState | null {
  *
  * Derived rather than stored: with the turn alternating every ply, the opener
  * is the player to move at an even move count and their opponent at an odd one.
- * Ultimate never passes a turn either, so this holds for every variant.
+ * No variant passes or doubles a turn - the pie-rule swap hands a mark over
+ * rather than skipping one - so this holds for every rule set. A variant that
+ * needs a player to act twice must encode both actions in one move code.
  */
 export function startingPlayerOf(state: GameState): Player {
   const even = state.moves.length % 2 === 0;

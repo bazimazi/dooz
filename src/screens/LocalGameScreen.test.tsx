@@ -57,3 +57,43 @@ describe('local round recovery', () => {
     );
   });
 });
+
+describe('local team play', () => {
+  afterEach(() => localStorage.clear());
+
+  it('seats two teams of two and passes the turn round all four', async () => {
+    await renderWithRouter(<LocalGameScreen mode="classic" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Name the players' }));
+    await userEvent.click(screen.getByRole('switch', { name: /Two teams of two/ }));
+    for (const [label, name] of [
+      ['Team X, first', 'Ana'],
+      ['Team X, second', 'Ben'],
+      ['Team O, first', 'Cy'],
+      ['Team O, second', 'Dee'],
+    ] as const) {
+      const field = screen.getByLabelText(label);
+      await userEvent.clear(field);
+      await userEvent.type(field, name);
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    expect(screen.getByText('2 v 2')).toBeInTheDocument();
+    const turn = () => screen.getByText(/’s turn · Team/).textContent;
+    expect(turn()).toBe('Ana’s turn · Team X');
+    expect(screen.getByText('with Ben')).toBeInTheDocument();
+
+    const seen: (string | null)[] = [];
+    for (const [row, col] of [
+      [1, 1],
+      [2, 1],
+      [3, 3],
+    ]) {
+      await userEvent.click(
+        screen.getByRole('gridcell', { name: `row ${row}, column ${col}, empty` }),
+      );
+      seen.push(turn());
+    }
+    expect(seen).toEqual(['Cy’s turn · Team O', 'Ben’s turn · Team X', 'Dee’s turn · Team O']);
+  });
+});

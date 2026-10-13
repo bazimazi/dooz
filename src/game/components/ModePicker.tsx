@@ -1,22 +1,18 @@
-import {
-  GAME_MODES,
-  type GameMode,
-  isModeId,
-  type ModeGroup,
-  type ModeId,
-  modeById,
-} from '@/game/engine';
+import { GAME_MODES, type GameMode, isModeId, type ModeGroup, type ModeId } from '@/game/engine';
 import { useRef } from 'react';
 import { CheckIcon } from '@/components/art/icons';
 import { TrophyIcon } from '@/components/art/ui-icons';
 import { cx } from '@/lib/cx';
+import { LOCALE_INFO, useLocale, useT } from '@/i18n';
+import { gameUiMessages } from '@/i18n/messages/gameUi';
+import { type ModeText, useModeText, useModeTexts } from '@/i18n/messages/modes';
 import { MiniBoard } from './MiniBoard';
 
-const GROUP_LABELS: Record<ModeGroup, string> = {
-  classic: 'The classics',
-  large: 'Bigger boards',
-  variant: 'Twists',
-};
+const GROUP_LABELS = {
+  classic: 'groupClassic',
+  large: 'groupLarge',
+  variant: 'groupVariant',
+} as const satisfies Record<ModeGroup, string>;
 
 const GROUP_ORDER: readonly ModeGroup[] = ['classic', 'large', 'variant'];
 
@@ -42,6 +38,10 @@ export function ModePicker({
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const t = useT(gameUiMessages);
+  const textOf = useModeTexts();
+  // Right-to-left, the tiles run from the right, and so do the arrow keys.
+  const rtl = LOCALE_INFO[useLocale()].dir === 'rtl';
 
   /**
    * Arrow keys move the selection, as a radio group requires.
@@ -60,7 +60,7 @@ export function ModePicker({
 
     let next: HTMLButtonElement | undefined;
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      next = tiles[index + (event.key === 'ArrowRight' ? 1 : -1)];
+      next = tiles[index + ((event.key === 'ArrowRight') !== rtl ? 1 : -1)];
     } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const down = event.key === 'ArrowDown';
       const from = current.getBoundingClientRect();
@@ -89,7 +89,7 @@ export function ModePicker({
     <div
       ref={containerRef}
       role="radiogroup"
-      aria-label="Game mode"
+      aria-label={t('gameMode')}
       onKeyDown={handleKeyDown}
       className={cx('flex w-full flex-col gap-5', className)}
     >
@@ -100,7 +100,7 @@ export function ModePicker({
         return (
           <section key={group} className="flex flex-col gap-2">
             <h2 className="flex items-center gap-3 px-1 text-xs font-semibold tracking-widest text-ink-muted uppercase">
-              {GROUP_LABELS[group]}
+              {t(GROUP_LABELS[group])}
               <span aria-hidden="true" className="h-px flex-1 bg-stroke-soft" />
             </h2>
             {/* One column on the narrowest phones: at 320px two columns leave
@@ -111,6 +111,7 @@ export function ModePicker({
                 <ModeTile
                   key={mode.id}
                   mode={mode}
+                  text={textOf(mode.id)}
                   selected={mode.id === value}
                   onSelect={() => onChange(mode.id)}
                 />
@@ -125,13 +126,16 @@ export function ModePicker({
 
 function ModeTile({
   mode,
+  text,
   selected,
   onSelect,
 }: {
   mode: GameMode;
+  text: ModeText;
   selected: boolean;
   onSelect: () => void;
 }) {
+  const t = useT(gameUiMessages);
   return (
     <button
       type="button"
@@ -144,7 +148,7 @@ function ModeTile({
       className={cx(
         // Narrow phones use rows; wider phones leave enough room for a board
         // preview above the complete mode name and description.
-        'group relative flex items-center gap-3 rounded-2xl border p-3 text-left min-[360px]:flex-col min-[360px]:items-start',
+        'group relative flex items-center gap-3 rounded-2xl border p-3 text-start min-[360px]:flex-col min-[360px]:items-start',
         'transition-[transform,border-color,background-color] duration-200 ease-spring',
         'hover:-translate-y-0.5 active:scale-[0.98]',
         selected
@@ -160,7 +164,7 @@ function ModeTile({
       {selected ? (
         <span
           aria-hidden="true"
-          className="absolute top-3 right-3 flex size-5 items-center justify-center rounded-full bg-mark-o text-sunken"
+          className="absolute end-3 top-3 flex size-5 items-center justify-center rounded-full bg-mark-o text-sunken"
         >
           <CheckIcon className="size-3.5" />
         </span>
@@ -168,15 +172,12 @@ function ModeTile({
 
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">{mode.name}</span>
+          <span className="text-sm font-semibold">{text.name}</span>
           {mode.ranked ? (
-            <TrophyIcon
-              className="size-3 shrink-0 text-ink-faint"
-              aria-label="Has a ranked ladder"
-            />
+            <TrophyIcon className="size-3 shrink-0 text-ink-faint" aria-label={t('ranked')} />
           ) : null}
         </span>
-        <span className="text-xs leading-relaxed text-ink-muted">{mode.tagline}</span>
+        <span className="text-xs leading-relaxed text-ink-muted">{text.tagline}</span>
       </span>
     </button>
   );
@@ -184,7 +185,7 @@ function ModeTile({
 
 /** The compact form for a game screen's header: mode name, tap to change. */
 export function ModeChip({ mode, onClick }: { mode: ModeId; onClick?: () => void }) {
-  const detail = modeById(mode);
+  const detail = useModeText(mode);
 
   if (!onClick) {
     return <span className="text-center text-sm text-ink-muted">{detail.name}</span>;

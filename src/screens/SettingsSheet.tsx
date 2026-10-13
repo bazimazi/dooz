@@ -4,10 +4,13 @@ import { Mark } from '@/components/art/marks';
 import { LockIcon, MoonIcon, SunIcon } from '@/components/art/ui-icons';
 import { Button } from '@/components/ui/Button';
 import { Segmented, Slider, Toggle } from '@/components/ui/Field';
+import { StylePicker } from '@/components/ui/StylePicker';
 import { useProgressStore } from '@/features/progress/store';
+import { NotificationSettings, TelemetrySettings } from '@/features/social/SettingsExtras';
 import { isSkinUnlocked, SKIN_UNLOCKS } from '@/features/progress/unlocks';
 import { cx } from '@/lib/cx';
-import { GRAPHICS_DESCRIPTIONS } from '@/lib/graphics';
+import { formatNumber, type LanguageChoice, LOCALE_INFO, LOCALES, useLocale, useT } from '@/i18n';
+import { settingsMessages } from '@/i18n/messages/settings';
 import {
   loadPreferences,
   savePreferences,
@@ -18,6 +21,7 @@ import {
 import { sfx } from '@/lib/sound';
 import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
+import { hapticsSupported } from '@/platform/haptics';
 
 /**
  * The settings sheet.
@@ -32,7 +36,10 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
   const { closing, close } = useClosing(onClose);
   const panelRef = useDialog<HTMLDivElement>(close);
   const [preferences, setPreferences] = useState(loadPreferences);
-  const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+  // iOS has no web vibration API but the native app drives the Taptic Engine,
+  // so ask the platform layer rather than the browser.
+  const canVibrate = hapticsSupported();
+  const t = useT(settingsMessages);
 
   function update(changes: Parameters<typeof savePreferences>[0]) {
     setPreferences(savePreferences(changes));
@@ -52,7 +59,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Settings"
+        aria-label={t('title')}
         tabIndex={-1}
         className={cx(
           'w-full max-w-88 panel-shell rounded-t-[2rem] border border-stroke p-2 outline-none sm:rounded-[2rem]',
@@ -65,56 +72,61 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
       >
         <div className="flex max-h-[85dvh] flex-col gap-5 overflow-y-auto panel-face rounded-t-[1.5rem] bg-surface px-5 py-6 sm:rounded-[1.5rem]">
           <span aria-hidden="true" className="mx-auto h-1 w-10 shrink-0 rounded-full bg-ink/25" />
-          <h2 className="text-center font-display text-2xl">Settings</h2>
+          <h2 className="text-center font-display text-2xl">{t('title')}</h2>
 
-          <Group title="Appearance">
+          <Group title={t('appearance')}>
             <Segmented<ThemeChoice>
-              label="Theme"
+              label={t('theme')}
               value={preferences.theme}
               onChange={(theme) => update({ theme })}
               options={[
-                { value: 'system', label: 'Auto', title: 'Follow the system setting' },
-                { value: 'light', label: <SunIcon />, title: 'Light' },
-                { value: 'dark', label: <MoonIcon />, title: 'Dark' },
+                { value: 'system', label: t('themeAuto'), title: t('themeAutoTitle') },
+                { value: 'light', label: <SunIcon />, title: t('themeLight') },
+                { value: 'dark', label: <MoonIcon />, title: t('themeDark') },
               ]}
             />
+            <StylePicker value={preferences.style} onChange={(style) => update({ style })} />
             <SkinPicker value={preferences.skin} onChange={(skin) => update({ skin })} />
+            <LanguagePicker
+              value={preferences.language}
+              onChange={(language) => update({ language })}
+            />
           </Group>
 
-          <Group title="Graphics">
+          <Group title={t('graphics')}>
             <Segmented<GraphicsQuality>
-              label="Graphics quality"
+              label={t('graphicsQuality')}
               value={preferences.graphics}
               onChange={(graphics) => update({ graphics })}
               options={[
-                { value: 'low', label: 'Low' },
-                { value: 'balanced', label: 'Balanced' },
-                { value: 'high', label: 'High' },
+                { value: 'low', label: t('graphicsLow') },
+                { value: 'balanced', label: t('graphicsBalanced') },
+                { value: 'high', label: t('graphicsHigh') },
               ]}
             />
             <p role="status" className="px-1 text-xs text-ink-muted">
-              {GRAPHICS_DESCRIPTIONS[preferences.graphics]}
+              {t(`graphicsDescription.${preferences.graphics}`)}
             </p>
           </Group>
 
-          <Group title="Sound">
+          <Group title={t('sound')}>
             <Toggle
-              label="Sound effects"
-              description="Every mark plays a note — a game is a little tune."
+              label={t('soundEffects')}
+              description={t('soundEffectsDescription')}
               checked={preferences.sound}
               onChange={(sound) => update({ sound })}
             />
             <Toggle
-              label="Music"
-              description="Warm mallets, mellow chords and a gentle beat."
+              label={t('music')}
+              description={t('musicDescription')}
               checked={preferences.music}
               onChange={(music) => update({ music })}
             />
             <Slider
-              label="Volume"
+              label={t('volume')}
               value={preferences.volume}
               disabled={!preferences.sound && !preferences.music}
-              describe={(value) => `${Math.round(value * 100)} percent`}
+              describe={(value) => t('volumePercent', { count: Math.round(value * 100) })}
               onChange={(volume) => {
                 update({ volume });
                 sfx.tap();
@@ -122,25 +134,30 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
             />
             {canVibrate ? (
               <Toggle
-                label="Vibration"
-                description="A light buzz on moves and results."
+                label={t('vibration')}
+                description={t('vibrationDescription')}
                 checked={preferences.haptics}
                 onChange={(haptics) => update({ haptics })}
               />
             ) : null}
           </Group>
 
-          <Group title="Help">
+          <Group title={t('notificationsPrivacy')}>
+            <NotificationSettings />
+            <TelemetrySettings />
+          </Group>
+
+          <Group title={t('help')}>
             <Toggle
-              label="Practice hints"
-              description="Ring the winning and losing squares in local and bot games."
+              label={t('hints')}
+              description={t('hintsDescription')}
               checked={preferences.hints}
               onChange={(hints) => update({ hints })}
             />
           </Group>
 
           <Button variant="ghost" size="small" onClick={close} className="self-center">
-            Done
+            {t('done')}
           </Button>
         </div>
       </div>
@@ -167,23 +184,33 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
  * including how far along the player already is.
  */
 function SkinPicker({ value, onChange }: { value: Skin; onChange: (skin: Skin) => void }) {
+  const t = useT(settingsMessages);
+  const locale = useLocale();
   const progress = useProgressStore();
   const [explained, setExplained] = useState<Skin | null>(null);
   const shown = SKIN_UNLOCKS.find((unlock) => unlock.skin === (explained ?? value));
 
   return (
     <div className="flex flex-col gap-2">
-      <div role="radiogroup" aria-label="Pieces" className="grid grid-cols-4 gap-2">
+      <div role="radiogroup" aria-label={t('pieces')} className="grid grid-cols-4 gap-2">
         {SKIN_UNLOCKS.map((unlock) => {
           const open = isSkinUnlocked(unlock.skin, progress);
           const selected = unlock.skin === value;
+          const name = t(`skin.${unlock.skin}.name`);
           return (
             <button
               key={unlock.skin}
               type="button"
               role="radio"
               aria-checked={selected}
-              aria-label={open ? unlock.name : `${unlock.name}, locked. ${unlock.requirement}`}
+              aria-label={
+                open
+                  ? name
+                  : t('pieceLocked', {
+                      name,
+                      requirement: t(`skin.${unlock.skin}.requirement`, { count: unlock.need }),
+                    })
+              }
               onClick={() => {
                 if (open) {
                   onChange(unlock.skin);
@@ -210,9 +237,9 @@ function SkinPicker({ value, onChange }: { value: Skin; onChange: (skin: Skin) =
                   className="size-6"
                 />
               </span>
-              <span className="text-[0.6875rem] text-ink-muted">{unlock.name}</span>
+              <span className="text-[0.6875rem] text-ink-muted">{name}</span>
               {!open ? (
-                <span className="absolute top-1 right-1 text-xs text-ink-faint">
+                <span className="absolute end-1 top-1 text-xs text-ink-faint">
                   <LockIcon />
                 </span>
               ) : null}
@@ -222,12 +249,46 @@ function SkinPicker({ value, onChange }: { value: Skin; onChange: (skin: Skin) =
       </div>
       {shown && !isSkinUnlocked(shown.skin, progress) ? (
         <p key={shown.skin} className="animate-toast-in px-1 text-xs text-ink-muted" role="status">
-          <strong className="text-ink">{shown.name}:</strong> {shown.requirement}{' '}
+          <strong className="text-ink">{t(`skin.${shown.skin}.name`)}:</strong>{' '}
+          {t(`skin.${shown.skin}.requirement`, { count: shown.need })}{' '}
           <span className="tnum text-ink-faint">
-            ({Math.min(shown.have(progress), shown.need)}/{shown.need})
+            ({formatNumber(Math.min(shown.have(progress), shown.need), locale)}/
+            {formatNumber(shown.need, locale)})
           </span>
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The interface language: the device's own, or one of the translations, each
+ * written in its own language so a player lost in the wrong one can still find
+ * theirs. A native select, because six options would crowd a segmented row.
+ */
+function LanguagePicker({
+  value,
+  onChange,
+}: {
+  value: LanguageChoice;
+  onChange: (language: LanguageChoice) => void;
+}) {
+  const t = useT(settingsMessages);
+  return (
+    <label className="flex items-center gap-3 px-1 text-sm">
+      <span className="shrink-0 text-ink-muted">{t('language')}</span>
+      <select
+        className="h-10 min-w-0 flex-1 rounded-tile border border-stroke bg-surface px-3 text-sm"
+        value={value}
+        onChange={(event) => onChange(event.target.value as LanguageChoice)}
+      >
+        <option value="system">{t('languageSystem')}</option>
+        {LOCALES.map((locale) => (
+          <option key={locale} value={locale} lang={locale} dir={LOCALE_INFO[locale].dir}>
+            {LOCALE_INFO[locale].nativeName}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

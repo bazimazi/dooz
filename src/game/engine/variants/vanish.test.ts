@@ -4,7 +4,8 @@ import { solveVanish, vanishQueues, vanishVerdict, vanishWinningMoves } from '..
 import { applyMove, canPlay, createGame, legalMoves } from '../game.js';
 import { modeById } from '../modes.js';
 import { fromMoves, seeded } from '../testing.js';
-import { Empty, isGameConfig, O, X } from '../types.js';
+import { isGameConfig } from '../config.js';
+import { Empty, O, X } from '../types.js';
 import { VANISH_MOVE_LIMIT, vanishedBy, vanishingNext } from './vanish.js';
 
 const VANISH = modeById('vanish').config;

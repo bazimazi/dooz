@@ -7,7 +7,9 @@ import {
   startingPlayerOf,
   type Player,
   randomStartingPlayer,
+  replay,
   sameConfig,
+  withSeed,
 } from '@/game/engine';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -32,6 +34,24 @@ interface UseGameOptions {
   opener?: Player;
   /** Independent on-device position for this game mode or journey stage. */
   storageKey?: string;
+  /**
+   * Moves already on the board when a game starts - a handicap or a
+   * challenge's pre-placed marks - and who opened them. Overrides `opener`.
+   * Restarting rebuilds them, and a take-back stops where they end.
+   */
+  setup?: { readonly opener: Player; readonly moves: readonly number[] };
+}
+
+/** A fresh game: the setup replayed when there is one, otherwise an empty board. */
+function freshGame(config: GameConfig, opener: Player, setup: UseGameOptions['setup']): GameState {
+  if (setup && setup.moves.length > 0) {
+    const built = replay(config, setup.opener, setup.moves);
+    if (built && built.status === 'playing') return built;
+  }
+  // A rule set that lays out its board from a seed - obstacles - gets a new
+  // layout every game rather than the mode's fixed one. A seed the caller
+  // chose is kept: the daily challenge's board is the same for everyone.
+  return createGame(config.seed === undefined ? withSeed(config) : config, setup?.opener ?? opener);
 }
 
 function restoreGame(config: GameConfig, storageKey?: string): GameState | null {
@@ -47,7 +67,9 @@ function restoreGame(config: GameConfig, storageKey?: string): GameState | null 
       saved.moves.length > 1000
     )
       return null;
-    let game = createGame(config, saved.opener);
+    // The saved config, not the mode's: it carries the seed the position's
+    // board was laid out from.
+    let game = createGame(saved.config as GameConfig, saved.opener);
     for (const move of saved.moves) {
       if (!Number.isInteger(move)) return null;
       const next = applyMove(game, move);
@@ -83,11 +105,14 @@ export function forgetGame(storageKey: string): void {
  * entrance animation again.
  */
 export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGame {
-  const fixed = options.opener;
+  const setup = options.setup;
+  const fixed = setup?.opener ?? options.opener;
   const storageKey = options.storageKey;
+  const setupLength = setup?.moves.length ?? 0;
   const [loadedKey, setLoadedKey] = useState(storageKey);
   const [game, setGame] = useState<GameState>(
-    () => restoreGame(config, storageKey) ?? createGame(config, fixed ?? randomStartingPlayer()),
+    () =>
+      restoreGame(config, storageKey) ?? freshGame(config, fixed ?? randomStartingPlayer(), setup),
   );
   const [opener, setOpener] = useState(() => startingPlayerOf(game));
   const [round, setRound] = useState(0);
@@ -96,7 +121,7 @@ export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGa
   // frame of the previous board paint under the new rules first.
   if (!sameConfig(game.config, config) || loadedKey !== storageKey) {
     const restored =
-      restoreGame(config, storageKey) ?? createGame(config, fixed ?? randomStartingPlayer());
+      restoreGame(config, storageKey) ?? freshGame(config, fixed ?? randomStartingPlayer(), setup);
     setLoadedKey(storageKey);
     setOpener(startingPlayerOf(restored));
     setGame(restored);
@@ -129,12 +154,12 @@ export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGa
 
   const restart = useCallback(
     (next?: Player) => {
-      const starting = next ?? fixed ?? randomStartingPlayer();
+      const starting = setup?.opener ?? next ?? fixed ?? randomStartingPlayer();
       setOpener(starting);
-      setGame(createGame(config, starting));
+      setGame(freshGame(config, starting, setup));
       setRound((count) => count + 1);
     },
-    [config, fixed],
+    [config, fixed, setup],
   );
 
   /**
@@ -147,14 +172,14 @@ export function useGame(config: GameConfig, options: UseGameOptions = {}): UseGa
    */
   const undo = useCallback(() => {
     setGame((current) => {
-      if (current.moves.length === 0) return current;
+      if (current.moves.length <= setupLength) return current;
       let rebuilt = createGame(current.config, opener);
       for (const move of current.moves.slice(0, -1)) {
         rebuilt = applyMove(rebuilt, move) ?? rebuilt;
       }
       return rebuilt;
     });
-  }, [opener]);
+  }, [opener, setupLength]);
 
-  return { game, play, restart, undo, canUndo: game.moves.length > 0, round };
+  return { game, play, restart, undo, canUndo: game.moves.length > setupLength, round };
 }

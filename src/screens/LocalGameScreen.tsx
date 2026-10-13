@@ -27,13 +27,18 @@ import { Screen } from '@/components/ui/Screen';
 import { useAccountStore } from '@/features/account/store';
 import { useGame } from '@/game/useGame';
 import { useGameFeedback } from '@/game/useGameFeedback';
+import { useGameDuration } from '@/game/useGameDuration';
+import { useMusicTension } from '@/game/useMusicTension';
 import { useTurnTint } from '@/game/useTurnTint';
 import { useProgressStore } from '@/features/progress/store';
 import { cx } from '@/lib/cx';
 import { hintsFor } from '@/game/hints';
+import { lastSeatName, nextSeatName, type Teams, teamName } from '@/game/teams';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
 import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
+import { useLocale, useT } from '@/i18n';
+import { gameScreenMessages } from '@/i18n/messages/gameScreens';
 
 interface LocalGameScreenProps {
   mode: ModeId;
@@ -46,9 +51,14 @@ interface Score {
 }
 
 const NO_SCORE: Score = { x: 0, o: 0, draws: 0 };
-function loadScore(mode: ModeId): Score {
+/** One series per mode, and another for the same mode played two against two. */
+function seriesKey(mode: ModeId, teams: boolean): string {
+  return teams ? `${mode}:teams` : mode;
+}
+
+function loadScore(series: string): Score {
   try {
-    const score = JSON.parse(localStorage.getItem(`dooz.local-series:${mode}`) ?? 'null');
+    const score = JSON.parse(localStorage.getItem(`dooz.local-series:${series}`) ?? 'null');
     return score &&
       ['x', 'o', 'draws'].every((key) => Number.isInteger(score[key]) && score[key] >= 0)
       ? score
@@ -66,9 +76,15 @@ function loadScore(mode: ModeId): Score {
  * them put their names on the seats, and hands the first move of the next game
  * to whoever lost the last one, which is both the house rule most people
  * already use and the one that keeps a series close. Draws alternate.
+ *
+ * Four people can play it too, as two teams of two: each team is one mark,
+ * and its players take its moves in turn (see `game/teams.ts`). The cards show
+ * whose seat is up, and the series is kept between the teams.
  */
 export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const returnTo = useReturnTo();
+  const t = useT(gameScreenMessages);
+  const locale = useLocale();
   const avatar = useAccountStore((state) => state.profile?.avatar);
   const config = useMemo(() => modeById(mode).config, [mode]);
   const { game, play, restart, undo, canUndo, round } = useGame(config, {
@@ -76,21 +92,42 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   });
   const [hintsOn, setHintsOn] = useState(() => loadPreferences().hints);
   const [names, setNames] = useState(() => loadPreferences().localNames);
+  const [partners, setPartners] = useState(() => loadPreferences().localPartners);
+  const [teamPlay, setTeamPlay] = useState(() => loadPreferences().localTeams);
+  const series = seriesKey(mode, teamPlay);
   const [renaming, setRenaming] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [reviewedRound, setReviewedRound] = useState(-1);
   // A result reopened with "Show result" appears at once, not after the reveal.
   const [reopenedRound, setReopenedRound] = useState(-1);
-  const [score, setScore] = useState<Score>(() => loadScore(mode));
+  const [score, setScore] = useState<Score>(() => loadScore(series));
+  // The round whose result is in `score`, mirrored from the ref below so the
+  // seat rotation can read it during render.
+  const [countedRound, setCountedRound] = useState(-1);
   const recordLocalGame = useProgressStore((state) => state.recordLocalGame);
 
   const hints = useMemo(() => (hintsOn ? hintsFor(game) : []), [hintsOn, game]);
   useGameFeedback(game, { threats: hints.filter((hint) => hint.kind === 'threat').length });
   useTurnTint(game);
+  useMusicTension(game);
+  const duration = useGameDuration(game);
 
   const finished = game.status !== 'playing';
-  const nameOf = (player: Player) => (player === X ? names[0] : names[1]);
-  const title = game.status === 'draw' ? 'Draw' : `${nameOf(game.winner ?? X)} wins!`;
+  const teams: Teams | null = teamPlay
+    ? { x: [names[0], partners[0]], o: [names[1], partners[1]] }
+    : null;
+  // Games of this series already decided, not counting this one: what decides
+  // which partner leads each team this game.
+  const gamesDone = score.x + score.o + score.draws - (countedRound === round ? 1 : 0);
+  /** Who plays `player`'s next move: the seat's name, or the team member who is up. */
+  const nameOf = (player: Player) =>
+    teams ? nextSeatName(game, player, teams, gamesDone) : player === X ? names[0] : names[1];
+  const title =
+    game.status === 'draw'
+      ? t('draw')
+      : teams
+        ? t('teamWin', { team: teamName(game.winner ?? X, teams, locale) })
+        : t('playerWins', { name: nameOf(game.winner ?? X) });
   // Somebody at this device won either way, so a win is always worth marking.
   const finishTone = finished ? (game.winner ? 'win' : 'draw') : null;
 
@@ -106,33 +143,44 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
         const { result } = counted.current;
         setScore((current) => ({ ...current, [result]: current[result] - 1 }));
         counted.current = null;
+        setCountedRound(-1);
       }
       return;
     }
     if (counted.current?.round === round) return;
     const result = game.winner === X ? 'x' : game.winner === O ? 'o' : 'draws';
     counted.current = { round, result };
+    setCountedRound(round);
     setScore((current) => ({ ...current, [result]: current[result] + 1 }));
     if (recordedRound.current !== round) {
       recordedRound.current = round;
-      recordLocalGame();
+      recordLocalGame(mode);
     }
-  }, [finished, round, game.winner, recordLocalGame]);
+  }, [finished, round, game.winner, recordLocalGame, mode]);
 
-  // A new mode is a new series.
-  const [scoredMode, setScoredMode] = useState(mode);
-  if (scoredMode !== mode) {
-    setScoredMode(mode);
-    setScore(loadScore(mode));
+  // A new mode is a new series, and so is switching between one-a-side and
+  // teams: the same people are not playing the same match any more.
+  const [scoredSeries, setScoredSeries] = useState(series);
+  if (scoredSeries !== series) {
+    setScoredSeries(series);
+    setScore(loadScore(series));
+    setCountedRound(-1);
   }
+  // The result counted against the old series is not the new one's to undo.
+  const countedSeries = useRef(scoredSeries);
+  useEffect(() => {
+    if (countedSeries.current === scoredSeries) return;
+    countedSeries.current = scoredSeries;
+    counted.current = null;
+  }, [scoredSeries]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(`dooz.local-series:${mode}`, JSON.stringify(score));
+      localStorage.setItem(`dooz.local-series:${scoredSeries}`, JSON.stringify(score));
     } catch {
       /* The current series still works without storage. */
     }
-  }, [mode, score]);
+  }, [scoredSeries, score]);
 
   function nextGame() {
     // Loser opens; after a draw, whoever did not open this one.
@@ -157,15 +205,32 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={{ name: names[0], kind: 'local', ...(avatar ? { avatar } : {}) }}
-          right={{ name: names[1], kind: 'local' }}
+          left={{
+            name: nameOf(X),
+            kind: 'local',
+            ...(avatar && !teams ? { avatar } : {}),
+            ...(teams
+              ? { detail: t('withPartner', { name: partnerOf(X, nameOf(X), teams) }) }
+              : {}),
+          }}
+          right={{
+            name: nameOf(O),
+            kind: 'local',
+            ...(teams
+              ? { detail: t('withPartner', { name: partnerOf(O, nameOf(O), teams) }) }
+              : {}),
+          }}
           centre={
             <div className="flex flex-col items-center gap-1">
               <ModeChip mode={mode} onClick={() => void returnTo('/')} />
               <ScoreLine score={score} />
             </div>
           }
-          badge={played > 0 ? `Game ${played + (finished ? 0 : 1)}` : 'Local'}
+          badge={
+            played > 0
+              ? t('gameNumber', { count: played + (finished ? 0 : 1) })
+              : t(teams ? 'badgeTeams' : 'badgeLocal')
+          }
         />
       </div>
 
@@ -178,10 +243,26 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           <OpenerBanner
             round={round}
             player={startingPlayerOf(game)}
-            label={`${nameOf(startingPlayerOf(game))} starts`}
+            label={t('starts', { name: nameOf(startingPlayerOf(game)) })}
             fresh={game.moves.length === 0}
           />
         </div>
+        {teams && !finished ? (
+          <p className="text-center text-sm text-ink" aria-live="polite">
+            {/* The name is set in bold wherever the language puts it. */}
+            {t('teamTurn', { mark: game.currentPlayer === X ? 'X' : 'O' })
+              .split(/(\{name\})/)
+              .map((part, at) =>
+                part === '{name}' ? (
+                  <span key={at} className="font-semibold">
+                    {nameOf(game.currentPlayer)}
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+          </p>
+        ) : null}
         <VariantStatus game={game} />
         {hintsOn ? <HintLegend hints={hints} /> : null}
       </main>
@@ -199,7 +280,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
               setReviewedRound(-1);
             }}
           >
-            Show result
+            {t('showResult')}
           </Button>
         ) : null}
         <GameControls
@@ -207,7 +288,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
             if (!finished && game.moves.length > 0) setConfirmRestart(true);
             else restart();
           }}
-          restartLabel="New game"
+          restartLabel={t('newGame')}
           onUndo={() => {
             setReviewedRound(-1);
             undo();
@@ -215,11 +296,11 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           canUndo={canUndo}
           extra={
             <>
-              <IconButton label="Name the players" onClick={() => setRenaming(true)}>
+              <IconButton label={t('namePlayers')} onClick={() => setRenaming(true)}>
                 <UsersIcon />
               </IconButton>
               <IconButton
-                label={hintsOn ? 'Turn hints off' : 'Turn hints on'}
+                label={t(hintsOn ? 'hintsOff' : 'hintsOn')}
                 aria-pressed={hintsOn}
                 onClick={toggleHints}
                 className={hintsOn ? 'text-ok' : undefined}
@@ -236,13 +317,25 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           onDismiss={() => setReviewedRound(round)}
           title={title}
           art={outcomeMark(game.winner)}
-          detail={<SeriesDetail score={score} names={names} winner={game.winner} />}
+          detail={
+            <SeriesDetail
+              score={score}
+              names={teams ? [teamName(X, teams, locale), teamName(O, teams, locale)] : names}
+              winner={game.winner}
+              {...(teams && game.winner
+                ? { finisher: lastSeatName(game, game.winner, teams, gamesDone) }
+                : {})}
+            />
+          }
           celebrate={game.winner !== null}
+          tone={game.winner !== null ? 'win' : 'draw'}
+          game={game}
+          durationMs={duration}
           revealDelay={reopenedRound === round ? 0 : revealDelayFor(game)}
           actions={
             <>
               <Button variant="primary" size="small" block onClick={nextGame}>
-                Next game
+                {t('nextGame')}
               </Button>
               <Button
                 variant="ghost"
@@ -251,13 +344,14 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
                 onClick={() => {
                   setScore(NO_SCORE);
                   counted.current = null;
+                  setCountedRound(-1);
                   restart();
                 }}
               >
-                New series
+                {t('newSeries')}
               </Button>
               <Button as={ReturnLink} to="/" variant="ghost" size="small" block>
-                Back to home
+                {t('backHome')}
               </Button>
             </>
           }
@@ -267,9 +361,17 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
       {renaming ? (
         <NamesSheet
           names={names}
+          partners={partners}
+          teams={teamPlay}
           onSave={(next) => {
-            setNames(next);
-            savePreferences({ localNames: next });
+            setNames(next.names);
+            setPartners(next.partners);
+            setTeamPlay(next.teams);
+            savePreferences({
+              localNames: next.names,
+              localPartners: next.partners,
+              localTeams: next.teams,
+            });
           }}
           onClose={() => setRenaming(false)}
         />
@@ -289,10 +391,11 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
 
 /** The series so far, as the two marks either side of a score. */
 function ScoreLine({ score }: { score: Score }) {
+  const t = useT(gameScreenMessages);
   return (
     <span
       className="tnum flex items-center gap-1.5 text-base font-semibold"
-      aria-label={`Score ${score.x} to ${score.o}`}
+      aria-label={t('score', { x: score.x, o: score.o })}
     >
       <span key={`x${score.x}`} className="animate-pop">
         {score.x}
@@ -309,20 +412,35 @@ function SeriesDetail({
   score,
   names,
   winner,
+  finisher,
 }: {
   score: Score;
   names: readonly [string, string];
   winner: Player | null;
+  /** In team play, the teammate whose move won it. */
+  finisher?: string;
 }) {
+  const t = useT(gameScreenMessages);
   return (
-    <div className="flex items-center justify-center gap-3 rounded-tile border border-stroke-soft px-3 py-2">
-      <SeriesSide name={names[0]} player={X} points={score.x} lit={winner === X} />
-      <span className="text-xs text-ink-faint">
-        {score.draws > 0 ? `${score.draws} drawn` : 'vs'}
-      </span>
-      <SeriesSide name={names[1]} player={O} points={score.o} lit={winner === O} />
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="flex items-center justify-center gap-3 rounded-tile border border-stroke-soft px-3 py-2">
+        <SeriesSide name={names[0]} player={X} points={score.x} lit={winner === X} />
+        <span className="text-xs text-ink-faint">
+          {score.draws > 0 ? t('drawnCount', { count: score.draws }) : t('vs')}
+        </span>
+        <SeriesSide name={names[1]} player={O} points={score.o} lit={winner === O} />
+      </div>
+      {finisher ? (
+        <p className="text-xs text-ink-muted">{t('winningMoveBy', { name: finisher })}</p>
+      ) : null}
     </div>
   );
+}
+
+/** The other member of `player`'s team from `name`. */
+function partnerOf(player: Player, name: string, teams: Teams): string {
+  const [first, second] = player === X ? teams.x : teams.o;
+  return name === first ? second : first;
 }
 
 function SeriesSide({
@@ -355,17 +473,26 @@ function SeriesSide({
 
 function NamesSheet({
   names,
+  partners,
+  teams,
   onSave,
   onClose,
 }: {
   names: readonly [string, string];
-  onSave: (names: [string, string]) => void;
+  partners: readonly [string, string];
+  teams: boolean;
+  onSave: (next: { names: [string, string]; partners: [string, string]; teams: boolean }) => void;
   onClose: () => void;
 }) {
+  const t = useT(gameScreenMessages);
   const { closing, close } = useClosing(onClose);
   const panelRef = useDialog<HTMLDivElement>(close);
+  const seat = (name: string, n: number) => name.trim() || t('playerN', { n });
   const [first, setFirst] = useState(names[0]);
   const [second, setSecond] = useState(names[1]);
+  const [third, setThird] = useState(partners[0]);
+  const [fourth, setFourth] = useState(partners[1]);
+  const [teamPlay, setTeamPlay] = useState(teams);
 
   return (
     <div
@@ -381,7 +508,7 @@ function NamesSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Name the players"
+        aria-label={t('namePlayers')}
         tabIndex={-1}
         className={cx(
           'max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
@@ -393,29 +520,76 @@ function NamesSheet({
           className="flex flex-col gap-4 panel-face rounded-[1.5rem] bg-surface px-5 py-6"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave([first.trim() || 'Player 1', second.trim() || 'Player 2']);
+            onSave({
+              names: [seat(first, 1), seat(second, 2)],
+              partners: [seat(third, 3), seat(fourth, 4)],
+              teams: teamPlay,
+            });
             close();
           }}
         >
-          <h2 className="text-center font-display text-xl">Who’s playing?</h2>
+          <h2 className="text-center font-display text-xl">{t('whosPlaying')}</h2>
+          <label className="flex items-center justify-between gap-3 rounded-tile border border-stroke-soft px-3 py-2 text-sm">
+            <span className="flex flex-col">
+              <span>{t('twoTeams')}</span>
+              <span className="text-xs text-ink-muted">{t('teammatesTakeTurns')}</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={teamPlay}
+              onChange={(event) => setTeamPlay(event.target.checked)}
+              className="size-5 shrink-0 accent-[var(--color-ok)]"
+            />
+          </label>
           <Field
-            label="Plays X"
+            label={t(teamPlay ? 'teamXFirst' : 'playsX')}
             value={first}
             maxLength={14}
             autoComplete="off"
             onChange={(event) => setFirst(event.target.value)}
             trailing={<Mark player={X} className="size-7 shrink-0" />}
           />
+          {teamPlay ? (
+            <Field
+              label={t('teamXSecond')}
+              value={third}
+              maxLength={14}
+              autoComplete="off"
+              onChange={(event) => setThird(event.target.value)}
+              trailing={<Mark player={X} className="size-7 shrink-0" />}
+            />
+          ) : null}
           <Field
-            label="Plays O"
+            label={t(teamPlay ? 'teamOFirst' : 'playsO')}
             value={second}
             maxLength={14}
             autoComplete="off"
             onChange={(event) => setSecond(event.target.value)}
             trailing={<Mark player={O} hole="var(--color-surface)" className="size-7 shrink-0" />}
           />
+          {teamPlay ? (
+            <Field
+              label={t('teamOSecond')}
+              value={fourth}
+              maxLength={14}
+              autoComplete="off"
+              onChange={(event) => setFourth(event.target.value)}
+              trailing={<Mark player={O} hole="var(--color-surface)" className="size-7 shrink-0" />}
+            />
+          ) : null}
+          {teamPlay ? (
+            <p className="text-center text-xs text-ink-muted">
+              {t('turnsGo', {
+                a: seat(first, 1),
+                b: seat(second, 2),
+                c: seat(third, 3),
+                d: seat(fourth, 4),
+              })}
+            </p>
+          ) : null}
           <Button type="submit" variant="primary" size="small" block>
-            Save
+            {t('save')}
           </Button>
           <Button
             type="button"
@@ -424,7 +598,7 @@ function NamesSheet({
             onClick={close}
             className="self-center"
           >
-            Cancel
+            {t('cancel')}
           </Button>
         </form>
       </div>

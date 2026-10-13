@@ -5,6 +5,7 @@ import {
   decodeServerMessage,
   type Emote,
   encode,
+  type ErrorCode,
   type MatchKind,
   type MatchResult,
   PROTOCOL_VERSION,
@@ -12,10 +13,15 @@ import {
   type Seat,
   type ServerMessage,
   type Snapshot,
+  type Tournament,
 } from '@/protocol';
 import { create } from 'zustand';
 import { useAccountStore } from '@/features/account/store';
+import { useSocialStore } from '@/features/social/store';
 import { multiplayerSocketUrl } from '@/lib/server-url';
+
+/** A server error code, or one the client raises itself. */
+export type OnlineErrorCode = ErrorCode | 'resumeLost';
 
 export type OnlinePhase =
   | 'offline'
@@ -39,7 +45,10 @@ interface OnlineState {
   phase: OnlinePhase;
   /** Set while the socket is down but a reconnect is scheduled. */
   reconnecting: boolean;
+  /** The server's English for the last error. Show it through `onlineErrorText`. */
   error: string | null;
+  /** The error's code, which picks its translation; `null` when there is none. */
+  errorCode: OnlineErrorCode | null;
 
   profile: PublicProfile | null;
 
@@ -63,10 +72,27 @@ interface OnlineState {
   drawRequested: boolean;
   muted: boolean;
   emotes: IncomingEmote[];
+
+  /** The tournament this client is following, as the server last described it. */
+  tournament: Tournament | null;
+  /** The tournament the current game belongs to, if any. */
+  tournamentGame: { id: string; name: string; berserk: boolean } | null;
+  /** Seats that went berserk in the current game. */
+  berserk: Player[];
+  /** Server time at which a bot will be offered while searching, or `null`. */
+  botAt: number | null;
+  joinTournament: (id: string) => void;
+  leaveTournament: (id: string) => void;
+  createBracket: (config: GameConfig, size: 4 | 8 | 16) => void;
+  startBracket: (id: string) => void;
+  goBerserk: () => void;
+
   connect: () => void;
   disconnect: () => void;
   queue: (config: GameConfig, ranked: boolean) => void;
   createRoom: (config: GameConfig) => void;
+  /** Open a private room and invite one friend into it. */
+  challenge: (accountId: string, config: GameConfig) => void;
   joinRoom: (code: string) => void;
   spectate: (code: string) => void;
   play: (index: number) => void;
@@ -98,7 +124,8 @@ let stopReconnecting = false;
 /** The last queue or private-room request, so a lost one can be asked for again. */
 type WaitRequest =
   | { type: 'queue'; config: GameConfig; ranked: boolean }
-  | { type: 'createRoom'; config: GameConfig };
+  | { type: 'createRoom'; config: GameConfig }
+  | { type: 'challenge'; config: GameConfig; accountId: string };
 let lastRequest: WaitRequest | null = null;
 /** Set when the server has forgotten that request; sent again after `welcome`. */
 let resendRequest: WaitRequest | null = null;
@@ -142,6 +169,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           phase: message.resumed ? 'connecting' : 'idle',
           reconnecting: false,
           error: null,
+          errorCode: null,
         });
         attempt = 0;
         if (message.resumed) return;
@@ -152,6 +180,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
         resendRequest = null;
         if (again?.type === 'queue') get().queue(again.config, again.ranked);
         else if (again?.type === 'createRoom') get().createRoom(again.config);
+        else if (again?.type === 'challenge') get().challenge(again.accountId, again.config);
         return;
       }
 
@@ -161,7 +190,9 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           config: message.config,
           ranked: message.ranked,
           queued: message.queued,
+          botAt: message.botAt ?? null,
           error: null,
+          errorCode: null,
         });
         return;
 
@@ -172,6 +203,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           config: message.config,
           ranked: false,
           error: null,
+          errorCode: null,
         });
         return;
 
@@ -189,6 +221,10 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           game: toGame(message.snapshot),
           clock: message.clock,
           error: null,
+          errorCode: null,
+          tournamentGame: message.tournament ?? null,
+          berserk: message.berserk ?? [],
+          botAt: null,
         });
         return;
 
@@ -244,7 +280,12 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
         return;
 
       case 'error':
-        set({ error: message.message, rematchRequested: false, drawRequested: false });
+        set({
+          error: message.message,
+          errorCode: message.code,
+          rematchRequested: false,
+          drawRequested: false,
+        });
 
         // These leave the client with nothing to wait for, so drop back to the
         // lobby rather than sitting on a dead "searching" screen.
@@ -262,7 +303,10 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
         if (
           message.code === 'versionMismatch' ||
           message.code === 'unauthorized' ||
-          message.code === 'alreadyPlaying'
+          message.code === 'alreadyPlaying' ||
+          // A suspended account is told why once; reconnecting would only be
+          // refused the same way.
+          message.code === 'banned'
         ) {
           stopReconnecting = true;
           // The session ends here, so the next one has to know what was lost.
@@ -276,6 +320,28 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 
       case 'pong':
         return;
+
+      // Friends' challenges and the like, for whichever screen is showing.
+      case 'notice':
+        useSocialStore.getState().receive(message.notice);
+        return;
+
+      case 'tournament': {
+        // Only the tournament being followed, or the first one heard about -
+        // a player in two at once would otherwise see them swap places.
+        const current = get().tournament;
+        if (!current || current.id === message.tournament.id)
+          set({ tournament: message.tournament });
+        return;
+      }
+
+      case 'berserk':
+        set((state) => ({
+          berserk: state.berserk.includes(message.player)
+            ? state.berserk
+            : [...state.berserk, message.player],
+        }));
+        return;
     }
   }
 
@@ -286,7 +352,11 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     try {
       url = multiplayerSocketUrl();
     } catch (error) {
-      set({ phase: 'offline', error: error instanceof Error ? error.message : 'Bad server URL' });
+      set({
+        phase: 'offline',
+        error: error instanceof Error ? error.message : 'Bad server URL',
+        errorCode: null,
+      });
       return;
     }
 
@@ -362,7 +432,12 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     } else if (phase === 'playing' || phase === 'watching' || phase === 'opponentLeft') {
       const unfinished = get().result === null;
       resetRoom();
-      if (unfinished) set({ error: 'The connection dropped and the game could not be resumed.' });
+      if (unfinished) {
+        set({
+          error: 'The connection dropped and the game could not be resumed.',
+          errorCode: 'resumeLost',
+        });
+      }
     }
   }
 
@@ -371,6 +446,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     set({
       ...FRESH_MATCH,
       error: null,
+      errorCode: null,
       game: null,
       clock: null,
       roomCode: null,
@@ -386,6 +462,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     phase: 'offline',
     reconnecting: false,
     error: null,
+    errorCode: null,
     profile: null,
     roomCode: null,
     kind: null,
@@ -404,6 +481,27 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     drawRequested: false,
     muted: false,
     emotes: [],
+    tournament: null,
+    tournamentGame: null,
+    berserk: [],
+    botAt: null,
+
+    joinTournament: (id) => {
+      const current = get().tournament;
+      if (current && current.id !== id) set({ tournament: null });
+      send({ type: 'tournamentJoin', id });
+    },
+
+    leaveTournament: (id) => send({ type: 'tournamentLeave', id }),
+
+    createBracket: (config, size) => {
+      set({ tournament: null });
+      send({ type: 'tournamentCreate', config, size });
+    },
+
+    startBracket: (id) => send({ type: 'tournamentStart', id }),
+
+    goBerserk: () => send({ type: 'berserk' }),
 
     connect: () => {
       if (socket || reconnectTimer) return;
@@ -436,6 +534,13 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       resetRoom();
       set({ config });
       send({ type: 'createRoom', config });
+    },
+
+    challenge: (accountId, config) => {
+      lastRequest = { type: 'challenge', config, accountId };
+      resetRoom();
+      set({ config });
+      send({ type: 'challenge', accountId, config });
     },
 
     joinRoom: (code) => {
@@ -485,7 +590,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       set({ phase: 'idle' });
     },
 
-    clearError: () => set({ error: null }),
+    clearError: () => set({ error: null, errorCode: null }),
   };
 });
 
@@ -496,7 +601,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
  * what lets the game screen show a move history and step back through a
  * finished game without asking the server for anything.
  */
-function toGame(snapshot: Snapshot): GameState {
+export function toGame(snapshot: Snapshot): GameState {
   return {
     config: snapshot.config,
     board: snapshot.board,
@@ -514,6 +619,7 @@ function toGame(snapshot: Snapshot): GameState {
           winBoards: snapshot.ultimate.winBoards,
         }
       : null,
+    ...(snapshot.extra ? { extra: snapshot.extra } : {}),
   };
 }
 

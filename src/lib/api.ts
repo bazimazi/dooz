@@ -67,7 +67,7 @@ function saveCached(path: string, payload: unknown, credentials?: Credentials | 
   }
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   schema: z.ZodType<T>,
   options: {

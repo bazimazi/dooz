@@ -2,7 +2,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { moveHeuristic } from '../../src/game/engine/bot/evaluate.js';
-import { vanishQueues } from '../../src/game/engine/bot/index.js';
+import {
+  evaluateUltimate,
+  UltimatePosition,
+  vanishQueues,
+} from '../../src/game/engine/bot/index.js';
 import {
   applyMove,
   type BotDifficulty,
@@ -20,6 +24,8 @@ import {
   opponentOf,
   type Player,
   replay,
+  ultimateBoardOf,
+  ultimateCells,
   VANISH_MOVE_LIMIT,
   vanishedBy,
   vanishVerdict,
@@ -27,14 +33,22 @@ import {
   X,
 } from '../../src/game/engine/index.js';
 import { seeded } from '../../src/game/engine/testing.js';
+import { TRIPLES } from '../../src/game/engine/variants/ultimate.js';
 
 /**
- * The tactics-puzzle pack: "win in N" positions for the line modes and vanish.
+ * The tactics-puzzle pack: "win in N" positions for the line modes, vanish,
+ * misère and Ultimate - 580 of them, in about half an hour.
  *
- * Run with `npm run puzzles`. It writes the pack the
- * client ships, `src/features/puzzles/pack.json`, unless `--out=` says
- * otherwise; `--modes=grid-6,gravity` restricts the run and `--dry-run` skips
- * the write, both for working on one mode at a time.
+ * Run with `npm run puzzles`. It writes the pack the client ships,
+ * `src/features/puzzles/pack.json`, and beside it `index.json`, a one-row-per-
+ * puzzle summary small enough for the main bundle; `--out=` moves both
+ * (`x.json` gets `x.index.json`). `--modes=grid-6,gravity` restricts the run
+ * and `--dry-run` skips the writes, both for working on one mode at a time.
+ *
+ * Every puzzle carries a `rating`, its percentile in the pack's difficulty
+ * order (1-100), so a run of puzzles can escalate across modes. Misère is won
+ * on the defender's move, so its stored line is one ply longer than the
+ * others: it ends with the defender's forced mark.
  *
  * Positions come from engine self-play: bot games at mixed levels, from fixed
  * seeds and on a counting clock instead of a real one, so the same games - and
@@ -48,7 +62,9 @@ import { seeded } from '../../src/game/engine/testing.js';
  * The bot's own search is not used for any of that. It prunes defender moves
  * for speed, which is right for playing and wrong for proving: a puzzle whose
  * "only move" has a second solution, or whose defence has an escape, is worse
- * than no puzzle. See {@link LineProver} for why the prover here is sound.
+ * than no puzzle. See {@link LineProver} for why the prover here is sound;
+ * vanish and misère are read off exact solvers, and Ultimate has its own
+ * exhaustive prover, {@link UltimateProver}.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +73,11 @@ const argValue = (name: string): string | undefined =>
   args.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 
 const outPath = resolve(argValue('out') ?? resolve(here, '../../src/features/puzzles/pack.json'));
+/** The compact summary is written next to the pack: `index.json` beside `pack.json`. */
+const indexPath = outPath.endsWith('pack.json')
+  ? resolve(dirname(outPath), 'index.json')
+  : outPath.replace(/(\.json)?$/, '.index.json');
+const PACK_VERSION = 2;
 const dryRun = args.includes('--dry-run');
 const onlyModes = argValue('modes')?.split(',');
 
@@ -126,11 +147,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'classic',
     prefix: 'c3',
-    targets: { 1: 4, 2: 2, 3: 0 },
+    targets: { 1: 12, 2: 2, 3: 0 },
     maxMateIn: 3,
     minStones: 2,
     minStonesMateInOne: 99,
-    games: 400,
+    games: 3000,
     matchups: [
       versus('beginner', 'beginner', 1, 1),
       versus('beginner', 'easy', 1, 2),
@@ -144,11 +165,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'grid-6',
     prefix: 'g6',
-    targets: { 1: 6, 2: 5, 3: 3 },
+    targets: { 1: 30, 2: 25, 3: 25 },
     maxMateIn: 4,
     minStones: 6,
     minStonesMateInOne: 99,
-    games: 400,
+    games: 3000,
     matchups: [
       versus('easy', 'medium', 8, 2),
       versus('medium', 'easy', 8, 2),
@@ -163,11 +184,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'grid-9',
     prefix: 'g9',
-    targets: { 1: 2, 2: 9, 3: 5 },
+    targets: { 1: 8, 2: 40, 3: 32 },
     maxMateIn: 4,
     minStones: 10,
     minStonesMateInOne: 22,
-    games: 150,
+    games: 450,
     matchups: BIG_BOARD_MATCHUPS,
     scanBack: 7,
     nodeLimit: 1_500_000,
@@ -176,11 +197,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'gomoku-13',
     prefix: 'k13',
-    targets: { 1: 2, 2: 7, 3: 3 },
+    targets: { 1: 6, 2: 30, 3: 24 },
     maxMateIn: 4,
     minStones: 12,
     minStonesMateInOne: 26,
-    games: 110,
+    games: 400,
     matchups: BIG_BOARD_MATCHUPS,
     scanBack: 7,
     nodeLimit: 1_500_000,
@@ -189,11 +210,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'gomoku-15',
     prefix: 'k15',
-    targets: { 1: 2, 2: 7, 3: 3 },
+    targets: { 1: 6, 2: 30, 3: 24 },
     maxMateIn: 4,
     minStones: 12,
     minStonesMateInOne: 26,
-    games: 110,
+    games: 400,
     matchups: BIG_BOARD_MATCHUPS,
     scanBack: 7,
     nodeLimit: 1_500_000,
@@ -202,11 +223,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'gravity',
     prefix: 'gr',
-    targets: { 1: 8, 2: 0, 3: 6 },
+    targets: { 1: 35, 2: 0, 3: 40 },
     maxMateIn: 5,
     minStones: 6,
     minStonesMateInOne: 99,
-    games: 220,
+    games: 1500,
     matchups: [
       versus('easy', 'medium', 8, 2),
       versus('medium', 'easy', 8, 2),
@@ -221,11 +242,11 @@ const PLANS: readonly ModePlan[] = [
   {
     id: 'vanish',
     prefix: 'vn',
-    targets: { 1: 5, 2: 0, 3: 5 },
+    targets: { 1: 30, 2: 0, 3: 35 },
     maxMateIn: 5,
     minStones: 4,
     minStonesMateInOne: 99,
-    games: 300,
+    games: 3000,
     matchups: [
       versus('beginner', 'easy', 1, 1),
       versus('easy', 'medium', 1, 1),
@@ -236,6 +257,44 @@ const PLANS: readonly ModePlan[] = [
     // Every position of the game: the solver answers in constant time.
     scanBack: 30,
     nodeLimit: 0,
+    minChoices: 2,
+  },
+  {
+    id: 'misere',
+    prefix: 'ms',
+    targets: { 1: 14, 2: 30, 3: 2 },
+    maxMateIn: 4,
+    minStones: 2,
+    minStonesMateInOne: 4,
+    games: 3000,
+    // Careful players draw misère, so the games that end are the careless ones.
+    matchups: [
+      versus('beginner', 'beginner', 1, 1),
+      versus('beginner', 'easy', 1, 2),
+      versus('easy', 'beginner', 1, 1),
+      versus('easy', 'easy', 1, 2),
+    ],
+    scanBack: 5,
+    nodeLimit: 0,
+    minChoices: 2,
+  },
+  {
+    id: 'ultimate',
+    prefix: 'ut',
+    targets: { 1: 12, 2: 40, 3: 48 },
+    maxMateIn: 4,
+    minStones: 16,
+    minStonesMateInOne: 30,
+    games: 400,
+    matchups: [
+      versus('easy', 'medium', 4, 2),
+      versus('medium', 'easy', 4, 2),
+      versus('medium', 'medium', 6, 3),
+      versus('medium', 'hard', 8, 2),
+      versus('hard', 'medium', 8, 3),
+    ],
+    scanBack: 6,
+    nodeLimit: 1_000_000,
     minChoices: 2,
   },
 ];
@@ -1105,6 +1164,520 @@ function vanishReply(state: GameState, budget: number, attackerWins: readonly nu
 }
 
 // ---------------------------------------------------------------------------
+// Misère
+// ---------------------------------------------------------------------------
+
+/** The eight lines of the 3x3 board as bitmasks over cells 0-8. */
+const MISERE_LINES = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+].map(([a, b, c]) => (1 << a!) | (1 << b!) | (1 << c!));
+
+const MISERE_FULL = 0b1_1111_1111;
+/** Scores sit at `MISERE_WIN - plies`: a win sooner, or a loss later, is worth more. */
+const MISERE_WIN = 100;
+const misereTable = new Map<number, number>();
+
+function hasLine(mask: number): boolean {
+  for (const line of MISERE_LINES) if ((mask & line) === line) return true;
+  return false;
+}
+
+/**
+ * Exact misère 3x3: the score for the side to move, whose marks are `mine`.
+ *
+ * Plain memoised negamax over the whole game - there are under 6,000 positions,
+ * so nothing is pruned and nothing is estimated. A win is `MISERE_WIN - plies`
+ * until the opponent completes a line, a loss the negation, a draw zero. A move
+ * that completes the mover's own line loses on the spot; one that fills the
+ * board without a line draws.
+ */
+function misereScore(mine: number, theirs: number): number {
+  const key = mine | (theirs << 9);
+  const cached = misereTable.get(key);
+  if (cached !== undefined) return cached;
+  let best = Number.NEGATIVE_INFINITY;
+  for (let cell = 0; cell < 9; cell++) {
+    const bit = 1 << cell;
+    if ((mine | theirs) & bit) continue;
+    best = Math.max(best, misereMoveScore(mine, theirs, cell));
+  }
+  misereTable.set(key, best);
+  return best;
+}
+
+/** The score of one move for the side to move, as {@link misereScore} counts it. */
+function misereMoveScore(mine: number, theirs: number, cell: number): number {
+  const after = mine | (1 << cell);
+  if (hasLine(after)) return -(MISERE_WIN - 1);
+  if ((after | theirs) === MISERE_FULL) return 0;
+  const reply = misereScore(theirs, after);
+  // One ply further from the end, from the other side.
+  return -reply + Math.sign(reply);
+}
+
+function misereMasks(state: GameState): { mine: number; theirs: number } {
+  let mine = 0;
+  let theirs = 0;
+  state.board.forEach((value, cell) => {
+    if (value === state.currentPlayer) mine |= 1 << cell;
+    else if (value !== Empty) theirs |= 1 << cell;
+  });
+  return { mine, theirs };
+}
+
+/**
+ * Attacker moves `cell` needs to force the defender into a line, counting
+ * itself, or infinity if it does not. The attacker's marks are `mine`.
+ */
+function misereMovesToWin(mine: number, theirs: number, cell: number): number {
+  const score = misereMoveScore(mine, theirs, cell);
+  if (score <= 0) return Number.POSITIVE_INFINITY;
+  // The win lands on the defender's move, an even number of plies away.
+  return (MISERE_WIN - score) / 2;
+}
+
+/** Empty cells, ascending. */
+function misereEmpties(mine: number, theirs: number): number[] {
+  const cells: number[] = [];
+  for (let cell = 0; cell < 9; cell++) if (!((mine | theirs) & (1 << cell))) cells.push(cell);
+  return cells;
+}
+
+/**
+ * The puzzle in a misère position: force the defender to complete a line.
+ *
+ * The solver's scores are exact, so this reads the puzzle straight off them as
+ * the vanish one does. The format differs from the other modes by one ply: the
+ * game is won on the defender's move, not the attacker's, so the stored line
+ * ends with the defender's forced losing mark and is `mateIn * 2` long. The
+ * last step accepts every attacker move after which every defender reply
+ * completes a defender line.
+ */
+function solveMisere(state: GameState, plan: ModePlan): Solution | null {
+  let { mine, theirs } = misereMasks(state);
+  const empties = misereEmpties(mine, theirs);
+  // A real choice: at least two squares that do not lose on the spot.
+  const safe = empties.filter((cell) => !hasLine(mine | (1 << cell)));
+  if (safe.length < Math.max(2, plan.minChoices)) return reject('no-choice');
+  const score = misereScore(mine, theirs);
+  if (score <= 0) return reject('no-win');
+  const mateIn = (MISERE_WIN - score) / 2;
+  if (mateIn > plan.maxMateIn) return reject('too-long');
+  if (mateIn === 1 && countStones(state) < plan.minStonesMateInOne) return reject('sparse');
+
+  const line: number[] = [];
+  const accept: number[][] = [];
+  let lastReplies = 0;
+  for (let step = 0; step < mateIn; step++) {
+    const remaining = mateIn - step;
+    const moves = misereEmpties(mine, theirs);
+    const winners = moves.filter((cell) => misereMovesToWin(mine, theirs, cell) <= remaining);
+    if (remaining === 1) {
+      if (winners.length === 0) throw new Error('misere: the main line lost the win');
+      // Every safe move winning is no puzzle: the defender was lost already.
+      const safeNow = moves.filter((cell) => !hasLine(mine | (1 << cell)));
+      if (step === 0 && winners.length === safeNow.length) return reject('no-choice');
+      const key = nth(winners, 0);
+      line.push(key);
+      accept.push(winners);
+      mine |= 1 << key;
+      const forced = misereEmpties(mine, theirs);
+      lastReplies = forced.length;
+      if (!forced.every((cell) => hasLine(theirs | (1 << cell)))) {
+        throw new Error('misere: the defence escaped');
+      }
+      line.push(nth(forced, 0));
+      break;
+    }
+    if (winners.length !== 1) return reject('not-unique');
+    const key = nth(winners, 0);
+    line.push(key);
+    accept.push([key]);
+    mine |= 1 << key;
+    const reply = misereReply(mine, theirs, remaining - 1);
+    line.push(reply);
+    theirs |= 1 << reply;
+  }
+
+  // One square left for the defender, and it is poisoned: the board did it. A
+  // choice of squares that are all poisoned is the squeeze proper.
+  const theme = mateIn >= 2 ? 'tempo' : lastReplies === 1 ? 'last-square' : 'squeeze';
+  const difficulty = mateIn * 100 + safe.length * 6 + (mateIn === 1 ? lastReplies * 4 : 0);
+  return { mateIn, line, accept, theme, difficulty, interest: difficulty };
+}
+
+/**
+ * The misère defence: the reply that holds out longest, then the lowest square.
+ * The defender's marks are `theirs`, the attacker's `mine`, defender to move.
+ */
+function misereReply(mine: number, theirs: number, budget: number): number {
+  let best = -1;
+  let bestDistance = -1;
+  for (const reply of misereEmpties(mine, theirs)) {
+    const after = theirs | (1 << reply);
+    // Completing their own line ends it now: no attacker moves needed.
+    let distance = 0;
+    if (!hasLine(after)) {
+      const score = misereScore(mine, after);
+      if (score <= 0) throw new Error('misere: the defence escaped');
+      distance = (MISERE_WIN - score) / 2;
+    }
+    if (distance > budget) throw new Error('misere: the defence escaped');
+    if (distance > bestDistance) {
+      best = reply;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Ultimate
+// ---------------------------------------------------------------------------
+
+/**
+ * Exact "win the big board within k moves" for Ultimate.
+ *
+ * Plain AND-OR search on the bot's mutable {@link UltimatePosition}: every
+ * attacker move is tried and every defender reply is answered. Nothing like the
+ * line prover's pass test holds here - where a mark sends the opponent matters
+ * as much as where it stands, so an extra defender mark can help the attacker -
+ * and nothing is skipped on the grounds that it looks irrelevant. Two things
+ * keep it affordable:
+ *
+ * - **A lower bound.** Marks are only ever added, so the attacker cannot win in
+ *   fewer moves than the cheapest meta line still open to them costs: for each
+ *   small board on it not already theirs, the empties of its best line with no
+ *   defender mark in it. A budget below that is refuted without a move played.
+ * - **A transposition table** on the position's own Zobrist hash, which already
+ *   covers the side to move and the board the mover is sent to.
+ *
+ * A position that costs more than its node budget is dropped.
+ */
+class UltimateProver {
+  readonly position: UltimatePosition;
+  readonly attacker: Player;
+  nodes = 0;
+  private readonly nodeLimit: number;
+  private readonly table = new Map<string, { proven: number; refuted: number }>();
+
+  constructor(state: GameState, nodeLimit: number) {
+    this.position = new UltimatePosition(state);
+    this.attacker = state.currentPlayer;
+    this.nodeLimit = nodeLimit;
+  }
+
+  get defender(): Player {
+    return opponentOf(this.attacker);
+  }
+
+  /** Legal moves, ascending. */
+  legal(): number[] {
+    return this.position.moves().toSorted((a, b) => a - b);
+  }
+
+  /** Attacker moves that win the game on the spot, ascending. */
+  immediateWins(): number[] {
+    const position = this.position;
+    const wins: number[] = [];
+    for (const move of this.legal()) {
+      position.play(move);
+      if (position.winner === this.attacker) wins.push(move);
+      position.unplay();
+    }
+    return wins;
+  }
+
+  /** The fewest attacker moves that could possibly finish a meta line. */
+  lowerBound(): number {
+    const { cells, boards, drawn } = this.position;
+    const attacker = this.attacker;
+    const cost = new Int32Array(9);
+    for (let board = 0; board < 9; board++) {
+      if (boards[board] === attacker) cost[board] = 0;
+      else if (boards[board] !== Empty || drawn[board] === 1) cost[board] = 99;
+      else {
+        const at = ultimateCells(board);
+        let best = 99;
+        for (const triple of TRIPLES) {
+          let empty = 0;
+          let blocked = false;
+          for (const k of triple) {
+            const value = cells[at[k] ?? 0];
+            if (value === Empty) empty++;
+            else if (value !== attacker) blocked = true;
+          }
+          if (!blocked && empty < best) best = empty;
+        }
+        cost[board] = best;
+      }
+    }
+    let best = 99;
+    for (const [a, b, c] of TRIPLES) {
+      best = Math.min(best, (cost[a] ?? 99) + (cost[b] ?? 99) + (cost[c] ?? 99));
+    }
+    return best;
+  }
+
+  /** True when the attacker, to move, wins within `budget` of their own moves. */
+  wins(budget: number): boolean {
+    if (budget <= 0 || this.position.settled) return false;
+    if (this.lowerBound() > budget) return false;
+    const key = `${this.position.primary}:${this.position.secondary}`;
+    const entry = this.table.get(key);
+    if (entry) {
+      if (budget >= entry.proven) return true;
+      if (budget <= entry.refuted) return false;
+    }
+    if (++this.nodes > this.nodeLimit) throw new Aborted();
+    // One move left: only a mark that wins on the spot will do.
+    if (budget === 1) return this.immediateWins().length > 0;
+
+    let result = false;
+    for (const move of this.ordered()) {
+      if (this.moveWins(move, budget)) {
+        result = true;
+        break;
+      }
+    }
+
+    if (entry) {
+      if (result) entry.proven = Math.min(entry.proven, budget);
+      else entry.refuted = Math.max(entry.refuted, budget);
+    } else {
+      if (this.table.size > 2_000_000) this.table.clear();
+      this.table.set(key, {
+        proven: result ? budget : Number.POSITIVE_INFINITY,
+        refuted: result ? 0 : budget,
+      });
+    }
+    return result;
+  }
+
+  /** Whether attacker move `move` wins within `budget` (counting itself). */
+  moveWins(move: number, budget: number): boolean {
+    const position = this.position;
+    position.play(move);
+    let result: boolean;
+    if (position.winner === this.attacker) result = true;
+    else if (position.settled || budget <= 1) result = false;
+    else result = this.everyReplyLoses(budget - 1);
+    position.unplay();
+    return result;
+  }
+
+  private everyReplyLoses(budget: number): boolean {
+    const position = this.position;
+    // A defender who can win on the spot does; checking that first refutes
+    // the commonest bad attacker move before any deeper search.
+    const replies = position.moves();
+    for (const reply of replies) {
+      position.play(reply);
+      const won = position.winner === this.defender;
+      position.unplay();
+      if (won) return false;
+    }
+    for (const reply of replies) {
+      position.play(reply);
+      const lost = !position.settled && this.wins(budget);
+      position.unplay();
+      if (!lost) return false;
+    }
+    return true;
+  }
+
+  /** Attacker moves, the ones that take a small board first, then ascending. */
+  private ordered(): number[] {
+    const position = this.position;
+    const moves = this.legal();
+    const takes: number[] = [];
+    const rest: number[] = [];
+    for (const move of moves) {
+      const board = ultimateBoardOf(move);
+      position.play(move);
+      const took = position.boards[board] === this.attacker;
+      position.unplay();
+      (took ? takes : rest).push(move);
+    }
+    return [...takes, ...rest];
+  }
+
+  /** Every attacker move that wins within `budget`, stopping once `limit` are found. */
+  winningMoves(budget: number, limit = Number.POSITIVE_INFINITY): number[] {
+    const found: number[] = [];
+    for (const move of this.ordered()) {
+      if (this.moveWins(move, budget)) found.push(move);
+      if (found.length >= limit) break;
+    }
+    return found.toSorted((a, b) => a - b);
+  }
+
+  /** The fewest moves the attacker needs, up to `limit`, or `null` if more. */
+  distance(limit: number): number | null {
+    for (let budget = 1; budget <= limit; budget++) if (this.wins(budget)) return budget;
+    return null;
+  }
+
+  /** Small boards where the attacker, sent there, could win the game at once. */
+  winningBoards(): number {
+    const position = this.position;
+    const { cells } = position;
+    let count = 0;
+    for (let board = 0; board < 9; board++) {
+      if (!position.isPlayable(board)) continue;
+      // Pretend the attacker were sent here and see whether some mark wins.
+      let wins = false;
+      for (const cell of ultimateCells(board)) {
+        if (cells[cell] !== Empty) continue;
+        cells[cell] = this.attacker;
+        const at = ultimateCells(board);
+        const takes = TRIPLES.some(([a, b, c]) =>
+          [a, b, c].every((k) => cells[at[k] ?? 0] === this.attacker),
+        );
+        cells[cell] = Empty;
+        if (!takes) continue;
+        const boards = Array.from(position.boards);
+        boards[board] = this.attacker;
+        if (TRIPLES.some(([a, b, c]) => [a, b, c].every((k) => boards[k] === this.attacker))) {
+          wins = true;
+          break;
+        }
+      }
+      if (wins) count++;
+    }
+    return count;
+  }
+}
+
+/**
+ * The puzzle in an Ultimate position, or `null` if there is none: a forced win
+ * of the big board within the plan's limit, unique at every step but the last.
+ */
+function solveUltimate(state: GameState, plan: ModePlan): Solution | null {
+  const prover = new UltimateProver(state, plan.nodeLimit);
+  try {
+    const mateIn = prover.distance(plan.maxMateIn);
+    if (mateIn === null) return reject('no-win');
+    if (mateIn === 1 && countStones(state) < plan.minStonesMateInOne) return reject('sparse');
+    return ultimateSolution(prover, mateIn, state);
+  } catch (error) {
+    if (error instanceof Aborted) return reject('budget');
+    throw error;
+  }
+}
+
+function ultimateSolution(
+  prover: UltimateProver,
+  mateIn: number,
+  state: GameState,
+): Solution | null {
+  const position = prover.position;
+  const line: number[] = [];
+  const accept: number[][] = [];
+  let freeAfterKey = false;
+  let forkAfterKey = false;
+  let decoys = 0;
+
+  for (let step = 0; step < mateIn; step++) {
+    const remaining = mateIn - step;
+    if (remaining === 1) {
+      const finals = prover.immediateWins();
+      if (finals.length === 0) throw new Error('ultimate: the main line lost the win');
+      line.push(nth(finals, 0));
+      accept.push(finals);
+      break;
+    }
+
+    const winners = prover.winningMoves(remaining, 2);
+    if (winners.length !== 1) return reject('not-unique');
+    const key = nth(winners, 0);
+    if (step === 0) decoys = boardTakers(prover) - (takesBoard(prover, key) ? 1 : 0);
+    line.push(key);
+    accept.push([key]);
+    position.play(key);
+    if (step === 0) {
+      freeAfterKey = position.active === -1;
+      forkAfterKey = prover.winningBoards() >= 2;
+    }
+    const reply = ultimateReply(prover, remaining - 1);
+    line.push(reply);
+    position.play(reply);
+    if (!prover.wins(remaining - 1)) throw new Error('ultimate: the defence escaped');
+  }
+
+  // Sending the defender to a finished board hands them a free move, which
+  // every Ultimate player learns to avoid; a key move that does it anyway is
+  // the subtle kind. A key move that leaves two boards each winning the game
+  // is the fork; otherwise the win is in where the defender was sent.
+  let theme: string;
+  if (mateIn === 1) theme = 'win-in-one';
+  else if (freeAfterKey) theme = 'free-move';
+  else if (forkAfterKey) theme = 'board-fork';
+  else theme = 'send';
+
+  const stones = countStones(state);
+  const choices = legalMoves(state).length;
+  let difficulty: number;
+  if (mateIn === 1) {
+    const finals = nth(accept, 0);
+    difficulty =
+      Math.min(stones, 60) * 0.5 + Math.min(choices, 40) * 0.5 + (finals.length === 1 ? 15 : 0);
+  } else {
+    difficulty = mateIn * 100 + Math.min(decoys, 10) * 3 + Math.min(choices, 40) * 0.5;
+    if (freeAfterKey) difficulty += 30;
+  }
+  const interest = difficulty + (SUBTLE_THEMES.has(theme) ? 30 : 0);
+  return { mateIn, line, accept, theme, difficulty, interest };
+}
+
+/** Whether attacker move `move` wins its small board. */
+function takesBoard(prover: UltimateProver, move: number): boolean {
+  const position = prover.position;
+  position.play(move);
+  const took = position.boards[ultimateBoardOf(move)] === prover.attacker;
+  position.unplay();
+  return took;
+}
+
+/** Attacker moves that win a small board: the plausible wrong answers. */
+function boardTakers(prover: UltimateProver): number {
+  return prover.legal().filter((move) => takesBoard(prover, move)).length;
+}
+
+/**
+ * The Ultimate defence: the reply that holds out longest, then the one the
+ * bot's evaluation likes best for the defender, then the lowest square.
+ */
+function ultimateReply(prover: UltimateProver, budget: number): number {
+  const position = prover.position;
+  let best = -1;
+  let bestDistance = -1;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const reply of prover.legal()) {
+    position.play(reply);
+    if (position.settled) throw new Error('ultimate: the defence escaped');
+    const distance = prover.distance(budget);
+    if (distance === null) throw new Error('ultimate: the defence escaped');
+    const score = evaluateUltimate(position, prover.defender);
+    position.unplay();
+    const better = distance !== bestDistance ? distance > bestDistance : score > bestScore;
+    if (better) {
+      best = reply;
+      bestDistance = distance;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
 // Deduplication
 // ---------------------------------------------------------------------------
 
@@ -1156,12 +1729,18 @@ function positionKey(state: GameState): string {
     return `vanish:${best}`;
   }
 
+  // Ultimate: the board the mover is confined to is part of the position. A
+  // symmetry of the 9x9 grid moves whole small boards, so the centre of the
+  // active one lands on the centre of its image.
+  const active = state.ultimate?.activeBoard ?? null;
+  const activeCentre = active === null ? -1 : (ultimateCells(active)[4] ?? -1);
   const chars = Array.from<string>({ length: size * size });
   for (const map of maps) {
     state.board.forEach((value, cell) => {
       chars[map[cell] ?? cell] = value === 0 ? '.' : value === state.currentPlayer ? 'a' : 'd';
     });
-    const text = chars.join('');
+    const sent = activeCentre < 0 ? '' : `|${ultimateBoardOf(map[activeCentre] ?? 0)}`;
+    const text = chars.join('') + sent;
     if (best === '' || text < best) best = text;
   }
   return `${variant}:${size}:${best}`;
@@ -1233,16 +1812,31 @@ interface Puzzle {
   accept: number[][];
   tier: Tier;
   theme?: string;
+  /** Percentile of difficulty across the whole pack, 1-100. */
+  rating: number;
 }
 
 interface Candidate {
-  readonly puzzle: Omit<Puzzle, 'id'>;
+  readonly puzzle: Omit<Puzzle, 'id' | 'rating'>;
   readonly difficulty: number;
   readonly interest: number;
   /** The position up to symmetry, for deduplication and a stable tie-break. */
   readonly key: string;
   /** The game it came from. The pack takes at most one puzzle per game. */
   readonly game: number;
+}
+
+function solve(state: GameState, plan: ModePlan): Solution | null {
+  switch (state.config.variant) {
+    case 'vanish':
+      return solveVanish(state, plan);
+    case 'misere':
+      return solveMisere(state, plan);
+    case 'ultimate':
+      return solveUltimate(state, plan);
+    default:
+      return solveLine(state, plan);
+  }
 }
 
 /** Play a mode's games and turn every qualifying position in them into a candidate. */
@@ -1266,16 +1860,19 @@ function collect(plan: ModePlan, planIndex: number): Candidate[] {
     if (final.status === 'won' && final.winner !== null) {
       decisive++;
       const winner = final.winner;
-      const starting = final.moves.length % 2 === 1 ? winner : opponentOf(winner);
+      // Under misère the game ends on the loser's move, not the winner's.
+      const misere = config.variant === 'misere';
+      const lastMover = misere ? opponentOf(winner) : winner;
+      const starting = final.moves.length % 2 === 1 ? lastMover : opponentOf(lastMover);
 
       // The winner's positions, from their final move backwards.
       for (let back = 0; back < plan.scanBack; back++) {
-        const ply = final.moves.length - 1 - back * 2;
+        const ply = final.moves.length - (misere ? 2 : 1) - back * 2;
         if (ply < 0) break;
         const state = replay(config, starting, final.moves.slice(0, ply));
         if (!state || state.status !== 'playing') continue;
         if (countStones(state) < plan.minStones) {
-          // On the line boards, going further back only removes marks.
+          // On the other boards, going further back only removes marks.
           if (plan.id === 'vanish') continue;
           break;
         }
@@ -1286,7 +1883,7 @@ function collect(plan: ModePlan, planIndex: number): Candidate[] {
         examined++;
 
         const solving = Date.now();
-        const solution = plan.id === 'vanish' ? solveVanish(state, plan) : solveLine(state, plan);
+        const solution = solve(state, plan);
         proving += Date.now() - solving;
         if (!solution) continue;
         candidates.push({
@@ -1397,6 +1994,19 @@ function immediateWins(state: GameState, player: Player): number[] {
   return legalMoves(probe).filter((move) => applyMove(probe, move)?.status === 'won');
 }
 
+/**
+ * Misère: the attacker's moves after which every defender reply completes a
+ * defender line - the attacker's own line and a full board excluded.
+ */
+function misereFinals(state: GameState, attacker: Player): number[] {
+  if (state.status !== 'playing' || state.currentPlayer !== attacker) return [];
+  return legalMoves(state).filter((move) => {
+    const next = applyMove(state, move);
+    if (!next || next.status !== 'playing') return false;
+    return legalMoves(next).every((reply) => applyMove(next, reply)?.winner === attacker);
+  });
+}
+
 /** The structural checks the client's test makes, run before anything is written. */
 function verify(puzzle: Puzzle): void {
   const fail = (why: string): never => {
@@ -1407,16 +2017,32 @@ function verify(puzzle: Puzzle): void {
   if (!start || start.status !== 'playing') return fail('moves do not reach a live position');
   const attacker = start.currentPlayer;
   const defender = opponentOf(attacker);
-  if (puzzle.line.length !== puzzle.mateIn * 2 - 1) fail('line length');
+  const misere = config.variant === 'misere';
+  // Misère is won on the defender's move, so its line has one more ply.
+  if (puzzle.line.length !== puzzle.mateIn * 2 - (misere ? 0 : 1)) fail('line length');
   if (puzzle.accept.length !== puzzle.mateIn) fail('accept length');
-  if (puzzle.mateIn >= 2 && immediateWins(start, attacker).length > 0) fail('already won');
-  if (immediateWins(start, defender).length > 0) fail('defender wins first');
+  if (puzzle.rating < 1 || puzzle.rating > 100 || !Number.isInteger(puzzle.rating)) fail('rating');
+  const finals = misere ? misereFinals : immediateWins;
+  if (puzzle.mateIn >= 2 && finals(start, attacker).length > 0) fail('already won');
+  // In Ultimate the defender's reach depends on where the attacker sends
+  // them, and under misère a line of their own is no threat: the check only
+  // means something on the line boards and vanish.
+  if (!misere && config.variant !== 'ultimate' && immediateWins(start, defender).length > 0) {
+    fail('defender wins first');
+  }
 
   let state = start;
   puzzle.line.forEach((move, ply) => {
+    if (misere && ply === puzzle.line.length - 1) {
+      // The defender's last move: every one they have completes their line.
+      const replies = legalMoves(state);
+      if (!replies.every((reply) => applyMove(state, reply)?.winner === attacker)) {
+        fail('the last defence escapes');
+      }
+    }
     if (ply % 2 === 0) {
       const step = ply / 2;
-      const expected = step < puzzle.mateIn - 1 ? [move] : immediateWins(state, attacker);
+      const expected = step < puzzle.mateIn - 1 ? [move] : finals(state, attacker);
       if (JSON.stringify(puzzle.accept[step]) !== JSON.stringify(expected)) fail(`accept ${step}`);
       if (!expected.includes(move)) fail(`final move ${move} does not win`);
     }
@@ -1481,8 +2107,24 @@ const ordered = selected.toSorted(
     compareText(a.key, b.key),
 );
 
+/**
+ * Each puzzle's rating: its percentile in that order, 1 for the easiest and
+ * 100 for the hardest, the same for puzzles the order cannot tell apart. It
+ * is what lets a run of puzzles escalate across modes.
+ */
+const ratingAt = (index: number): number => {
+  let first = index;
+  const at = nth(ordered, index);
+  while (first > 0) {
+    const before = nth(ordered, first - 1);
+    if (before.puzzle.tier !== at.puzzle.tier || before.difficulty !== at.difficulty) break;
+    first--;
+  }
+  return ordered.length <= 1 ? 1 : 1 + Math.floor((99 * first) / (ordered.length - 1));
+};
+
 const numbering = new Map<ModeId, number>();
-const puzzles: Puzzle[] = ordered.map((candidate) => {
+const puzzles: Puzzle[] = ordered.map((candidate, at) => {
   const { mode, startingPlayer, moves, mateIn, line, accept, tier, theme } = candidate.puzzle;
   const index = (numbering.get(mode) ?? 0) + 1;
   numbering.set(mode, index);
@@ -1496,6 +2138,7 @@ const puzzles: Puzzle[] = ordered.map((candidate) => {
     line,
     accept,
     tier,
+    rating: ratingAt(at),
   };
   if (theme) puzzle.theme = theme;
   return puzzle;
@@ -1507,20 +2150,39 @@ console.log(`  by mode: ${JSON.stringify(countBy(puzzles, (puzzle) => puzzle.mod
 console.log(`  by tier: ${JSON.stringify(countBy(puzzles, (puzzle) => `t${puzzle.tier}`))}`);
 console.log(`  by theme: ${JSON.stringify(countBy(puzzles, (puzzle) => puzzle.theme ?? '-'))}`);
 
-if (dryRun) {
-  console.log('dry run: nothing written');
-} else {
-  // Formatted the way the repository's prettier config would, so regenerating
-  // the pack never shows up as a formatting diff.
-  let text = `${JSON.stringify({ version: 1, puzzles }, null, 2)}\n`;
+/**
+ * Write `value` as JSON formatted the way the repository's prettier config
+ * would, so regenerating the pack never shows up as a formatting diff.
+ */
+async function writeJson(path: string, value: unknown): Promise<void> {
+  let text = `${JSON.stringify(value, null, 2)}\n`;
   try {
     const prettier = await import('prettier');
-    const options = (await prettier.resolveConfig(outPath)) ?? {};
-    text = await prettier.format(text, { ...options, filepath: outPath });
+    const options = (await prettier.resolveConfig(path)) ?? {};
+    text = await prettier.format(text, { ...options, filepath: path });
   } catch {
     console.warn('prettier unavailable: writing plain JSON');
   }
-  mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, text);
-  console.log(`wrote ${outPath}`);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+  console.log(`wrote ${path}`);
+}
+
+if (dryRun) {
+  console.log('dry run: nothing written');
+} else {
+  await writeJson(outPath, { version: PACK_VERSION, puzzles });
+  // The summary the main bundle loads, so a puzzle list or a rush can be
+  // built without the whole pack: one row per puzzle, in pack order.
+  await writeJson(indexPath, {
+    version: PACK_VERSION,
+    puzzles: puzzles.map((puzzle) => [
+      puzzle.id,
+      puzzle.mode,
+      puzzle.mateIn,
+      puzzle.tier,
+      puzzle.theme ?? null,
+      puzzle.rating,
+    ]),
+  });
 }

@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { LinkIcon, SearchPlayerIcon } from '@/components/art/icons';
 import { TrophyIcon, UsersIcon } from '@/components/art/ui-icons';
 import { Button } from '@/components/ui/Button';
+import { useT } from '@/i18n';
+import { onlineMessages } from '@/i18n/messages/online';
 import { cx } from '@/lib/cx';
 import { useClosing } from '@/lib/useClosing';
 import { useDialog } from '@/lib/useDialog';
@@ -38,6 +40,7 @@ export function OnlineSheet({
   const panelRef = useDialog<HTMLDivElement>(close);
   const [code, setCode] = useState('');
   const ready = code.length === ROOM_CODE_LENGTH;
+  const t = useT(onlineMessages);
 
   return (
     <div
@@ -53,7 +56,7 @@ export function OnlineSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Play ${modeName} online`}
+        aria-label={t('playOnline', { mode: modeName })}
         tabIndex={-1}
         className={cx(
           'max-h-[calc(100dvh-2.5rem)] w-full max-w-80 overflow-y-auto panel-shell rounded-[2rem] border border-stroke p-2 outline-none',
@@ -66,27 +69,23 @@ export function OnlineSheet({
 
           <SheetAction
             icon={<TrophyIcon />}
-            title="Ranked match"
-            body={
-              rankedAvailable
-                ? 'Counts towards your rating. Matched by skill.'
-                : 'This mode has no ladder — try a standard board.'
-            }
+            title={t('rankedMatch')}
+            body={rankedAvailable ? t('rankedBody') : t('rankedUnavailable')}
             disabled={!rankedAvailable}
             onClick={() => onQuick(true)}
           />
 
           <SheetAction
             icon={<SearchPlayerIcon />}
-            title="Casual match"
-            body="Play a stranger. Nothing at stake."
+            title={t('casualMatch')}
+            body={t('casualBody')}
             onClick={() => onQuick(false)}
           />
 
           <SheetAction
             icon={<LinkIcon />}
-            title="Invite a friend"
-            body="Open a private room and share the link."
+            title={t('inviteFriend')}
+            body={t('inviteBody')}
             onClick={onHost}
           />
 
@@ -100,12 +99,12 @@ export function OnlineSheet({
             }}
           >
             <label className="col-span-2 flex flex-col gap-1 text-xs text-ink-faint">
-              <span className="px-1">Have a code?</span>
+              <span className="px-1">{t('haveCode')}</span>
               <input
                 value={code}
                 onChange={(event) => setCode(roomCodeFrom(event.target.value))}
                 placeholder="ABC123"
-                aria-label="Room code"
+                aria-label={t('roomCode')}
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -119,7 +118,7 @@ export function OnlineSheet({
               />
             </label>
             <Button type="submit" size="small" disabled={!ready} block>
-              Join
+              {t('join')}
             </Button>
             <Button
               type="button"
@@ -130,12 +129,12 @@ export function OnlineSheet({
               icon={<UsersIcon />}
               onClick={() => onWatch(code.trim().toUpperCase())}
             >
-              Watch
+              {t('watch')}
             </Button>
           </form>
 
           <Button variant="ghost" size="small" onClick={close} className="mt-1 self-center">
-            Back
+            {t('back')}
           </Button>
         </div>
       </div>
@@ -162,7 +161,7 @@ function SheetAction({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        'group flex items-center gap-3 rounded-2xl border border-stroke-soft px-3 py-3 text-left',
+        'group flex items-center gap-3 rounded-2xl border border-stroke-soft px-3 py-3 text-start',
         'transition-[transform,border-color,background-color] duration-200 ease-spring',
         'hover:-translate-y-0.5 hover:border-stroke hover:bg-surface/60 active:scale-[0.98]',
         'disabled:pointer-events-none disabled:opacity-45',

@@ -12,7 +12,7 @@ import {
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
-import { BulbIcon, SparkIcon, TargetIcon } from '@/components/art/ui-icons';
+import { BulbIcon, ClockIcon, SparkIcon, TargetIcon } from '@/components/art/ui-icons';
 import { Board, type BoardHint } from '@/game/components/Board';
 import { GameControls } from '@/game/components/GameControls';
 import { GameHeader } from '@/game/components/GameHeader';
@@ -34,19 +34,46 @@ import { Card, EmptyState } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
-import { DIFFICULTY_LABELS } from '@/game/bot/labels';
+import { useDifficultyLabels } from '@/game/bot/labels';
 import { useBotOpponent } from '@/game/bot/useBotOpponent';
 import { useSuggestion } from '@/game/bot/useSuggestion';
 import { forgetGame, useGame } from '@/game/useGame';
 import { useGameFeedback } from '@/game/useGameFeedback';
+import { useGameDuration } from '@/game/useGameDuration';
+import { useMusicTension } from '@/game/useMusicTension';
 import { useTurnTint } from '@/game/useTurnTint';
-import { isUnlocked, type Stage, stageAfter, stageById, starsFor } from '@/features/journey/stages';
+import { rivalWorld, useRivalWorld } from '@/features/journey/worlds';
+import { rivalText, stageText } from '@/i18n/messages/journey';
+import {
+  FRESH_MEMORY,
+  nextRemark,
+  type Remark,
+  type RemarkMemory,
+  resultLine,
+} from '@/features/journey/remarks';
+import {
+  analyseWin,
+  isUnlocked,
+  playerMoves,
+  type Stage,
+  stageAfter,
+  stageById,
+  stageDifficulty,
+  type StageResult,
+  stageStyle,
+  starsFor,
+} from '@/features/journey/stages';
 import { type BotRecord, useProgressStore } from '@/features/progress/store';
+import { RewardsPanel } from '@/features/progress/RewardsPanel';
+import { BlitzGame } from '@/features/arcade/BlitzGame';
 import { cx } from '@/lib/cx';
-import { hintsFor } from '@/game/hints';
+import { hintsFor, suggestionCells } from '@/game/hints';
 import { loadPreferences, savePreferences } from '@/lib/preferences';
 import { sfx } from '@/lib/sound';
 import { consumeDialogHistory } from '@/lib/useDialog';
+import { type Translator, useT } from '@/i18n';
+import { gameScreenMessages } from '@/i18n/messages/gameScreens';
+import { useModeText } from '@/i18n/messages/modes';
 
 interface BotGameScreenProps {
   mode: ModeId;
@@ -55,11 +82,15 @@ interface BotGameScreenProps {
   practice?: boolean;
   /** A journey stage, which fixes the mode, the rival and the opener. */
   stage?: string;
+  /** Play against the clock. Not on a journey stage, which has its own rules. */
+  blitz?: boolean;
+  /** Pre-placed marks: positive for you, negative for the bot. */
+  handicap?: number;
 }
 
 /** What the finished game earned, worked out once when it ends. */
 type Earned =
-  | { kind: 'stage'; stars: number; improved: boolean }
+  | { kind: 'stage'; stars: number; improved: boolean; line: string }
   | { kind: 'record'; record: BotRecord }
   | { kind: 'none' };
 
@@ -73,9 +104,17 @@ export function BotGameScreen({
   difficulty,
   practice = false,
   stage: stageId,
+  blitz = false,
+  handicap = 0,
 }: BotGameScreenProps) {
   const stage = stageId ? stageById(stageId) : undefined;
   const journey = useProgressStore((state) => state.journey);
+  const t = useT(gameScreenMessages);
+  // The clock and head starts live in the arcade's match, which still records
+  // the game as a bot game.
+  if (!stageId && !practice && (blitz || handicap !== 0)) {
+    return <BlitzGame mode={mode} difficulty={difficulty} blitz={blitz} handicap={handicap} />;
+  }
   if (stageId && !stage) return <BotGame mode={mode} difficulty={difficulty} practice={practice} />;
   // A link can name any stage; the journey decides which are open.
   if (stage && !isUnlocked(stage, journey)) {
@@ -83,11 +122,11 @@ export function BotGameScreen({
       <Screen scroll>
         <Card className="w-full">
           <EmptyState
-            title="Stage locked"
-            body={`Earn stars on the earlier stages to face ${stage.rival.name} here.`}
+            title={t('stageLocked')}
+            body={t('stageLockedBody', { rival: stage.rival.name })}
             action={
               <Button as={ReturnLink} to="/journey" size="small" className="w-auto px-4">
-                Journey map
+                {t('journeyMap')}
               </Button>
             }
           />
@@ -100,7 +139,7 @@ export function BotGameScreen({
       // Stages and practice have their own saved positions and help settings.
       key={stage?.id ?? (practice ? 'practice' : 'free')}
       mode={stage?.mode ?? mode}
-      difficulty={stage?.rival.difficulty ?? difficulty}
+      difficulty={stage ? stageDifficulty(stage) : difficulty}
       practice={practice && !stage}
       stage={stage}
     />
@@ -121,12 +160,26 @@ function BotGame({
   const navigate = useNavigate();
   const router = useRouter();
   const returnTo = useReturnTo();
+  const t = useT(gameScreenMessages);
+  const levels = useDifficultyLabels();
+  const modeName = useModeText(mode).name;
   const config = useMemo(() => modeById(mode).config, [mode]);
+  // A stage's opener and head start, built once so a restart rebuilds the same.
+  const setup = useMemo(
+    () => (stage?.setup ? { opener: stage.opener, moves: stage.setup } : undefined),
+    [stage],
+  );
+  const style = useMemo(() => (stage ? stageStyle(stage) : undefined), [stage]);
   const { game, play, restart, undo, canUndo, round } = useGame(config, {
-    ...(stage ? { opener: X } : {}),
+    ...(stage ? { opener: stage.opener } : {}),
+    ...(setup ? { setup } : {}),
     storageKey: stage ? `journey:${stage.id}` : `bot:${mode}:${difficulty}:${practice}`,
   });
   const [hintsOn, setHintsOn] = useState(() => !stage && (practice || loadPreferences().hints));
+  // A stage that offers hints gives its third star for not using them: the
+  // round they were last switched on in, so a restart starts clean.
+  const [hintedRound, setHintedRound] = useState(-1);
+  const offersHints = !stage || stage.objective === 'no-hints';
   const [pendingChange, setPendingChange] = useState<'restart' | BotDifficulty | null>(null);
   const [reviewedRound, setReviewedRound] = useState(-1);
   // A result reopened with "Show result" appears at once, not after the reveal.
@@ -135,19 +188,24 @@ function BotGame({
   const recordStage = useProgressStore((state) => state.recordStage);
 
   const onMove = useCallback((index: number) => play(index), [play]);
-  const { thinking } = useBotOpponent({
+  const { thinking, lastSearch } = useBotOpponent({
     game,
     botPlayer: O,
     difficulty,
     onMove,
     paused: pendingChange !== null,
+    ...(style ? { style } : {}),
   });
   const { suggestion, thinking: suggesting, suggest } = useSuggestion(game);
 
   const hints = useMemo<BoardHint[]>(() => {
     const forced = hintsOn && game.currentPlayer === X ? hintsFor(game) : [];
-    if (practice && suggestion !== null && !forced.some((hint) => hint.index === suggestion)) {
-      return [...forced, { index: suggestion, kind: 'best' }];
+    if (practice && suggestion !== null) {
+      // A suggestion is a move code; on most rule sets that is one square.
+      const best = suggestionCells(game, suggestion).filter(
+        (index) => !forced.some((hint) => hint.index === index),
+      );
+      return [...forced, ...best.map((index) => ({ index, kind: 'best' as const }))];
     }
     return forced;
   }, [hintsOn, game, practice, suggestion]);
@@ -157,13 +215,28 @@ function BotGame({
     threats: hints.filter((hint) => hint.kind === 'threat').length,
   });
   useTurnTint(game);
-  const remark = useRivalRemarks(game, stage);
+  useMusicTension(game);
+  // A journey stage is played in the rival's own world: board tint, backdrop
+  // motif and theme tune. Cleared again on the way out.
+  useRivalWorld(stage ? rivalWorld(stage.rival.id) : null);
+  const duration = useGameDuration(game);
+  const remark = useRivalRemarks(game, stage, mode, round, lastSearch);
 
-  const rivalName = stage ? stage.rival.name : `${DIFFICULTY_LABELS[difficulty]} bot`;
+  const rivalName = stage ? stage.rival.name : levels.bot(difficulty);
   const finished = game.status !== 'playing';
   const outcome = outcomeFor(game, X);
   const perfectClassic = mode === 'classic' && ['hard', 'expert', 'master'].includes(difficulty);
-  const yourMoves = countMovesBy(game.moves.length, startingPlayerOf(game), X);
+  const yourMoves = playerMoves(game, stage, X);
+  const hintsUsed = hintsOn || hintedRound === round;
+  // What the finished game did besides win - read once it is over, from the
+  // moves, so the stars and the goal line agree.
+  const stageResult = useMemo<StageResult | null>(
+    () =>
+      stage && finished
+        ? { won: outcome === 'win', moves: yourMoves, hintsUsed, ...analyseWin(game, stage, X) }
+        : null,
+    [stage, finished, outcome, yourMoves, hintsUsed, game],
+  );
 
   // Record each finished game exactly once, when it finishes - not on every
   // render of the finished board, and not again if a take-back reopens it.
@@ -174,9 +247,15 @@ function BotGame({
     recordedRound.current = round;
 
     let value: Earned = { kind: 'none' };
-    if (stage) {
-      const stars = starsFor(stage, outcome === 'win', yourMoves);
-      value = { kind: 'stage', stars, improved: recordStage(stage.id, stars) };
+    if (stage && stageResult) {
+      const stars = starsFor(stage, stageResult);
+      value = {
+        kind: 'stage',
+        stars,
+        improved: recordStage(stage.id, stars),
+        // The rival's parting line, chosen once per game rather than per render.
+        line: resultLine(stage.rival, outcome),
+      };
     } else if (!practice) {
       value = { kind: 'record', record: recordBotGame(mode, difficulty, outcome) };
     }
@@ -185,8 +264,8 @@ function BotGame({
     finished,
     round,
     stage,
+    stageResult,
     outcome,
-    yourMoves,
     practice,
     mode,
     difficulty,
@@ -220,7 +299,9 @@ function BotGame({
   function toggleHints() {
     const next = !hintsOn;
     setHintsOn(next);
-    if (!practice) savePreferences({ hints: next });
+    if (next) setHintedRound(round);
+    // A stage's hints are its own, not the player's general preference.
+    if (!practice && !stage) savePreferences({ hints: next });
   }
 
   function requestChange(change: 'restart' | BotDifficulty) {
@@ -246,27 +327,30 @@ function BotGame({
 
   const title = stage
     ? outcome === 'win'
-      ? 'Stage cleared!'
+      ? t('stageCleared')
       : outcome === 'loss'
-        ? `${stage.rival.name} wins`
-        : 'A draw'
+        ? t('rivalWins', { name: stage.rival.name })
+        : t('aDraw')
     : outcome === 'win'
-      ? 'You win!'
+      ? t('youWin')
       : outcome === 'loss'
-        ? `${DIFFICULTY_LABELS[difficulty]} bot wins`
-        : 'Draw';
+        ? t('rivalWins', { name: levels.bot(difficulty) })
+        : t('draw');
 
   const following = stage ? stageAfter(stage) : undefined;
   const thisRound = earned?.round === round ? earned.value : null;
+  // Set by the same record call as `earned`, so it belongs to this round
+  // whenever this round recorded anything.
+  const award = useProgressStore((state) => state.lastAward);
 
   return (
     <Screen>
       <div className="relative z-10 w-full animate-rise" style={{ animationDelay: '0.04s' }}>
         <GameHeader
           game={game}
-          left={{ name: 'You', kind: 'local', isYou: true }}
+          left={{ name: t('you'), kind: 'local', isYou: true }}
           right={{
-            name: stage ? stage.rival.name : DIFFICULTY_LABELS[difficulty],
+            name: stage ? stage.rival.name : levels.label(difficulty),
             kind: 'bot',
             busy: thinking,
             ...(stage ? { avatar: stage.rival.avatar } : {}),
@@ -278,9 +362,15 @@ function BotGame({
               <ModeChip mode={mode} onClick={() => void returnTo('/')} />
             )
           }
-          badge={stage ? 'Journey' : practice ? 'Practice' : 'vs Bot'}
+          badge={t(stage ? 'badgeJourney' : practice ? 'badgePractice' : 'badgeBot')}
         />
-        {remark ? <RivalBubble key={remark.id} text={remark.text} /> : null}
+        {remark ? (
+          <RivalBubble
+            key={`${round}:${remark.id}`}
+            text={remark.text}
+            accent={['fork', 'signature', 'bossIntro', 'nearLoss'].includes(remark.event)}
+          />
+        ) : null}
       </div>
 
       <main
@@ -298,7 +388,9 @@ function BotGame({
           <OpenerBanner
             round={round}
             player={startingPlayerOf(game)}
-            label={startingPlayerOf(game) === X ? 'You go first' : `${rivalName} goes first`}
+            label={
+              startingPlayerOf(game) === X ? t('youGoFirst') : t('goesFirst', { name: rivalName })
+            }
             fresh={game.moves.length === 0}
           />
         </div>
@@ -307,20 +399,16 @@ function BotGame({
         {hintsOn || practice ? <HintLegend hints={hints} /> : null}
 
         {!stage && practice ? (
-          <p className="text-center text-xs text-ink-muted">
-            Try ideas freely · Take back moves or ask for a suggestion.
-          </p>
+          <p className="text-center text-xs text-ink-muted">{t('practiceNote')}</p>
         ) : !stage && perfectClassic ? (
-          <p className="text-center text-xs text-ink-muted">
-            This bot plays Classic perfectly. Holding a draw is a success.
-          </p>
+          <p className="text-center text-xs text-ink-muted">{t('perfectNote')}</p>
         ) : null}
 
         {stage ? (
           <StageGoal
             stage={stage}
             moves={yourMoves}
-            earned={finished ? starsFor(stage, outcome === 'win', yourMoves) : null}
+            earned={stageResult ? starsFor(stage, stageResult) : null}
           />
         ) : (
           <ThinkingIndicator thinking={thinking} />
@@ -340,35 +428,35 @@ function BotGame({
               setReviewedRound(-1);
             }}
           >
-            Show result
+            {t('showResult')}
           </Button>
         ) : null}
         {stage ? null : (
           <Segmented<BotDifficulty>
-            label="Bot difficulty"
+            label={t('botDifficulty')}
             value={difficulty}
             onChange={requestChange}
             size="small"
             className="w-full max-w-board"
             options={BOT_DIFFICULTIES.map((value) => ({
               value,
-              label: DIFFICULTY_LABELS[value].slice(0, 3),
-              title: DIFFICULTY_LABELS[value],
+              label: levels.short(value),
+              title: levels.label(value),
             }))}
           />
         )}
 
         <GameControls
           onRestart={() => requestChange('restart')}
-          restartLabel={stage ? 'Restart stage' : 'New game'}
+          restartLabel={t(stage ? 'restartStage' : 'newGame')}
           onUndo={practice ? takeBack : undefined}
           canUndo={canUndo && !thinking}
           extra={
-            stage ? null : (
+            !offersHints ? null : (
               <>
                 {practice ? (
                   <IconButton
-                    label="Suggest a move"
+                    label={t('suggestMove')}
                     onClick={suggest}
                     disabled={finished || thinking || suggesting || game.currentPlayer !== X}
                     className={suggestion !== null ? 'text-ink' : undefined}
@@ -379,13 +467,30 @@ function BotGame({
                   </IconButton>
                 ) : null}
                 <IconButton
-                  label={hintsOn ? 'Turn hints off' : 'Turn hints on'}
+                  label={t(hintsOn ? 'hintsOff' : 'hintsOn')}
                   aria-pressed={hintsOn}
                   onClick={toggleHints}
                   className={hintsOn ? 'text-ok' : undefined}
                 >
                   <BulbIcon />
                 </IconButton>
+                {!stage && !practice ? (
+                  <IconButton
+                    label={t('playClock')}
+                    aria-pressed={false}
+                    onClick={async () => {
+                      await consumeDialogHistory(router.history);
+                      void navigate({
+                        to: '/play/bot',
+                        search: { mode, difficulty, blitz: true },
+                        replace: true,
+                        viewTransition: false,
+                      });
+                    }}
+                  >
+                    <ClockIcon />
+                  </IconButton>
+                ) : null}
               </>
             )
           }
@@ -412,11 +517,18 @@ function BotGame({
           note={
             stage
               ? outcome === 'draw'
-                ? `${stage.rival.name} held you to a draw.`
-                : `“${outcome === 'win' ? stage.rival.concede : stage.rival.gloat}”`
+                ? t('heldDraw', { name: stage.rival.name })
+                : t('quote', {
+                    line:
+                      thisRound?.kind === 'stage'
+                        ? thisRound.line
+                        : outcome === 'win'
+                          ? rivalText(stage.rival).concede
+                          : rivalText(stage.rival).gloat,
+                  })
               : outcome === 'draw' && perfectClassic
-                ? 'You held a draw against a bot that plays perfectly. Well played.'
-                : `${DIFFICULTY_LABELS[difficulty]} bot · ${modeById(mode).name}`
+                ? t('perfectDraw')
+                : `${levels.bot(difficulty)} · ${modeName}`
           }
           detail={
             thisRound ? (
@@ -428,7 +540,15 @@ function BotGame({
               />
             ) : null
           }
+          rewards={
+            thisRound && thisRound.kind !== 'none' && award ? (
+              <RewardsPanel award={award} won={outcome === 'win'} />
+            ) : null
+          }
           celebrate={outcome === 'win'}
+          tone={outcome}
+          game={game}
+          durationMs={duration}
           revealDelay={reopenedRound === round ? 0 : revealDelayFor(game)}
           actions={
             stage ? (
@@ -451,7 +571,7 @@ function BotGame({
                       });
                     }}
                   >
-                    Next: {following.rival.name}
+                    {t('nextStage', { name: following.rival.name })}
                   </Button>
                 ) : null}
                 <Button
@@ -460,16 +580,16 @@ function BotGame({
                   block
                   onClick={() => restart()}
                 >
-                  {outcome === 'win' ? 'Play again' : 'Try again'}
+                  {t(outcome === 'win' ? 'playAgain' : 'tryAgain')}
                 </Button>
                 <Button as={ReturnLink} to="/journey" variant="ghost" size="small" block>
-                  Journey map
+                  {t('journeyMap')}
                 </Button>
               </>
             ) : (
               <>
                 <Button variant="primary" size="small" block onClick={() => restart()}>
-                  Play again
+                  {t('playAgain')}
                 </Button>
                 {outcome === 'loss' && difficulty !== BOT_DIFFICULTIES[0] ? (
                   <Button
@@ -478,7 +598,7 @@ function BotGame({
                     block
                     onClick={() => goTo({ difficulty: easier(difficulty) })}
                   >
-                    Try an easier bot
+                    {t('easierBot')}
                   </Button>
                 ) : outcome === 'win' && difficulty !== BOT_DIFFICULTIES.at(-1) ? (
                   <Button
@@ -487,7 +607,7 @@ function BotGame({
                     block
                     onClick={() => goTo({ difficulty: harder(difficulty) })}
                   >
-                    Try a harder bot
+                    {t('harderBot')}
                   </Button>
                 ) : null}
                 {!practice ? (
@@ -505,11 +625,11 @@ function BotGame({
                     size="small"
                     block
                   >
-                    Practice with hints
+                    {t('practiceHints')}
                   </Button>
                 ) : null}
                 <Button as={ReturnLink} to="/" variant="ghost" size="small" block>
-                  Back to home
+                  {t('backHome')}
                 </Button>
               </>
             )
@@ -518,13 +638,13 @@ function BotGame({
       ) : null}
       {pendingChange !== null ? (
         <GameResetDialog
-          title={pendingChange === 'restart' ? 'Start a new round?' : 'Change bot difficulty?'}
-          description={
-            pendingChange === 'restart'
-              ? 'This will replace the round you are playing.'
-              : `Start a round against the ${DIFFICULTY_LABELS[pendingChange]} bot. This will replace your current round.`
-          }
-          actionLabel={pendingChange === 'restart' ? 'New round' : 'Change difficulty'}
+          {...(pendingChange === 'restart'
+            ? {}
+            : {
+                title: t('changeDifficultyTitle'),
+                description: t('changeDifficultyBody', { level: levels.label(pendingChange) }),
+                actionLabel: t('changeDifficulty'),
+              })}
           onCancel={() => setPendingChange(null)}
           onConfirm={() => {
             const change = pendingChange;
@@ -544,11 +664,6 @@ function BotGame({
   );
 }
 
-/** Moves `player` has made in a game of `plies` opened by `opener`. */
-function countMovesBy(plies: number, opener: 1 | 2, player: 1 | 2): number {
-  return opener === player ? Math.ceil(plies / 2) : Math.floor(plies / 2);
-}
-
 function easier(difficulty: BotDifficulty): BotDifficulty {
   const index = BOT_DIFFICULTIES.indexOf(difficulty);
   return BOT_DIFFICULTIES[Math.max(0, index - 1)] ?? difficulty;
@@ -557,6 +672,20 @@ function easier(difficulty: BotDifficulty): BotDifficulty {
 function harder(difficulty: BotDifficulty): BotDifficulty {
   const index = BOT_DIFFICULTIES.indexOf(difficulty);
   return BOT_DIFFICULTIES[Math.min(BOT_DIFFICULTIES.length - 1, index + 1)] ?? difficulty;
+}
+
+/** What a stage's third star asks for besides the par: "without a hint". */
+function objectiveWords(stage: Stage, t: Translator<(typeof gameScreenMessages)['en']>): string {
+  switch (stage.objective) {
+    case 'no-hints':
+      return t('objectiveNoHints');
+    case 'fork':
+      return t('objectiveFork');
+    case 'flawless':
+      return t('objectiveFlawless');
+    case 'par':
+      return '';
+  }
 }
 
 /**
@@ -574,15 +703,19 @@ function StageGoal({
   /** The stars the finished game earned; null while it is still being played. */
   earned: number | null;
 }) {
+  const t = useT(gameScreenMessages);
   const [two, three] = stage.par;
-  const onPace = moves <= three ? 3 : moves <= two ? 2 : 1;
+  const onPace =
+    stage.objective === 'par' ? (moves <= three ? 3 : moves <= two ? 2 : 1) : moves <= two ? 2 : 1;
   return (
     <div className="flex min-h-5 flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
-      <span className="tnum whitespace-nowrap">Your moves: {moves}</span>
+      <span className="tnum whitespace-nowrap">{t('yourMoves', { count: moves })}</span>
       <span aria-hidden="true">·</span>
       <Stars earned={earned ?? onPace} className="text-sm" />
       <span className="tnum text-xs whitespace-nowrap text-ink-faint">
-        ≤{three} for three · ≤{two} for two
+        {stage.objective === 'par'
+          ? t('parGoal', { three, two })
+          : t('objectiveGoal', { two, objective: objectiveWords(stage, t) })}
       </span>
     </div>
   );
@@ -599,6 +732,8 @@ function EarnedDetail({
   stage: Stage | undefined;
   moves: number;
 }): ReactNode {
+  const t = useT(gameScreenMessages);
+  const levels = useDifficultyLabels();
   useEffect(() => {
     if (earned.kind === 'stage' && earned.stars > 0) {
       const timer = setTimeout(() => sfx.sparkle(earned.stars + 2), 700);
@@ -613,12 +748,12 @@ function EarnedDetail({
         <Stars earned={earned.stars} animate delay={0.55} className="text-4xl" />
         {earned.stars > 0 ? (
           <p className="tnum text-xs text-ink-faint">
-            Won in {moves} moves
-            {earned.improved ? ' · new best' : ''}
-            {stage && earned.stars < 3 ? ` · three stars at ${stage.par[1]} or fewer` : ''}
+            {t('wonIn', { count: moves })}
+            {earned.improved ? t('newBest') : ''}
+            {stage && earned.stars < 3 ? t('threeStarsAt', { count: stage.par[1] }) : ''}
           </p>
         ) : (
-          <p className="text-xs text-ink-faint">Win the game to earn stars.</p>
+          <p className="text-xs text-ink-faint">{t('winToEarn')}</p>
         )}
       </div>
     );
@@ -630,12 +765,16 @@ function EarnedDetail({
       <div className="flex flex-col items-center gap-1 text-xs text-ink-faint">
         {record.streak >= 2 ? (
           <p className="flex animate-pop items-center gap-1 text-sm font-semibold text-warn">
-            <SparkIcon className="size-4" /> {record.streak} wins in a row
+            <SparkIcon className="size-4" /> {t('streak', { count: record.streak })}
           </p>
         ) : null}
         <p className="tnum">
-          vs {DIFFICULTY_LABELS[difficulty]}: {record.won} won · {record.drawn} drawn ·{' '}
-          {record.lost} lost
+          {t('record', {
+            level: levels.label(difficulty),
+            won: record.won,
+            drawn: record.drawn,
+            lost: record.lost,
+          })}
         </p>
       </div>
     );
@@ -651,6 +790,7 @@ function EarnedDetail({
  * above it does not jump every time the bot takes or finishes a turn.
  */
 function ThinkingIndicator({ thinking }: { thinking: boolean }) {
+  const t = useT(gameScreenMessages);
   return (
     <p
       className={cx(
@@ -660,7 +800,7 @@ function ThinkingIndicator({ thinking }: { thinking: boolean }) {
       )}
       aria-live="polite"
     >
-      {thinking ? 'Bot is thinking' : ''}
+      {thinking ? t('botThinking') : ''}
       <span aria-hidden="true" className="flex items-end gap-1 pb-0.5">
         {[0, 1, 2].map((dot) => (
           <span
@@ -675,48 +815,40 @@ function ThinkingIndicator({ thinking }: { thinking: boolean }) {
 }
 
 /**
- * What a journey rival says as the game goes: a taunt when they have just made
- * a threat you must answer, a worry when you have just made one they must.
+ * What a journey rival says as the game goes: an introduction, then lines for
+ * the moments that matter - a threat made or blocked, two at once, the end
+ * coming - read off the position by `nextRemark`.
  *
- * Read off the same exact threat check the hints use, so a rival never taunts
- * a threat that is not there. Not every threat gets a line - every other one at
- * most - because a character who comments on every move is one you mute.
+ * Worked out during render when the position changes, rather than in an
+ * effect, so the line and the move that prompted it arrive in one paint.
  */
 function useRivalRemarks(
   game: GameState,
   stage: Stage | undefined,
-): { id: number; text: string } | null {
-  // Worked out during render when the position changes, rather than in an
-  // effect, so the line and the move that prompted it arrive in one paint.
+  mode: ModeId,
+  round: number,
+  note: { move: number; reason: string; score: number } | null,
+): Remark | null {
   const [said, setSaid] = useState<{
-    game: GameState;
-    remark: { id: number; text: string } | null;
-    lastSpoke: number;
-  }>({ game, remark: null, lastSpoke: -10 });
+    game: GameState | null;
+    remark: Remark | null;
+    memory: RemarkMemory;
+    firstRound: number;
+  }>({ game: null, remark: null, memory: FRESH_MEMORY, firstRound: round });
 
-  if (said.game !== game) {
-    setSaid(nextRemark(said, game, stage));
+  if (said.game !== game && stage) {
+    const next = nextRemark(said, game, {
+      rival: stage.rival,
+      mode,
+      bot: O,
+      setupPlies: stage.setup?.length ?? 0,
+      note,
+      rematch: round !== said.firstRound,
+      boss: stage.boss === true,
+      ...(stage.intro ? { intro: stageText(stage).intro } : {}),
+    });
+    setSaid({ ...said, game, ...next });
   }
 
-  return said.remark;
-}
-
-function nextRemark(
-  previous: { remark: { id: number; text: string } | null; lastSpoke: number },
-  game: GameState,
-  stage: Stage | undefined,
-): { game: GameState; remark: { id: number; text: string } | null; lastSpoke: number } {
-  const ply = game.moves.length;
-  // A new game starts quiet.
-  if (ply === 0) return { game, remark: null, lastSpoke: -10 };
-
-  const quiet = { game, remark: previous.remark, lastSpoke: previous.lastSpoke };
-  if (!stage || game.status !== 'playing' || ply < 3 || ply - previous.lastSpoke < 3) return quiet;
-  if (!hintsFor(game).some((hint) => hint.kind === 'threat')) return quiet;
-
-  // X to move and under threat: the rival just made it. O to move and under
-  // threat: you did.
-  const lines = game.currentPlayer === X ? stage.rival.taunts : stage.rival.worries;
-  const text = lines[ply % lines.length];
-  return text ? { game, remark: { id: ply, text }, lastSpoke: ply } : quiet;
+  return stage ? said.remark : null;
 }

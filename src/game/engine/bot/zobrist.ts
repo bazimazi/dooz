@@ -1,4 +1,4 @@
-import { type Board, Empty, O, type Player } from '../types.js';
+import { type Board, isMark, O, type Player } from '../types.js';
 
 /**
  * Zobrist hashing: each (cell, player) pair gets a fixed random value, and a
@@ -75,7 +75,8 @@ export function hashBoard(
 
   for (let index = 0; index < board.length; index++) {
     const cell = board[index];
-    if (cell === undefined || cell === Empty) continue;
+    // Blocked squares never change during a game, so they need no key.
+    if (!isMark(cell)) continue;
     const key = slot(index, cell);
     primary ^= table.primary[key] ?? 0;
     secondary ^= table.secondary[key] ?? 0;

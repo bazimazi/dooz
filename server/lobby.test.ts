@@ -234,7 +234,7 @@ describe('matchmaking', () => {
     const a = h.join('Ada');
     const b = h.join('Bob');
 
-    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    a.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
     b.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
 
     expect(a.last('matched')).toBeUndefined();
@@ -260,11 +260,11 @@ describe('matchmaking', () => {
     const b = h.join('Bob');
 
     // Put 600 points between them, which no opening band covers.
-    h.accounts.recordResult(a.accountId, 'classic', 'win', 1800, true);
-    h.accounts.recordResult(b.accountId, 'classic', 'loss', 1100, true);
+    h.accounts.recordResult(a.accountId, 'grid-6', 'win', 1800, true);
+    h.accounts.recordResult(b.accountId, 'grid-6', 'loss', 1100, true);
 
-    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
-    b.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    a.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
     expect(a.last('matched')).toBeUndefined();
 
     // After the band has grown past the gap, the periodic sweep pairs them.
@@ -753,6 +753,20 @@ describe('results', () => {
     expect(record?.mode).toBe('classic');
     expect(record?.moveTimesMs).toHaveLength(5);
   });
+
+  it('seeds each game of a seeded rule set, and records the seed for replay', () => {
+    const h = newHarness();
+    const { a, b } = matched(h, modeById('obstacles').config);
+    const snapshot = currentSnapshot(a)!;
+    expect(snapshot.config.seed).toBeTypeOf('number');
+    // The seeded squares are on the board both clients are shown.
+    expect(snapshot.board.filter((cell) => cell === 3).length).toBeGreaterThan(0);
+    expect(currentSnapshot(b)!.board).toEqual(snapshot.board);
+
+    a.send({ type: 'resign' });
+    const record = h.matches.find(resultOf(a)!.matchId, a.accountId, (id) => h.accounts.get(id));
+    expect(record?.config.seed).toBe(snapshot.config.seed);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -831,11 +845,11 @@ describe('ratings', () => {
     const h = newHarness();
     const a = h.join('Ada');
     const b = h.join('Bob');
-    a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
-    b.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    a.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
 
     const { mover, waiter } = toMove(a, b);
-    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+    playMoves(mover, waiter, [0, 6, 1, 7, 2, 8, 3]);
 
     const rating = resultOf(a)!.rating!;
     expect(rating).not.toBeNull();
@@ -914,12 +928,12 @@ describe('ratings', () => {
 
     const c = h.join('Cat');
     const d = h.join('Dan');
-    c.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
-    d.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    c.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
+    d.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
     c.send({ type: 'resign' });
 
     expect(resultOf(c)?.kind).toBe('ranked');
-    expect(h.accounts.statsFor(c.accountId, 'classic')).toMatchObject({
+    expect(h.accounts.statsFor(c.accountId, 'grid-6')).toMatchObject({
       played: 1,
       rankedPlayed: 1,
     });
@@ -1155,6 +1169,30 @@ describe('spectating', () => {
     mover.send({ type: 'move', index: 4 });
 
     expect(watcher.last('state')?.snapshot.board[4]).not.toBe(0);
+  });
+
+  it('keeps watchers of a rated game two plies behind until it ends', () => {
+    const h = newHarness();
+    const a = h.join('Ada');
+    const b = h.join('Bob');
+    a.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
+    b.send({ type: 'queue', config: CONFIGS.grid6, ranked: true });
+    const code = a.last('matched')!.code;
+    const watcher = h.join('Cat');
+
+    const { mover, waiter } = toMove(a, b);
+    mover.send({ type: 'move', index: 0 });
+    waiter.send({ type: 'move', index: 6 });
+    mover.send({ type: 'move', index: 1 });
+    watcher.send({ type: 'spectate', code });
+    expect(watcher.last('matched')?.snapshot.moves).toEqual([0]);
+
+    waiter.send({ type: 'move', index: 7 });
+    expect(watcher.last('state')?.snapshot.moves).toEqual([0, 6]);
+    expect(mover.last('state')?.snapshot.moves).toEqual([0, 6, 1, 7]);
+
+    mover.send({ type: 'resign' });
+    expect(watcher.last('state')?.snapshot.moves).toEqual([0, 6, 1, 7]);
   });
 });
 

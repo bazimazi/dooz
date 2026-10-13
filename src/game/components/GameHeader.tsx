@@ -1,13 +1,15 @@
-import { type GameState, describeConfig, O, X } from '@/game/engine';
+import { type GameState, O, X } from '@/game/engine';
 import type { ReactNode } from 'react';
 import { cx } from '@/lib/cx';
+import { useLocale } from '@/i18n';
+import { describeConfigText } from '@/i18n/messages/modes';
 import { PlayerCard, type SeatInfo } from './PlayerCard';
 
 interface GameHeaderProps {
   game: GameState;
-  /** The X seat, always drawn on the left. */
+  /** The X seat, drawn on the start side: the left, or the right in a right-to-left language. */
   left: SeatInfo;
-  /** The O seat, always drawn on the right. */
+  /** The O seat, drawn on the end side. */
   right: SeatInfo;
   /** Replaces the mode label - the mode picker, on the screens that have one. */
   centre?: ReactNode;
@@ -17,6 +19,7 @@ interface GameHeaderProps {
 
 export function GameHeader({ game, left, right, centre, badge }: GameHeaderProps) {
   const playing = game.status === 'playing';
+  const locale = useLocale();
 
   return (
     <header className="flex w-full items-start justify-center gap-2.5 pt-4">
@@ -25,7 +28,7 @@ export function GameHeader({ game, left, right, centre, badge }: GameHeaderProps
       <div className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1 self-start pt-3 min-[360px]:w-[5.5rem]">
         {centre ?? (
           <span className="text-center text-sm leading-tight text-ink-muted">
-            {describeConfig(game.config)}
+            {describeConfigText(game.config, locale)}
           </span>
         )}
         {badge ? (

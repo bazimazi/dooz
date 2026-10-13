@@ -38,3 +38,61 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The multiplayer server on its own, so a server regression is reported by
+  # name rather than buried in the client's test run.
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Server tests
+        run: npx vitest run --project server
+
+  # The Tauri shell: formatting, lints and a full type/borrow check. Ubuntu
+  # needs the WebKitGTK headers the webview links against.
+  tauri:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install WebKitGTK and friends
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # `generate_context!` embeds the built frontend; the checks only need the
+      # directory to exist, not a real build of it.
+      - name: Placeholder frontend
+        working-directory: .
+        run: mkdir -p dist && echo '<!doctype html>' > dist/index.html
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Check
+        run: cargo check --locked

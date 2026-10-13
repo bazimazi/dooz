@@ -1,4 +1,10 @@
-import { type BotDifficulty, canPlay, type GameState, type Player } from '@/game/engine';
+import {
+  type BotDifficulty,
+  type BotStyle,
+  canPlay,
+  type GameState,
+  type Player,
+} from '@/game/engine';
 import { useEffect, useRef, useState } from 'react';
 import { usePageVisible } from '@/lib/usePageVisible';
 import { BotSearch } from './BotSearch';
@@ -20,12 +26,32 @@ interface UseBotOpponentOptions {
   onMove: (index: number) => void;
   /** Set to stop the bot thinking at all - the practice screen pauses it. */
   paused?: boolean;
+  /**
+   * Overrides the level's thinking time, in milliseconds. Blitz shortens it so
+   * the bot keeps pace with a player on the clock.
+   */
+  timeBudgetMs?: number;
+  /**
+   * A journey rival's style: which moves it prefers, and through `tempo` how
+   * long it appears to think. Must be stable across renders, like `onMove`.
+   */
+  style?: BotStyle;
 }
 
 export interface BotStatus {
   thinking: boolean;
-  /** Depth and node count of the last completed search, for the practice panel. */
-  lastSearch: { depth: number; nodes: number; reason: string } | null;
+  /**
+   * The last completed search: depth and nodes for the practice panel, and
+   * the move with the bot's reason and score, which a rival's lines are read
+   * from.
+   */
+  lastSearch: {
+    depth: number;
+    nodes: number;
+    reason: string;
+    move: number;
+    score: number;
+  } | null;
 }
 
 /**
@@ -45,6 +71,8 @@ export function useBotOpponent({
   difficulty,
   onMove,
   paused = false,
+  timeBudgetMs,
+  style,
 }: UseBotOpponentOptions): BotStatus {
   const searchRef = useRef<BotSearch | null>(null);
   const visible = usePageVisible();
@@ -76,7 +104,10 @@ export function useBotOpponent({
 
       // Hold the move back until the minimum has elapsed, so the bot appears to
       // consider even the positions it solves instantly.
-      const minimum = game.moves.length === 0 ? OPENING_THINK_MS : MINIMUM_THINK_MS;
+      // A rival's tempo stretches or shortens the pause - Sage deliberates,
+      // Bruno barely waits - without touching how long the search may run.
+      const minimum =
+        (game.moves.length === 0 ? OPENING_THINK_MS : MINIMUM_THINK_MS) * (style?.tempo ?? 1);
       const wait = Math.max(0, minimum - (Date.now() - startedAt));
       delayTimer = setTimeout(() => {
         if (cancelled) return;
@@ -85,10 +116,23 @@ export function useBotOpponent({
       }, wait);
     };
 
-    const cancelSearch = searchRef.current?.search(game, { difficulty }, (chosen) => {
+    const options = {
+      difficulty,
+      ...(timeBudgetMs === undefined ? {} : { timeBudgetMs }),
+      ...(style ? { style } : {}),
+    };
+    const cancelSearch = searchRef.current?.search(game, options, (chosen) => {
       settle(
         chosen?.move ?? null,
-        chosen ? { depth: chosen.depth, nodes: chosen.nodes, reason: chosen.reason } : null,
+        chosen
+          ? {
+              depth: chosen.depth,
+              nodes: chosen.nodes,
+              reason: chosen.reason,
+              move: chosen.move,
+              score: chosen.score,
+            }
+          : null,
       );
     });
 
@@ -97,7 +141,7 @@ export function useBotOpponent({
       cancelSearch?.();
       clearTimeout(delayTimer);
     };
-  }, [thinking, visible, game, difficulty, onMove]);
+  }, [thinking, visible, game, difficulty, onMove, timeBudgetMs, style]);
 
   return { thinking, lastSearch };
 }

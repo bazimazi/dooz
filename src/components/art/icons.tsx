@@ -134,9 +134,14 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
-export function BackIcon(props: IconProps) {
+/** Points back along the reading direction, so it turns around in right-to-left text. */
+export function BackIcon({ className, ...props }: IconProps) {
   return (
-    <Icon viewBox="0 0 24 24" {...props}>
+    <Icon
+      viewBox="0 0 24 24"
+      className={className ? `rtl:-scale-x-100 ${className}` : 'rtl:-scale-x-100'}
+      {...props}
+    >
       <path
         d="M9 7 4 12l5 5M4 12h9a7 7 0 0 1 7 7v1"
         stroke="currentColor"

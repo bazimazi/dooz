@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  isGameConfig,
+  MAX_BOARD_SIZE,
+  MIN_BOARD_SIZE,
+  moveSpace,
+  OPENING_RULES,
+  VARIANT_IDS,
+} from '@/game/engine';
 
 /**
  * Wire protocol for online play.
@@ -13,9 +21,11 @@ import { z } from 'zod';
  * draw offers, emotes, spectators and rating results. Version 4 added the
  * gravity and vanish rule sets - an older client cannot parse a snapshot of
  * either, so it is told to reload rather than handed a board it would reject.
+ * Version 5 added blocked squares, config options (exact runs, opening rules,
+ * seeds), move codes beyond the cell range, and per-variant extra state.
  */
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** Room codes people read aloud, so ambiguous glyphs (0/O, 1/I/L) are excluded. */
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -29,7 +39,8 @@ export const roomCodeSchema = z
   .regex(new RegExp(`^[${ROOM_CODE_ALPHABET}]+$`), 'Invalid room code');
 
 export const playerSchema = z.union([z.literal(1), z.literal(2)]);
-export const cellSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
+/** Empty, X, O, or a blocked square. */
+export const cellSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
 
 export const DISPLAY_NAME_MIN = 2;
 export const DISPLAY_NAME_MAX = 20;
@@ -67,55 +78,35 @@ export const passwordSchema = z.string().min(PASSWORD_MIN).max(PASSWORD_MAX);
 // Game shape
 // ---------------------------------------------------------------------------
 
-export const VARIANT_IDS = [
-  'classic',
-  'gomoku',
-  'misere',
-  'gravity',
-  'vanish',
-  'ultimate',
-] as const;
+export { VARIANT_IDS };
 export const variantSchema = z.enum(VARIANT_IDS);
 
-export const MIN_BOARD_SIZE = 3;
-export const MAX_BOARD_SIZE = 15;
+export { MAX_BOARD_SIZE, MIN_BOARD_SIZE };
 
 /**
  * The rules a game is played under.
  *
- * The cross-field checks mirror the engine's own: a run longer than the board
- * could never be completed, and Ultimate is defined on one geometry only. They
- * are repeated here rather than imported so the protocol package stays free of
- * a dependency on the engine - the server checks both, and disagreeing would be
- * a bug either way.
+ * The shape is checked here and the meaning by the engine's own
+ * `isGameConfig`: the board sizes each rule set is defined for, and which
+ * options it supports, belong to the variant, so the transport asks the rules
+ * rather than keeping a second copy that could drift from them.
  */
 export const gameConfigSchema = z
   .object({
     variant: variantSchema,
     size: z.number().int().min(MIN_BOARD_SIZE).max(MAX_BOARD_SIZE),
     winLength: z.number().int().min(3).max(6),
+    exact: z.boolean().optional(),
+    opening: z.enum(OPENING_RULES).optional(),
+    seed: z.number().int().min(0).max(0xffff_ffff).optional(),
   })
   .refine((config) => config.winLength <= config.size, {
     message: 'Win length cannot exceed the board size',
     path: ['winLength'],
   })
-  .refine(
-    (config) => config.variant !== 'ultimate' || (config.size === 9 && config.winLength === 3),
-    {
-      message: 'Ultimate is played on a 9x9 board with three in a row',
-      path: ['variant'],
-    },
-  )
-  .refine(
-    (config) => config.variant !== 'vanish' || (config.size === 3 && config.winLength === 3),
-    {
-      message: 'Vanish is played on a 3x3 board with three in a row',
-      path: ['variant'],
-    },
-  )
-  .refine((config) => config.variant !== 'gravity' || config.size >= 4, {
-    message: 'Gravity needs a board of at least 4x4',
-    path: ['size'],
+  .refine((config) => isGameConfig(config), {
+    message: 'These rules do not support that board or option',
+    path: ['variant'],
   });
 
 export const ultimateMetaSchema = z
@@ -126,6 +117,52 @@ export const ultimateMetaSchema = z
     winBoards: z.array(z.number().int().min(0).max(8)).length(3).nullable(),
   })
   .nullable();
+
+const cellIndexSchema = z.number().int().min(0).max(255);
+const powerChargesSchema = z.object({
+  bomb: z.number().int().min(0).max(9),
+  wall: z.number().int().min(0).max(9),
+});
+const quantumMarkSchema = z.object({
+  player: playerSchema,
+  move: z.number().int().min(1).max(9),
+  cells: z.tuple([cellIndexSchema, cellIndexSchema]),
+  at: cellIndexSchema.nullable(),
+});
+
+/**
+ * The state a rule set carries beyond the board, one shape per `kind`.
+ *
+ * It is all derived from the config and the moves, so the client could rebuild
+ * it by replaying them - but the board components read it on every render,
+ * and the server already has it. A rule set that adds a `VariantExtra` member
+ * adds its shape here; the cross-field check below insists the kind matches
+ * the variant, so a snapshot cannot dress one rule set's state up as another's.
+ */
+export const variantExtraSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
+  z.object({
+    kind: z.literal('pente'),
+    captures: z.tuple([z.number().int().min(0).max(99), z.number().int().min(0).max(99)]),
+    captured: z.array(cellIndexSchema).max(16),
+  }),
+  z.object({
+    kind: z.literal('quantum'),
+    marks: z.array(quantumMarkSchema).max(9),
+    pending: z.number().int().min(0).max(8).nullable(),
+    cycle: z.array(cellIndexSchema).max(9).nullable(),
+    classical: z.array(z.number().int().min(1).max(9).nullable()).length(9),
+    collapsed: z.array(cellIndexSchema).max(9),
+  }),
+  z.object({ kind: z.literal('powers'), x: powerChargesSchema, o: powerChargesSchema }),
+]);
+
+/** Which `extra` kind each variant carries, for the ones that carry one. */
+const EXTRA_KIND: Partial<Record<string, string>> = {
+  pente: 'pente',
+  quantum: 'quantum',
+  powers: 'powers',
+};
 
 /**
  * Authoritative game state, as the server sees it.
@@ -149,6 +186,7 @@ export const snapshotSchema = z
     lastMove: z.number().int().nonnegative().nullable(),
     moves: z.array(z.number().int().nonnegative()),
     ultimate: ultimateMetaSchema,
+    extra: variantExtraSchema.optional(),
   })
   .refine((snapshot) => snapshot.board.length === snapshot.config.size * snapshot.config.size, {
     message: 'Board length does not match the board size',
@@ -158,15 +196,43 @@ export const snapshotSchema = z
     (snapshot) =>
       [
         ...(snapshot.winLine ?? []),
-        ...snapshot.moves,
         ...(snapshot.lastMove === null ? [] : [snapshot.lastMove]),
       ].every((index) => index < snapshot.board.length),
     { message: 'Cell index outside the board', path: ['winLine'] },
   )
+  .refine(
+    // Moves are codes rather than cells for rule sets with more than one kind
+    // of action, so they are bounded by the rules' move space instead.
+    (snapshot) => {
+      const limit = moveSpace(snapshot.config);
+      return snapshot.moves.every((move) => move < limit);
+    },
+    { message: 'Move outside the rules', path: ['moves'] },
+  )
   .refine((snapshot) => (snapshot.config.variant === 'ultimate') === (snapshot.ultimate !== null), {
     message: 'Ultimate state must accompany an Ultimate game and no other',
     path: ['ultimate'],
-  });
+  })
+  .refine(
+    (snapshot) =>
+      (snapshot.extra?.kind ?? 'none') === 'none' ||
+      EXTRA_KIND[snapshot.config.variant] === snapshot.extra?.kind,
+    { message: 'Extra state belongs to a different rule set', path: ['extra'] },
+  )
+  .refine(
+    (snapshot) =>
+      [
+        ...(snapshot.extra?.kind === 'pente' ? snapshot.extra.captured : []),
+        ...(snapshot.extra?.kind === 'quantum'
+          ? [
+              ...snapshot.extra.collapsed,
+              ...(snapshot.extra.cycle ?? []),
+              ...snapshot.extra.marks.flatMap((mark) => [...mark.cells, mark.at ?? 0]),
+            ]
+          : []),
+      ].every((index) => index < snapshot.board.length),
+    { message: 'Cell index outside the board', path: ['extra'] },
+  );
 
 /**
  * Both clocks, as of `asOf`.
@@ -232,6 +298,112 @@ export const seatSchema = z.object({
   wantsRematch: z.boolean(),
 });
 
+/**
+ * Something for one player's attention that is not part of a game: a friend's
+ * challenge, a friend request, a correspondence move, a tournament starting.
+ *
+ * Delivered over the socket when the player is connected, kept in a short
+ * server-side inbox the app polls when it is not, and sent as a Web Push when
+ * the player has opted in. The same id arrives on every channel, so a client
+ * that hears about it twice shows it once.
+ */
+export const NOTICE_KINDS = [
+  'challenge',
+  'challengeDeclined',
+  'friendRequest',
+  'friendAccepted',
+  'correspondenceInvite',
+  'correspondenceTurn',
+  'correspondenceResult',
+  'tournament',
+  'system',
+] as const;
+export const noticeKindSchema = z.enum(NOTICE_KINDS);
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+export const noticeSchema = z.object({
+  id: z.string().min(1).max(64),
+  kind: noticeKindSchema,
+  title: z.string().max(120),
+  body: z.string().max(300),
+  at: z.number().int().nonnegative(),
+  /** In-app path to open, always relative so a notice cannot send anyone off-site. */
+  url: z
+    .string()
+    .max(200)
+    .regex(/^\/(?!\/)[\w\-./?=&%]*$/, 'Relative path only')
+    .optional(),
+  from: publicProfileSchema.optional(),
+  /** Room to join, for a challenge. */
+  code: roomCodeSchema.optional(),
+  config: gameConfigSchema.optional(),
+});
+export type Notice = z.infer<typeof noticeSchema>;
+
+// ---------------------------------------------------------------------------
+// Tournaments
+// ---------------------------------------------------------------------------
+
+/** Tournament ids share the room-code alphabet, so they can be read aloud too. */
+export const tournamentIdSchema = roomCodeSchema;
+
+export const TOURNAMENT_KINDS = ['arena', 'bracket'] as const;
+export const tournamentKindSchema = z.enum(TOURNAMENT_KINDS);
+export type TournamentKind = (typeof TOURNAMENT_KINDS)[number];
+
+export const TOURNAMENT_STATUSES = ['scheduled', 'running', 'finished'] as const;
+export const tournamentStatusSchema = z.enum(TOURNAMENT_STATUSES);
+
+/** Bracket sizes a private tournament may be created with. */
+export const BRACKET_SIZES = [4, 8, 16] as const;
+
+export const tournamentStandingSchema = z.object({
+  rank: z.number().int().positive(),
+  profile: publicProfileSchema,
+  score: z.number().int().nonnegative(),
+  played: z.number().int().nonnegative(),
+  won: z.number().int().nonnegative(),
+  /** Two wins in a row puts a player on fire: their wins and draws count double. */
+  fire: z.boolean(),
+  /** Still taking pairings. A player who left keeps their score but is not paired. */
+  active: z.boolean(),
+});
+
+export const bracketMatchSchema = z.object({
+  a: publicProfileSchema.nullable(),
+  b: publicProfileSchema.nullable(),
+  /** 1 if `a` went through, 2 if `b` did; `null` until decided. */
+  winner: z.union([z.literal(1), z.literal(2)]).nullable(),
+  /** Room the match is being played in, for spectators. */
+  code: roomCodeSchema.nullable(),
+});
+
+export const tournamentSchema = z.object({
+  id: tournamentIdSchema,
+  kind: tournamentKindSchema,
+  name: z.string().max(60),
+  mode: z.string().max(80),
+  config: gameConfigSchema,
+  status: tournamentStatusSchema,
+  startsAt: z.number().int().nonnegative(),
+  endsAt: z.number().int().nonnegative(),
+  /** Players signed up, active or not. */
+  players: z.number().int().nonnegative(),
+  maxPlayers: z.number().int().positive(),
+  /** Whether berserk (half your clock for an extra point) is allowed. */
+  berserk: z.boolean(),
+  /** Whether the account asking is signed up. */
+  joined: z.boolean(),
+  /** Account that created a private bracket; it alone may start it early. */
+  hostId: z.string().nullable(),
+  standings: z.array(tournamentStandingSchema).max(100),
+  /** Rounds of a bracket, first round first. `null` for an arena. */
+  bracket: z.array(z.array(bracketMatchSchema).max(8)).max(5).nullable(),
+});
+
+export type Tournament = z.infer<typeof tournamentSchema>;
+export type TournamentStanding = z.infer<typeof tournamentStandingSchema>;
+
 // ---------------------------------------------------------------------------
 // Client -> server
 // ---------------------------------------------------------------------------
@@ -255,6 +427,11 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('queue'),
     config: gameConfigSchema,
     ranked: z.boolean(),
+    /**
+     * Whether a server bot may be offered after a long wait. Defaults to yes
+     * for casual games; a bot is always labelled as one.
+     */
+    bots: z.boolean().optional(),
   }),
   /** Open a private room and get back a code to share. Never rated. */
   z.object({ type: z.literal('createRoom'), config: gameConfigSchema }),
@@ -273,6 +450,25 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   /** Stop showing the opponent's emotes for the rest of this match. */
   z.object({ type: z.literal('mute'), muted: z.boolean() }),
   z.object({ type: z.literal('ping') }),
+  /** Sign up for a tournament, or come back to one after leaving it. */
+  z.object({ type: z.literal('tournamentJoin'), id: tournamentIdSchema }),
+  /** Stop taking pairings. Points already scored are kept. */
+  z.object({ type: z.literal('tournamentLeave'), id: tournamentIdSchema }),
+  /** Create a private single-elimination bracket to invite friends into. */
+  z.object({
+    type: z.literal('tournamentCreate'),
+    config: gameConfigSchema,
+    size: z.union([z.literal(4), z.literal(8), z.literal(16)]),
+  }),
+  /** The host starts a bracket before it has filled up. */
+  z.object({ type: z.literal('tournamentStart'), id: tournamentIdSchema }),
+  /** In an arena game, before your first move: half your clock for a bonus point. */
+  z.object({ type: z.literal('berserk') }),
+  /**
+   * Open a private room and invite one friend to it. The server answers with
+   * the same `roomCreated` a private room gets, and tells the friend.
+   */
+  z.object({ type: z.literal('challenge'), accountId: accountIdSchema, config: gameConfigSchema }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -294,6 +490,12 @@ export const ERROR_CODES = [
   'serverFull',
   'notRankable',
   'alreadyPlaying',
+  /** No such tournament, or it cannot be joined, left or started now. */
+  'tournamentUnavailable',
+  /** The account is suspended. Not retried: the client says why and stops. */
+  'banned',
+  /** Not allowed for this account - not friends, blocked, or muted. */
+  'forbidden',
 ] as const;
 
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -303,6 +505,12 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export const ratingChangeSchema = z.object({
   before: z.number().int(),
   after: z.number().int(),
+  /** Rating deviation after the game. High means still settling. */
+  rd: z.number().nonnegative().optional(),
+  provisional: z.boolean().optional(),
+  /** Ranked games this season, for the placement counter. */
+  seasonPlayed: z.number().int().nonnegative().optional(),
+  placementGames: z.number().int().nonnegative().optional(),
 });
 
 export const matchResultSchema = z.object({
@@ -336,6 +544,8 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     ranked: z.boolean(),
     /** Players waiting in this queue, so the client can say something true. */
     queued: z.number().int().nonnegative(),
+    /** Server time at which a bot will be offered if nobody turns up. */
+    botAt: z.number().int().nonnegative().nullable().optional(),
   }),
   z.object({
     type: z.literal('roomCreated'),
@@ -352,6 +562,13 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
     snapshot: snapshotSchema,
     clock: clockSchema.nullable(),
     spectators: z.number().int().nonnegative(),
+    /** The tournament this game belongs to, if any. */
+    tournament: z
+      .object({ id: tournamentIdSchema, name: z.string(), berserk: z.boolean() })
+      .nullable()
+      .optional(),
+    /** Seats that went berserk in this game. */
+    berserk: z.array(playerSchema).max(2).optional(),
   }),
   z.object({
     type: z.literal('state'),
@@ -370,6 +587,11 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('opponentLeft') }),
   z.object({ type: z.literal('error'), code: errorCodeSchema, message: z.string() }),
   z.object({ type: z.literal('pong') }),
+  /** A tournament this player is in changed: standings, pairing, start, end. */
+  z.object({ type: z.literal('tournament'), tournament: tournamentSchema }),
+  /** A seat went berserk; its clock is in the next `state`. */
+  z.object({ type: z.literal('berserk'), player: playerSchema }),
+  z.object({ type: z.literal('notice'), notice: noticeSchema }),
 ]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

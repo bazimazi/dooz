@@ -15,7 +15,8 @@ import {
 } from './game.js';
 import { GAME_MODES, modeById } from './modes.js';
 import { fromMoves, seeded } from './testing.js';
-import { Empty, type GameConfig, isGameConfig, O, X } from './types.js';
+import { isGameConfig } from './config.js';
+import { Empty, type GameConfig, O, X } from './types.js';
 
 describe('createGame', () => {
   it('starts empty and playing', () => {

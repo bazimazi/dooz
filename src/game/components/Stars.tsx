@@ -1,4 +1,6 @@
 import { cx } from '@/lib/cx';
+import { useT } from '@/i18n';
+import { gameUiMessages } from '@/i18n/messages/gameUi';
 
 const STAR_PATH = 'M12 2.8l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 16.8l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z';
 
@@ -35,11 +37,12 @@ interface StarsProps {
  * own beat - the result screen's moment of reward, spread out enough to feel.
  */
 export function Stars({ earned, animate = false, delay = 0, className }: StarsProps) {
+  const t = useT(gameUiMessages);
   return (
     <span
       className={cx('inline-flex items-center gap-1', className)}
       role="img"
-      aria-label={`${earned} of 3 stars`}
+      aria-label={t('stars', { count: earned, total: 3 })}
     >
       {[0, 1, 2].map((star) => {
         const lit = star < earned;

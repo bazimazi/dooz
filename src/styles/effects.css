@@ -1,0 +1,293 @@
+/**
+ * The game's effects: callouts, the win's slow motion, hint halos, the result
+ * hero and the home screen's demo board.
+ *
+ * Every rule here is either decoration a graphics preset can remove, or is
+ * scoped to one by `data-graphics` - the explicit player choice is the only
+ * thing that turns any of it down (see AGENTS.md).
+ */
+
+/* --------------------------------------------------------------------------
+   Callouts: "FORK!", "BLOCKED!" - stamped over the board, then gone.
+   -------------------------------------------------------------------------- */
+
+.fx-callout {
+  position: absolute;
+  top: 9%;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 3;
+  padding: 0.15em 0.6em 0.2em;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 5.5vw, 1.9rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--color-on-btn-primary);
+  background: var(--callout-fill, var(--color-btn-primary));
+  border: 2px solid color-mix(in srgb, var(--color-ink) 35%, transparent);
+  box-shadow: 0 10px 24px -12px var(--color-shadow);
+  animation: callout 1.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+
+/* The mover's colour, deepened until white type holds on it in both themes. */
+.fx-callout[data-player='x'] {
+  --callout-fill: color-mix(in srgb, var(--color-mark-x-edge) 85%, black);
+}
+
+.fx-callout[data-player='o'] {
+  --callout-fill: color-mix(in srgb, var(--color-mark-o-edge) 78%, black);
+}
+
+/* A block is a defence, not an attack: it gets the calm accent instead. */
+.fx-callout[data-kind='blocked'] {
+  --callout-fill: color-mix(in srgb, var(--color-btn-primary) 85%, black);
+}
+
+.fx-callout-rich {
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.25);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--callout-fill) 35%, transparent),
+    0 0 26px -4px var(--callout-fill),
+    0 12px 28px -12px var(--color-shadow);
+}
+
+@keyframes callout {
+  0% {
+    opacity: 0;
+    transform: scale(1.9) rotate(-6deg);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(0.92) rotate(1.5deg);
+  }
+  24% {
+    transform: scale(1.04) rotate(-1deg);
+  }
+  32%,
+  76% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40%) scale(0.94);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   The winning move, in slow motion. Only the mark that completed the line
+   carries it, and only on High.
+   -------------------------------------------------------------------------- */
+
+.fx-slowmo {
+  animation-duration: 1.15s !important;
+}
+
+/* --------------------------------------------------------------------------
+   Hint halos: a soft pool of light under a hint ring, so a square that wins
+   or loses the game glows rather than just being outlined.
+   -------------------------------------------------------------------------- */
+
+.hint-halo {
+  background: radial-gradient(closest-side, var(--halo), transparent);
+  animation: halo 1.8s ease-in-out infinite;
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .hint-halo {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   The ghost of the mark about to be played, under the pointer: it breathes
+   so it reads as "this would go here" rather than as a faint real mark.
+   -------------------------------------------------------------------------- */
+
+:root[data-graphics='high'] .group:hover > .hover-ghost {
+  animation: ghost-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes ghost-breathe {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.36;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Result hero: rays behind the verdict, and the verdict's letters dropping in.
+   -------------------------------------------------------------------------- */
+
+.result-rays {
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--rays) 55%, transparent) 0deg 9deg,
+    transparent 9deg 24deg
+  );
+  mask-image: radial-gradient(circle, black 18%, transparent 68%);
+  animation: rays-spin 14s linear infinite;
+}
+
+@keyframes rays-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .result-rays {
+  animation: none;
+}
+
+:root[data-graphics='low'] .result-rays {
+  display: none;
+}
+
+.result-letter {
+  display: inline-block;
+  animation: letter-drop 0.5s cubic-bezier(0.22, 1.5, 0.36, 1) both;
+}
+
+@keyframes letter-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.6em) scale(1.4);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.result-ribbon {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ribbon) 88%, white),
+    var(--ribbon) 55%,
+    color-mix(in srgb, var(--ribbon) 80%, black)
+  );
+  clip-path: polygon(0 0, 100% 0, 96% 50%, 100% 100%, 0 100%, 4% 50%);
+}
+
+/* --------------------------------------------------------------------------
+   The home screen's demo board: a game that plays itself on a loop.
+   -------------------------------------------------------------------------- */
+
+.hero-mark {
+  animation: hero-mark 0.55s cubic-bezier(0.22, 1.5, 0.36, 1) both;
+}
+
+@keyframes hero-mark {
+  from {
+    opacity: 0;
+    transform: scale(0.3) rotate(-25deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+.hero-line {
+  animation: draw-line 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* --------------------------------------------------------------------------
+   The board arriving: its rows rise in from the middle outwards, so the grid
+   assembles itself rather than appearing whole. `backwards` rather than
+   `both`, so nothing lingers on the rows once they are in place.
+   -------------------------------------------------------------------------- */
+
+.board-row {
+  animation: board-row-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(0.1s + var(--row, 0) * 40ms);
+}
+
+@keyframes board-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8%) scaleY(0.92);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Backdrop scenery that moves, on High only: the arcade floor's grid hums.
+   -------------------------------------------------------------------------- */
+
+.arcade-floor {
+  animation: arcade-hum 3.2s ease-in-out infinite;
+}
+
+@keyframes arcade-hum {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+:root:is([data-graphics='low'], [data-graphics='balanced']) .arcade-floor {
+  animation: none;
+}
+
+/* --------------------------------------------------------------------------
+   The home screen: a lit hero card holding a board on a tilted stage.
+   -------------------------------------------------------------------------- */
+
+.home-hero-card {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 12% 0%,
+      color-mix(in srgb, var(--color-mark-x) 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 70% 60% at 100% 100%,
+      color-mix(in srgb, var(--color-mark-o) 12%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--color-surface) 80%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-ink) 12%, transparent),
+    0 18px 40px -26px var(--color-shadow);
+}
+
+.hero-tilt {
+  transform: perspective(700px) rotateX(9deg) rotateZ(-2deg);
+  transform-origin: 50% 70%;
+  transition: transform 0.5s var(--ease-soft);
+}
+
+.home-hero-card:hover .hero-tilt,
+.home-hero-card:focus-visible .hero-tilt {
+  transform: perspective(700px) rotateX(3deg) rotateZ(0deg) translateY(-2px);
+}
+
+.hero-pool {
+  position: absolute;
+  inset: auto 4% -12% 4%;
+  height: 34%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--color-glow-o), transparent);
+  filter: blur(6px);
+  opacity: 0.75;
+  pointer-events: none;
+}

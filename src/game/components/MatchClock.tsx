@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '@/i18n';
+import { matchMessages } from '@/i18n/messages/onlineMatch';
 import { cx } from '@/lib/cx';
 import { sfx } from '@/lib/sound';
 
@@ -81,6 +83,7 @@ export function MatchClock({
   }, [ticking, remainingMs]);
 
   const urgent = ticking && displayed <= URGENT_MS;
+  const t = useT(matchMessages);
 
   // One tick per whole second in the last ten, faster-sounding in the last
   // five. Keyed on the second rather than the frame, so it cannot stutter.
@@ -107,7 +110,7 @@ export function MatchClock({
         urgent && 'animate-tick',
       )}
     >
-      <span className="sr-only">Time left </span>
+      <span className="sr-only">{t('timeLeft')} </span>
       {formatClock(displayed)}
     </span>
   );

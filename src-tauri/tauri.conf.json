@@ -28,7 +28,7 @@
       "assetProtocol": {
         "enable": false
       },
-      "capabilities": ["default"],
+      "capabilities": ["default", "desktop", "mobile"],
       "csp": {
         "default-src": "'self'",
         "img-src": "'self' data: blob:",
@@ -36,7 +36,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "script-src": "'self'",
         "worker-src": "'self' blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:8787 ws://127.0.0.1:8787 wss://dooz.example.com https://dooz.example.com"
+        "connect-src": "'self' ipc: http://ipc.localhost ws://localhost:8787 ws://127.0.0.1:8787 http://localhost:8787 http://127.0.0.1:8787"
       }
     }
   },
@@ -63,6 +63,19 @@
       "deb": {
         "depends": []
       }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["dooz"]
+      },
+      "mobile": [
+        {
+          "scheme": ["dooz"],
+          "appLink": false
+        }
+      ]
     }
   }
 }

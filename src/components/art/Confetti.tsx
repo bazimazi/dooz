@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useGraphics } from '@/lib/graphics';
+import { STAR_CLIP } from '@/features/collection/art';
+import { useWinEffect } from '@/features/collection/useWinEffect';
 
 /**
  * The burst fired over the result panel when the game was won.
@@ -53,6 +55,9 @@ const PIECES = Array.from({ length: PIECE_COUNT }, (_, index) => {
 
 export function Confetti({ className }: { className?: string }) {
   const quality = useGraphics();
+  // The win effect equipped in the collection recolours and reshapes the
+  // pieces; the throw itself is the same for all of them.
+  const effect = useWinEffect();
   if (quality === 'low') return null;
   const pieces = quality === 'balanced' ? PIECES.slice(0, 16) : PIECES;
   return (
@@ -81,19 +86,41 @@ export function Confetti({ className }: { className?: string }) {
               className="block animate-confetti-spin"
               style={{ '--rot': piece.rot, animationDelay: piece.delay } as CSSProperties}
             >
-              <span
-                className="block"
-                style={{
-                  width: piece.width,
-                  height: piece.round ? piece.width : piece.height,
-                  borderRadius: piece.round ? '50%' : 2,
-                  background: piece.colour,
-                }}
+              <PieceShape
+                piece={piece}
+                shape={effect.shape}
+                colour={effect.colours[index % effect.colours.length] ?? piece.colour}
               />
             </span>
           </span>
         </span>
       ))}
     </div>
+  );
+}
+
+function PieceShape({
+  piece,
+  shape,
+  colour,
+}: {
+  piece: (typeof PIECES)[number];
+  shape: 'mixed' | 'round' | 'star' | 'square';
+  colour: string;
+}) {
+  const round = shape === 'round' || (shape === 'mixed' && piece.round);
+  const star = shape === 'star';
+  const size = star ? piece.width + 5 : piece.width;
+  return (
+    <span
+      className="block"
+      style={{
+        width: size,
+        height: round || star ? size : piece.height,
+        borderRadius: round ? '50%' : star ? 0 : 2,
+        clipPath: star ? STAR_CLIP : undefined,
+        background: colour,
+      }}
+    />
   );
 }

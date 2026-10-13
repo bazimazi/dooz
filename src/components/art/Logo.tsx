@@ -1,3 +1,6 @@
+import { useT } from '@/i18n';
+import { routeMessages } from '@/i18n/messages/routes';
+
 /**
  * The "TIC TAC XOE" wordmark, traced from the Figma export.
  *
@@ -11,15 +14,10 @@
  * without fighting over the same `transform`.
  */
 export function Logo({ className }: { className?: string }) {
+  const t = useT(routeMessages);
   return (
-    <svg
-      viewBox="0 0 171 226"
-      fill="none"
-      className={className}
-      role="img"
-      aria-label="dooz - tic tac toe"
-    >
-      <title>dooz - tic tac toe</title>
+    <svg viewBox="0 0 171 226" fill="none" className={className} role="img" aria-label={t('logo')}>
+      <title>{t('logo')}</title>
 
       {/* "TIC" */}
       <g

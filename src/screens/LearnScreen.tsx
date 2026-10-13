@@ -10,6 +10,11 @@ import { Card } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { Tabs } from '@/components/ui/Tabs';
+import { RIVALS, STAGES } from '@/features/journey/stages';
+import { LessonsCard } from '@/features/lessons/LessonsCard';
+import { formatNumber, type Locale, useLocale, useT } from '@/i18n';
+import { learnMessages } from '@/i18n/messages/learn';
+import { useModeTexts } from '@/i18n/messages/modes';
 import { OnboardingSheet } from './OnboardingSheet';
 
 /**
@@ -25,14 +30,18 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
   const selected = mode;
   const [tutorial, setTutorial] = useState(false);
   const detail = modeById(selected);
+  const t = useT(learnMessages);
+  const locale = useLocale();
+  const modeText = useModeTexts();
+  const text = modeText(selected);
 
   return (
     <Screen width="wide" scroll>
       <header className="flex w-full items-center gap-3 pt-2 pb-4">
-        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label="Back to home">
-          <BackIcon />
+        <IconButton as={ReturnLink} to="/" tone="bare" size="small" label={t('backHome')}>
+          <BackIcon className="rtl:-scale-x-100" />
         </IconButton>
-        <h1 className="font-display text-xl">How to play</h1>
+        <h1 className="font-display text-xl">{t('howToPlay')}</h1>
       </header>
 
       <div className="flex w-full flex-col gap-4 pb-6">
@@ -42,24 +51,22 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
               <BulbIcon />
             </span>
             <div className="flex flex-1 flex-col gap-2">
-              <h2 className="text-base font-semibold">Three moves, thirty seconds</h2>
-              <p className="text-sm text-ink-muted">
-                Place a mark, win a game and block an opponent — on a real board, not a diagram.
-              </p>
+              <h2 className="text-base font-semibold">{t('walkthroughTitle')}</h2>
+              <p className="text-sm text-ink-muted">{t('walkthroughBody')}</p>
               <Button
                 size="small"
                 variant="primary"
                 className="mt-1 w-auto self-start px-5 whitespace-nowrap"
                 onClick={() => setTutorial(true)}
               >
-                Start the walkthrough
+                {t('startWalkthrough')}
               </Button>
             </div>
           </div>
         </Card>
 
         <Tabs
-          label="Mode"
+          label={t('mode')}
           value={selected}
           onChange={(next) =>
             void navigate({
@@ -70,40 +77,47 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
               resetScroll: false,
             })
           }
-          options={GAME_MODES.map((entry) => ({ value: entry.id, label: entry.name }))}
+          options={GAME_MODES.map((entry) => ({ value: entry.id, label: modeText(entry.id).name }))}
         />
 
         <Card className="w-full">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            <div className="mx-auto w-40 shrink-0 sm:mx-0">
+            <div dir="ltr" className="mx-auto w-40 shrink-0 sm:mx-0">
               <MiniBoard config={detail.config} active />
             </div>
 
             <div className="flex flex-1 flex-col gap-3">
               <div>
-                <h2 className="font-display text-xl">{detail.name}</h2>
-                <p className="text-sm text-ink-muted">{detail.tagline}</p>
+                <h2 className="font-display text-xl">{text.name}</h2>
+                <p className="text-sm text-ink-muted">{text.tagline}</p>
               </div>
 
-              <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-sm text-ink-muted">
-                {detail.rules.map((rule) => (
+              <ol className="flex list-decimal flex-col gap-1.5 ps-4 text-sm text-ink-muted">
+                {text.rules.map((rule) => (
                   <li key={rule}>{rule}</li>
                 ))}
               </ol>
 
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                <dt className="text-ink-faint">Board</dt>
+                <dt className="text-ink-faint">{t('board')}</dt>
                 <dd>
-                  {detail.config.size} × {detail.config.size}
+                  {/* Qubic's cube is stored as an 8x8 board, but it is played
+                      as four layers of four. */}
+                  {detail.config.variant === 'qubic'
+                    ? t('cubeSize', { size: 4 })
+                    : t('boardSize', { size: detail.config.size })}
                 </dd>
-                <dt className="text-ink-faint">In a row</dt>
-                <dd>{detail.config.winLength}</dd>
-                <dt className="text-ink-faint">Clock</dt>
+                <dt className="text-ink-faint">{t('inARow')}</dt>
+                <dd>{formatNumber(detail.config.winLength, locale)}</dd>
+                <dt className="text-ink-faint">{t('clock')}</dt>
                 <dd>
-                  {clockLength(detail.clock.initialSeconds)} + {detail.clock.incrementSeconds}s
+                  {t('clockValue', {
+                    time: clockLength(detail.clock.initialSeconds, locale, t),
+                    count: detail.clock.incrementSeconds,
+                  })}
                 </dd>
-                <dt className="text-ink-faint">Ranked</dt>
-                <dd>{detail.ranked ? 'Yes' : 'Casual only'}</dd>
+                <dt className="text-ink-faint">{t('ranked')}</dt>
+                <dd>{detail.ranked ? t('rankedYes') : t('rankedNo')}</dd>
               </dl>
             </div>
           </div>
@@ -120,7 +134,7 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
                 })
               }
             >
-              Practice with hints
+              {t('practiceHints')}
             </Button>
             <Button
               size="small"
@@ -134,7 +148,7 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
                 })
               }
             >
-              Play the bot
+              {t('playBot')}
             </Button>
             {detail.ranked ? (
               <Button
@@ -146,44 +160,29 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
                   void navigate({ to: '/play/online', search: { mode: selected, ranked: true } })
                 }
               >
-                Play ranked
+                {t('playRanked')}
               </Button>
             ) : null}
           </div>
         </Card>
 
+        <LessonsCard mode={selected} />
+
         <Card className="w-full" padding="tight">
-          <h2 className="px-2 py-1 text-xs tracking-wide text-ink-faint uppercase">Good to know</h2>
+          <h2 className="px-2 py-1 text-xs tracking-wide text-ink-faint uppercase">
+            {t('goodToKnow')}
+          </h2>
           <ul className="flex flex-col gap-2 px-2 pt-1 pb-2 text-sm text-ink-muted">
-            <li>
-              <strong className="text-ink">Ranked vs casual.</strong> Only ranked games move your
-              rating. Leaving one early counts as a resignation.
-            </li>
-            <li>
-              <strong className="text-ink">Clocks.</strong> Every online game is timed, with a few
-              seconds added after each move. Running out loses the game.
-            </li>
-            <li>
-              <strong className="text-ink">Disconnections.</strong> Your seat is held for 45 seconds
-              and your clock keeps running. Come back and you carry on where you were.
-            </li>
-            <li>
-              <strong className="text-ink">Practice mode.</strong> Hints ring the square that wins
-              and the one you must block, you can take moves back, and the target button asks the
-              engine what it would play.
-            </li>
-            <li>
-              <strong className="text-ink">Journey.</strong> Six rivals, eighteen stages, every
-              mode. You always move first; win in fewer moves for more stars.
-            </li>
-            <li>
-              <strong className="text-ink">Puzzles.</strong> Every one is a proven forced win. A new
-              daily puzzle arrives each day — solve them on consecutive days to build a streak.
-            </li>
-            <li>
-              <strong className="text-ink">Pieces.</strong> Win against the bot, solve puzzles and
-              earn journey stars to unlock new piece sets in Settings.
-            </li>
+            {TIPS.map((tip) => (
+              <li key={tip}>
+                <strong className="text-ink">{t(`tip.${tip}.title`)}</strong>{' '}
+                {t(`tip.${tip}.body`, {
+                  count: SEAT_HELD_SECONDS,
+                  rivals: RIVALS.length,
+                  stages: STAGES.length,
+                })}
+              </li>
+            ))}
           </ul>
         </Card>
       </div>
@@ -193,10 +192,28 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
   );
 }
 
+/** The good-to-know notes, in the order they are listed. */
+const TIPS = [
+  'ranked',
+  'clocks',
+  'disconnect',
+  'practice',
+  'journey',
+  'puzzles',
+  'pieces',
+] as const;
+
+/** How long the server holds a dropped player's seat, as the notes describe it. */
+const SEAT_HELD_SECONDS = 45;
+
 /** "3 min", or "2:30" for a clock that is not a whole number of minutes. */
-function clockLength(seconds: number): string {
+function clockLength(
+  seconds: number,
+  locale: Locale,
+  t: (key: 'clockMinutes', values: { count: number }) => string,
+): string {
   const rest = seconds % 60;
-  return rest === 0
-    ? `${seconds / 60} min`
-    : `${Math.floor(seconds / 60)}:${String(rest).padStart(2, '0')}`;
+  if (rest === 0) return t('clockMinutes', { count: seconds / 60 });
+  const padded = new Intl.NumberFormat(locale, { minimumIntegerDigits: 2 }).format(rest);
+  return `${formatNumber(Math.floor(seconds / 60), locale)}:${padded}`;
 }

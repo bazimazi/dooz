@@ -5,6 +5,15 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 
 const BASE = process.env.AUDIT_URL ?? 'http://127.0.0.1:3000';
+
+/**
+ * A sheet gives its history entry back just after it unmounts. A load or
+ * reload started before that Back lands is aborted or left waiting by it, so
+ * wait for the Back - or for long enough that there clearly is none.
+ */
+async function settleSheetHistory(page) {
+  await page.waitForEvent('framenavigated', { timeout: 2000 }).catch(() => undefined);
+}
 const browser = await chromium.launch({ channel: 'chrome' });
 const screenshots = await mkdtemp(join(tmpdir(), 'dooz-graphics-qa-'));
 const errors = [];
@@ -55,6 +64,7 @@ try {
     await page.screenshot({ path: join(screenshots, `settings-low-${width}.png`) });
     await dialog.getByRole('button', { name: 'Done', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
+    await settleSheetHistory(page);
     await page.reload();
     assert.equal(await page.locator('html').getAttribute('data-graphics'), 'low');
 
@@ -70,6 +80,7 @@ try {
         .click();
       await page.getByRole('button', { name: 'Done', exact: true }).click();
       await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+      await settleSheetHistory(page);
       // A direct load also verifies applying the saved preset before rendering.
       await page.goto(`${BASE}/play/local?mode=classic`);
       await page.getByRole('grid').waitFor();

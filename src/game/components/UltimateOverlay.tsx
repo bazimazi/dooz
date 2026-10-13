@@ -25,7 +25,7 @@ export function UltimateOverlay({ game }: { game: GameState }) {
   const playing = game.status === 'playing';
 
   return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+    <div dir="ltr" className="pointer-events-none absolute inset-0" aria-hidden="true">
       <div className="grid h-full w-full grid-cols-3 grid-rows-3">
         {Array.from({ length: 9 }, (_, board) => {
           const owner = meta.boards[board] ?? Empty;

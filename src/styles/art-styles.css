@@ -1,0 +1,924 @@
+/**
+ * Visual styles.
+ *
+ * Each style is a full second (and third) palette laid over the semantic
+ * tokens in `theme.css`, plus a board material, mark accents and a backdrop
+ * (drawn by `components/art/Backdrop.tsx`). The original look - Pastel - is
+ * what the document shows with no `data-style` at all, so nothing here can
+ * change it.
+ *
+ * Every style carries a dark block and a light one, selected the same two
+ * ways the base theme is: by the system preference unless pinned, or by the
+ * pinned `data-theme`. The light blocks are one attribute more specific than
+ * the dark ones, so a style's light palette always beats its own dark one and
+ * the base light palette alike.
+ *
+ * Contrast was checked for every pair a component actually paints text on:
+ * ink, muted and faint ink on canvas, surface, sunken, raised and seat; the
+ * button labels on their fills; the status colours and the O colour (which
+ * doubles as gold for stars and trophies) on the surface - all at least 4.5:1.
+ * The marks hold 3:1 against the board, which is the bar for graphics.
+ *
+ * `--color-b8` is redefined to the style's accent because three components
+ * use it directly as "the highlight colour"; in Pastel it already is.
+ */
+
+:root[data-style='tabletop'] {
+  --color-canvas: #173a2c;
+  --color-surface: #2c1f16;
+  --color-raised: #5c3f27;
+  --color-sunken: #1b130d;
+  --color-stroke: #b88a55;
+  --color-stroke-soft: rgb(184 138 85 / 0.42);
+  --color-grid: #f3d9a8;
+  --color-board: #6a4224;
+  --color-board-edge: #4a2c17;
+  --color-accent: #e0a964;
+  --color-b8: #e0a964;
+  --color-ink: #f7ead6;
+  --color-ink-muted: rgb(247 234 214 / 0.86);
+  --color-ink-faint: rgb(247 234 214 / 0.72);
+  --color-on-raised: #f7ead6;
+  --color-mark-x: #ff8a78;
+  --color-mark-x-edge: #7a1c12;
+  --color-mark-x-soft: #ffc2b5;
+  --color-mark-o: #f7cd5c;
+  --color-mark-o-edge: #6e4a0c;
+  --color-mark-o-soft: #fff0b8;
+  --color-ok: #6ee7a8;
+  --color-warn: #f7cd5c;
+  --color-danger: #ff9585;
+  --color-glow-win: rgb(224 169 100 / 0.4);
+  --color-glow-x: rgb(255 138 120 / 0.55);
+  --color-glow-o: rgb(247 205 92 / 0.55);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+  --color-seat-idle: #3d2b1e;
+  --color-btn-primary: #a8432b;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #4a3322;
+  --color-on-btn-secondary: #f7ead6;
+  --color-backdrop-shape: #14321f;
+  --color-backdrop-glow: #3e6b4c;
+  --color-face: #f7ead6;
+  --color-face-ink: #2c1f16;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-style='tabletop']:not([data-theme='dark']) {
+    --color-canvas: #d9e6d6;
+    --color-surface: #fbf6ec;
+    --color-raised: #ffffff;
+    --color-sunken: #efe3cc;
+    --color-stroke: #b98c58;
+    --color-stroke-soft: rgb(185 140 88 / 0.32);
+    --color-grid: #5a3a1c;
+    --color-board: #e8c690;
+    --color-board-edge: #8a5a2e;
+    --color-accent: #a0682e;
+    --color-b8: #a0682e;
+    --color-ink: #3a2412;
+    --color-ink-muted: rgb(58 36 18 / 0.86);
+    --color-ink-faint: rgb(58 36 18 / 0.72);
+    --color-on-raised: #3a2412;
+    --color-mark-x: #a8182f;
+    --color-mark-x-edge: #5e0a17;
+    --color-mark-x-soft: #e55b6e;
+    --color-mark-o: #7f5300;
+    --color-mark-o-edge: #3f2900;
+    --color-mark-o-soft: #c9902a;
+    --color-ok: #0f6b45;
+    --color-warn: #8a5600;
+    --color-danger: #b4232f;
+    --color-glow-win: rgb(160 104 46 / 0.3);
+    --color-glow-x: rgb(168 24 47 / 0.4);
+    --color-glow-o: rgb(127 83 0 / 0.4);
+    --color-scrim: rgb(58 36 18 / 0.45);
+    --color-shadow: rgb(58 36 18 / 0.35);
+    --color-seat-idle: #f1e6d2;
+    --color-btn-primary: #8e3b22;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #3a2412;
+    --color-backdrop-shape: #c6d8c2;
+    --color-backdrop-glow: #f3e2b0;
+    --color-face: #ffd98a;
+    --color-face-ink: #3a2412;
+  }
+}
+
+:root[data-style='tabletop'][data-theme='light'] {
+  --color-canvas: #d9e6d6;
+  --color-surface: #fbf6ec;
+  --color-raised: #ffffff;
+  --color-sunken: #efe3cc;
+  --color-stroke: #b98c58;
+  --color-stroke-soft: rgb(185 140 88 / 0.32);
+  --color-grid: #5a3a1c;
+  --color-board: #e8c690;
+  --color-board-edge: #8a5a2e;
+  --color-accent: #a0682e;
+  --color-b8: #a0682e;
+  --color-ink: #3a2412;
+  --color-ink-muted: rgb(58 36 18 / 0.86);
+  --color-ink-faint: rgb(58 36 18 / 0.72);
+  --color-on-raised: #3a2412;
+  --color-mark-x: #a8182f;
+  --color-mark-x-edge: #5e0a17;
+  --color-mark-x-soft: #e55b6e;
+  --color-mark-o: #7f5300;
+  --color-mark-o-edge: #3f2900;
+  --color-mark-o-soft: #c9902a;
+  --color-ok: #0f6b45;
+  --color-warn: #8a5600;
+  --color-danger: #b4232f;
+  --color-glow-win: rgb(160 104 46 / 0.3);
+  --color-glow-x: rgb(168 24 47 / 0.4);
+  --color-glow-o: rgb(127 83 0 / 0.4);
+  --color-scrim: rgb(58 36 18 / 0.45);
+  --color-shadow: rgb(58 36 18 / 0.35);
+  --color-seat-idle: #f1e6d2;
+  --color-btn-primary: #8e3b22;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #3a2412;
+  --color-backdrop-shape: #c6d8c2;
+  --color-backdrop-glow: #f3e2b0;
+  --color-face: #ffd98a;
+  --color-face-ink: #3a2412;
+}
+
+:root[data-style='neon'] {
+  --color-canvas: #0b0618;
+  --color-surface: #150c2c;
+  --color-raised: #2c1a5c;
+  --color-sunken: #07030f;
+  --color-stroke: #7b5cff;
+  --color-stroke-soft: rgb(123 92 255 / 0.42);
+  --color-grid: #6a46e0;
+  --color-board: #0d0720;
+  --color-board-edge: #3d24a8;
+  --color-accent: #00e5ff;
+  --color-b8: #00e5ff;
+  --color-ink: #f6f2ff;
+  --color-ink-muted: rgb(246 242 255 / 0.86);
+  --color-ink-faint: rgb(246 242 255 / 0.72);
+  --color-on-raised: #f6f2ff;
+  --color-mark-x: #ff3fb4;
+  --color-mark-x-edge: #9c0068;
+  --color-mark-x-soft: #ffa3e2;
+  --color-mark-o: #ffe14d;
+  --color-mark-o-edge: #9a7a00;
+  --color-mark-o-soft: #fff3a6;
+  --color-ok: #3dffb0;
+  --color-warn: #ffe14d;
+  --color-danger: #ff6b8f;
+  --color-glow-win: rgb(0 229 255 / 0.4);
+  --color-glow-x: rgb(255 63 180 / 0.55);
+  --color-glow-o: rgb(255 225 77 / 0.55);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+  --color-seat-idle: #22154a;
+  --color-btn-primary: #6a2cff;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #2a1a5a;
+  --color-on-btn-secondary: #f6f2ff;
+  --color-backdrop-shape: #1a0f3d;
+  --color-backdrop-glow: #3a1c8c;
+  --color-face: #f6f2ff;
+  --color-face-ink: #6a2cff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-style='neon']:not([data-theme='dark']) {
+    --color-canvas: #efeaff;
+    --color-surface: #ffffff;
+    --color-raised: #ffffff;
+    --color-sunken: #e2d9ff;
+    --color-stroke: #b3a1ff;
+    --color-stroke-soft: rgb(179 161 255 / 0.32);
+    --color-grid: #a58fff;
+    --color-board: #fbf9ff;
+    --color-board-edge: #7b5cff;
+    --color-accent: #5b1fe0;
+    --color-b8: #5b1fe0;
+    --color-ink: #1d0b45;
+    --color-ink-muted: rgb(29 11 69 / 0.86);
+    --color-ink-faint: rgb(29 11 69 / 0.72);
+    --color-on-raised: #1d0b45;
+    --color-mark-x: #d1007a;
+    --color-mark-x-edge: #7a0047;
+    --color-mark-x-soft: #ff5cc0;
+    --color-mark-o: #8f6400;
+    --color-mark-o-edge: #4d3600;
+    --color-mark-o-soft: #e0a800;
+    --color-ok: #057a4f;
+    --color-warn: #8a5a00;
+    --color-danger: #c2003b;
+    --color-glow-win: rgb(91 31 224 / 0.3);
+    --color-glow-x: rgb(209 0 122 / 0.4);
+    --color-glow-o: rgb(143 100 0 / 0.4);
+    --color-scrim: rgb(29 11 69 / 0.45);
+    --color-shadow: rgb(29 11 69 / 0.35);
+    --color-seat-idle: #ebe5ff;
+    --color-btn-primary: #5b1fe0;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #1d0b45;
+    --color-backdrop-shape: #ded3ff;
+    --color-backdrop-glow: #cbbaff;
+    --color-face: #ffd98a;
+    --color-face-ink: #1d0b45;
+  }
+}
+
+:root[data-style='neon'][data-theme='light'] {
+  --color-canvas: #efeaff;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+  --color-sunken: #e2d9ff;
+  --color-stroke: #b3a1ff;
+  --color-stroke-soft: rgb(179 161 255 / 0.32);
+  --color-grid: #a58fff;
+  --color-board: #fbf9ff;
+  --color-board-edge: #7b5cff;
+  --color-accent: #5b1fe0;
+  --color-b8: #5b1fe0;
+  --color-ink: #1d0b45;
+  --color-ink-muted: rgb(29 11 69 / 0.86);
+  --color-ink-faint: rgb(29 11 69 / 0.72);
+  --color-on-raised: #1d0b45;
+  --color-mark-x: #d1007a;
+  --color-mark-x-edge: #7a0047;
+  --color-mark-x-soft: #ff5cc0;
+  --color-mark-o: #8f6400;
+  --color-mark-o-edge: #4d3600;
+  --color-mark-o-soft: #e0a800;
+  --color-ok: #057a4f;
+  --color-warn: #8a5a00;
+  --color-danger: #c2003b;
+  --color-glow-win: rgb(91 31 224 / 0.3);
+  --color-glow-x: rgb(209 0 122 / 0.4);
+  --color-glow-o: rgb(143 100 0 / 0.4);
+  --color-scrim: rgb(29 11 69 / 0.45);
+  --color-shadow: rgb(29 11 69 / 0.35);
+  --color-seat-idle: #ebe5ff;
+  --color-btn-primary: #5b1fe0;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #1d0b45;
+  --color-backdrop-shape: #ded3ff;
+  --color-backdrop-glow: #cbbaff;
+  --color-face: #ffd98a;
+  --color-face-ink: #1d0b45;
+}
+
+:root[data-style='paper'] {
+  --color-canvas: #2a2f3b;
+  --color-surface: #363c4a;
+  --color-raised: #4c5467;
+  --color-sunken: #20242e;
+  --color-stroke: #8a96b0;
+  --color-stroke-soft: rgb(138 150 176 / 0.42);
+  --color-grid: #7f8cab;
+  --color-board: #323846;
+  --color-board-edge: #1d2129;
+  --color-accent: #8ab4ff;
+  --color-b8: #8ab4ff;
+  --color-ink: #fbf7ee;
+  --color-ink-muted: rgb(251 247 238 / 0.86);
+  --color-ink-faint: rgb(251 247 238 / 0.72);
+  --color-on-raised: #fbf7ee;
+  --color-mark-x: #ff79ad;
+  --color-mark-x-edge: #a3245a;
+  --color-mark-x-soft: #ffc0d8;
+  --color-mark-o: #ffcd57;
+  --color-mark-o-edge: #93680a;
+  --color-mark-o-soft: #ffe7a8;
+  --color-ok: #6fe3b0;
+  --color-warn: #ffcd57;
+  --color-danger: #ff8f9c;
+  --color-glow-win: rgb(138 180 255 / 0.4);
+  --color-glow-x: rgb(255 121 173 / 0.55);
+  --color-glow-o: rgb(255 205 87 / 0.55);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+  --color-seat-idle: #414858;
+  --color-btn-primary: #c03c63;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #4c5467;
+  --color-on-btn-secondary: #fbf7ee;
+  --color-backdrop-shape: #353b4a;
+  --color-backdrop-glow: #454d60;
+  --color-face: #fbf7ee;
+  --color-face-ink: #363c4a;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-style='paper']:not([data-theme='dark']) {
+    --color-canvas: #ece2cc;
+    --color-surface: #fffdf7;
+    --color-raised: #ffffff;
+    --color-sunken: #f3ead6;
+    --color-stroke: #c9b48c;
+    --color-stroke-soft: rgb(201 180 140 / 0.32);
+    --color-grid: #8fb0e0;
+    --color-board: #fffdf4;
+    --color-board-edge: #d8c7a2;
+    --color-accent: #3b6fd1;
+    --color-b8: #3b6fd1;
+    --color-ink: #2e2a24;
+    --color-ink-muted: rgb(46 42 36 / 0.86);
+    --color-ink-faint: rgb(46 42 36 / 0.72);
+    --color-on-raised: #2e2a24;
+    --color-mark-x: #c8195f;
+    --color-mark-x-edge: #73082f;
+    --color-mark-x-soft: #f06a9c;
+    --color-mark-o: #946000;
+    --color-mark-o-edge: #4a3000;
+    --color-mark-o-soft: #d9a030;
+    --color-ok: #0b6e47;
+    --color-warn: #8a5600;
+    --color-danger: #b8192c;
+    --color-glow-win: rgb(59 111 209 / 0.3);
+    --color-glow-x: rgb(200 25 95 / 0.4);
+    --color-glow-o: rgb(148 96 0 / 0.4);
+    --color-scrim: rgb(46 42 36 / 0.45);
+    --color-shadow: rgb(46 42 36 / 0.35);
+    --color-seat-idle: #f6eedd;
+    --color-btn-primary: #b8285a;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #2e2a24;
+    --color-backdrop-shape: #e3d6b8;
+    --color-backdrop-glow: #f7efdc;
+    --color-face: #ffd98a;
+    --color-face-ink: #2e2a24;
+  }
+}
+
+:root[data-style='paper'][data-theme='light'] {
+  --color-canvas: #ece2cc;
+  --color-surface: #fffdf7;
+  --color-raised: #ffffff;
+  --color-sunken: #f3ead6;
+  --color-stroke: #c9b48c;
+  --color-stroke-soft: rgb(201 180 140 / 0.32);
+  --color-grid: #8fb0e0;
+  --color-board: #fffdf4;
+  --color-board-edge: #d8c7a2;
+  --color-accent: #3b6fd1;
+  --color-b8: #3b6fd1;
+  --color-ink: #2e2a24;
+  --color-ink-muted: rgb(46 42 36 / 0.86);
+  --color-ink-faint: rgb(46 42 36 / 0.72);
+  --color-on-raised: #2e2a24;
+  --color-mark-x: #c8195f;
+  --color-mark-x-edge: #73082f;
+  --color-mark-x-soft: #f06a9c;
+  --color-mark-o: #946000;
+  --color-mark-o-edge: #4a3000;
+  --color-mark-o-soft: #d9a030;
+  --color-ok: #0b6e47;
+  --color-warn: #8a5600;
+  --color-danger: #b8192c;
+  --color-glow-win: rgb(59 111 209 / 0.3);
+  --color-glow-x: rgb(200 25 95 / 0.4);
+  --color-glow-o: rgb(148 96 0 / 0.4);
+  --color-scrim: rgb(46 42 36 / 0.45);
+  --color-shadow: rgb(46 42 36 / 0.35);
+  --color-seat-idle: #f6eedd;
+  --color-btn-primary: #b8285a;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #2e2a24;
+  --color-backdrop-shape: #e3d6b8;
+  --color-backdrop-glow: #f7efdc;
+  --color-face: #ffd98a;
+  --color-face-ink: #2e2a24;
+}
+
+:root[data-style='ink'] {
+  --color-canvas: #14120e;
+  --color-surface: #211e18;
+  --color-raised: #3a352b;
+  --color-sunken: #0d0c09;
+  --color-stroke: #7d725d;
+  --color-stroke-soft: rgb(125 114 93 / 0.42);
+  --color-grid: #5c5444;
+  --color-board: #1b1914;
+  --color-board-edge: #2e2a22;
+  --color-accent: #ff6648;
+  --color-b8: #ff6648;
+  --color-ink: #f2ead8;
+  --color-ink-muted: rgb(242 234 216 / 0.86);
+  --color-ink-faint: rgb(242 234 216 / 0.72);
+  --color-on-raised: #f2ead8;
+  --color-mark-x: #ff6648;
+  --color-mark-x-edge: #8a1d0a;
+  --color-mark-x-soft: #ffa38f;
+  --color-mark-o: #efe6d0;
+  --color-mark-o-edge: #7a705c;
+  --color-mark-o-soft: #ffffff;
+  --color-ok: #8ed6a8;
+  --color-warn: #e8c06a;
+  --color-danger: #ff8a75;
+  --color-glow-win: rgb(255 102 72 / 0.4);
+  --color-glow-x: rgb(255 102 72 / 0.55);
+  --color-glow-o: rgb(239 230 208 / 0.55);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+  --color-seat-idle: #2c2821;
+  --color-btn-primary: #b3311d;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #3a352b;
+  --color-on-btn-secondary: #f2ead8;
+  --color-backdrop-shape: #1c1a15;
+  --color-backdrop-glow: #2c2820;
+  --color-face: #f2ead8;
+  --color-face-ink: #211e18;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-style='ink']:not([data-theme='dark']) {
+    --color-canvas: #efe7d6;
+    --color-surface: #fbf7ee;
+    --color-raised: #ffffff;
+    --color-sunken: #e9dfca;
+    --color-stroke: #b5a888;
+    --color-stroke-soft: rgb(181 168 136 / 0.32);
+    --color-grid: #a89a7c;
+    --color-board: #f8f2e4;
+    --color-board-edge: #cbbd9c;
+    --color-accent: #c1271a;
+    --color-b8: #c1271a;
+    --color-ink: #1e1a14;
+    --color-ink-muted: rgb(30 26 20 / 0.86);
+    --color-ink-faint: rgb(30 26 20 / 0.72);
+    --color-on-raised: #1e1a14;
+    --color-mark-x: #c1271a;
+    --color-mark-x-edge: #6e1208;
+    --color-mark-x-soft: #e76a57;
+    --color-mark-o: #24211c;
+    --color-mark-o-edge: #000000;
+    --color-mark-o-soft: #6b6458;
+    --color-ok: #2f6b45;
+    --color-warn: #7a5300;
+    --color-danger: #b02418;
+    --color-glow-win: rgb(193 39 26 / 0.3);
+    --color-glow-x: rgb(193 39 26 / 0.4);
+    --color-glow-o: rgb(36 33 28 / 0.4);
+    --color-scrim: rgb(30 26 20 / 0.45);
+    --color-shadow: rgb(30 26 20 / 0.35);
+    --color-seat-idle: #f3ecdc;
+    --color-btn-primary: #a82316;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #1e1a14;
+    --color-backdrop-shape: #e2d8c2;
+    --color-backdrop-glow: #f7f1e3;
+    --color-face: #f2d9a0;
+    --color-face-ink: #1e1a14;
+  }
+}
+
+:root[data-style='ink'][data-theme='light'] {
+  --color-canvas: #efe7d6;
+  --color-surface: #fbf7ee;
+  --color-raised: #ffffff;
+  --color-sunken: #e9dfca;
+  --color-stroke: #b5a888;
+  --color-stroke-soft: rgb(181 168 136 / 0.32);
+  --color-grid: #a89a7c;
+  --color-board: #f8f2e4;
+  --color-board-edge: #cbbd9c;
+  --color-accent: #c1271a;
+  --color-b8: #c1271a;
+  --color-ink: #1e1a14;
+  --color-ink-muted: rgb(30 26 20 / 0.86);
+  --color-ink-faint: rgb(30 26 20 / 0.72);
+  --color-on-raised: #1e1a14;
+  --color-mark-x: #c1271a;
+  --color-mark-x-edge: #6e1208;
+  --color-mark-x-soft: #e76a57;
+  --color-mark-o: #24211c;
+  --color-mark-o-edge: #000000;
+  --color-mark-o-soft: #6b6458;
+  --color-ok: #2f6b45;
+  --color-warn: #7a5300;
+  --color-danger: #b02418;
+  --color-glow-win: rgb(193 39 26 / 0.3);
+  --color-glow-x: rgb(193 39 26 / 0.4);
+  --color-glow-o: rgb(36 33 28 / 0.4);
+  --color-scrim: rgb(30 26 20 / 0.45);
+  --color-shadow: rgb(30 26 20 / 0.35);
+  --color-seat-idle: #f3ecdc;
+  --color-btn-primary: #a82316;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #1e1a14;
+  --color-backdrop-shape: #e2d8c2;
+  --color-backdrop-glow: #f7f1e3;
+  --color-face: #f2d9a0;
+  --color-face-ink: #1e1a14;
+}
+
+:root[data-style='chalkboard'] {
+  --color-canvas: #1c2a24;
+  --color-surface: #24342d;
+  --color-raised: #3a5046;
+  --color-sunken: #14201b;
+  --color-stroke: #8aa898;
+  --color-stroke-soft: rgb(138 168 152 / 0.42);
+  --color-grid: #c9d4c9;
+  --color-board: #2a3c33;
+  --color-board-edge: #7a5634;
+  --color-accent: #9dd8ff;
+  --color-b8: #9dd8ff;
+  --color-ink: #f1f3ec;
+  --color-ink-muted: rgb(241 243 236 / 0.86);
+  --color-ink-faint: rgb(241 243 236 / 0.72);
+  --color-on-raised: #f1f3ec;
+  --color-mark-x: #ff9ec4;
+  --color-mark-x-edge: #b0386a;
+  --color-mark-x-soft: #ffd0e2;
+  --color-mark-o: #ffe08a;
+  --color-mark-o-edge: #a37d1a;
+  --color-mark-o-soft: #fff1c4;
+  --color-ok: #9df0c0;
+  --color-warn: #ffe08a;
+  --color-danger: #ffa8a8;
+  --color-glow-win: rgb(157 216 255 / 0.4);
+  --color-glow-x: rgb(255 158 196 / 0.55);
+  --color-glow-o: rgb(255 224 138 / 0.55);
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-shadow: rgb(0 0 0 / 0.9);
+  --color-seat-idle: #2e4239;
+  --color-btn-primary: #3c7560;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #3a5046;
+  --color-on-btn-secondary: #f1f3ec;
+  --color-backdrop-shape: #22332b;
+  --color-backdrop-glow: #2f463b;
+  --color-face: #f1f3ec;
+  --color-face-ink: #24342d;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-style='chalkboard']:not([data-theme='dark']) {
+    --color-canvas: #e6ebe6;
+    --color-surface: #ffffff;
+    --color-raised: #ffffff;
+    --color-sunken: #e9eee9;
+    --color-stroke: #a9b8ae;
+    --color-stroke-soft: rgb(169 184 174 / 0.32);
+    --color-grid: #9fb0a6;
+    --color-board: #fcfdfb;
+    --color-board-edge: #b9c2bc;
+    --color-accent: #1f6bd1;
+    --color-b8: #1f6bd1;
+    --color-ink: #1d2a24;
+    --color-ink-muted: rgb(29 42 36 / 0.86);
+    --color-ink-faint: rgb(29 42 36 / 0.72);
+    --color-on-raised: #1d2a24;
+    --color-mark-x: #c8105a;
+    --color-mark-x-edge: #6d0731;
+    --color-mark-x-soft: #ef5f97;
+    --color-mark-o: #875a00;
+    --color-mark-o-edge: #3f2a00;
+    --color-mark-o-soft: #d29a20;
+    --color-ok: #0b6b44;
+    --color-warn: #7d5200;
+    --color-danger: #b3122a;
+    --color-glow-win: rgb(31 107 209 / 0.3);
+    --color-glow-x: rgb(200 16 90 / 0.4);
+    --color-glow-o: rgb(135 90 0 / 0.4);
+    --color-scrim: rgb(29 42 36 / 0.45);
+    --color-shadow: rgb(29 42 36 / 0.35);
+    --color-seat-idle: #eef2ee;
+    --color-btn-primary: #1f6b52;
+    --color-on-btn-primary: #ffffff;
+    --color-btn-secondary: #ffffff;
+    --color-on-btn-secondary: #1d2a24;
+    --color-backdrop-shape: #d6ded8;
+    --color-backdrop-glow: #f2f5f2;
+    --color-face: #ffd98a;
+    --color-face-ink: #1d2a24;
+  }
+}
+
+:root[data-style='chalkboard'][data-theme='light'] {
+  --color-canvas: #e6ebe6;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+  --color-sunken: #e9eee9;
+  --color-stroke: #a9b8ae;
+  --color-stroke-soft: rgb(169 184 174 / 0.32);
+  --color-grid: #9fb0a6;
+  --color-board: #fcfdfb;
+  --color-board-edge: #b9c2bc;
+  --color-accent: #1f6bd1;
+  --color-b8: #1f6bd1;
+  --color-ink: #1d2a24;
+  --color-ink-muted: rgb(29 42 36 / 0.86);
+  --color-ink-faint: rgb(29 42 36 / 0.72);
+  --color-on-raised: #1d2a24;
+  --color-mark-x: #c8105a;
+  --color-mark-x-edge: #6d0731;
+  --color-mark-x-soft: #ef5f97;
+  --color-mark-o: #875a00;
+  --color-mark-o-edge: #3f2a00;
+  --color-mark-o-soft: #d29a20;
+  --color-ok: #0b6b44;
+  --color-warn: #7d5200;
+  --color-danger: #b3122a;
+  --color-glow-win: rgb(31 107 209 / 0.3);
+  --color-glow-x: rgb(200 16 90 / 0.4);
+  --color-glow-o: rgb(135 90 0 / 0.4);
+  --color-scrim: rgb(29 42 36 / 0.45);
+  --color-shadow: rgb(29 42 36 / 0.35);
+  --color-seat-idle: #eef2ee;
+  --color-btn-primary: #1f6b52;
+  --color-on-btn-primary: #ffffff;
+  --color-btn-secondary: #ffffff;
+  --color-on-btn-secondary: #1d2a24;
+  --color-backdrop-shape: #d6ded8;
+  --color-backdrop-glow: #f2f5f2;
+  --color-face: #ffd98a;
+  --color-face-ink: #1d2a24;
+}
+
+/* --------------------------------------------------------------------------
+   Board materials
+   --------------------------------------------------------------------------
+   The board is three layers a style can dress independently: the frame around
+   it (`.board-frame`), the surface the marks sit on (`.board-surface`, a flat
+   `--color-board` under an optional `--board-material` image) and the rules
+   between the squares (`.board-cell` borders). Materials are CSS gradients
+   only - no images to fetch, nothing to decode, and they recolour with the
+   light and dark palettes above because they lean on the same tokens.
+
+   `--board-size` is set on the surface by the board, so a material can scale
+   its pattern to the squares (the paper style's graph ruling does).
+   -------------------------------------------------------------------------- */
+
+/* The shorthand, not `background-image`: some materials size and place their
+   layers (`0 0 / 23px 19px`), which only the shorthand accepts. */
+.board-surface {
+  background: var(--board-material, none), var(--color-board);
+}
+
+/* Tabletop: a wooden board under a lamp. Grain is two crossing repeats at
+   slightly different angles, so it never lines up into stripes, and the lamp
+   is a warm pool in the top-left that the stones' shading agrees with. */
+:root[data-style='tabletop'] .board-surface {
+  --board-material:
+    radial-gradient(ellipse 110% 85% at 22% 12%, rgb(255 228 180 / 0.2), transparent 62%),
+    repeating-linear-gradient(97deg, rgb(255 240 220 / 0.045) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(84deg, rgb(40 18 4 / 0.12) 0 1px, transparent 1px 13px),
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(0 0 0 / 0.12));
+}
+
+:root[data-style='tabletop'] .board-frame {
+  border-color: color-mix(in srgb, var(--color-board-edge) 70%, black);
+  background:
+    repeating-linear-gradient(95deg, rgb(255 230 200 / 0.05) 0 2px, transparent 2px 10px),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--color-board-edge) 85%, white),
+      var(--color-board-edge)
+    );
+  backdrop-filter: none;
+}
+
+:root[data-style='tabletop'][data-graphics='high'] .board-frame {
+  box-shadow:
+    inset 0 1px 0 rgb(255 240 210 / 0.35),
+    inset 0 -2px 0 rgb(0 0 0 / 0.25),
+    0 22px 40px -18px rgb(0 0 0 / 0.75),
+    0 6px 12px -6px rgb(0 0 0 / 0.5);
+}
+
+:root[data-style='tabletop'] .board-cell {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-grid) 58%, transparent);
+}
+
+/* On a goban the lines run through the squares' centres and the stones sit
+   on the intersections. The board draws those lines itself (see
+   `BoardMaterial`); the square edges step aside. */
+.board-surface[data-goban] .board-cell {
+  border-color: transparent;
+}
+
+/* Neon: a cabinet screen. Faint scanlines and a glow pooled in the middle;
+   the rules are lit tubes in the accent colour. */
+:root[data-style='neon'] .board-surface {
+  --board-material:
+    radial-gradient(
+      ellipse 75% 75% at 50% 50%,
+      color-mix(in srgb, var(--color-stroke) 18%, transparent),
+      transparent 72%
+    ),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.028) 0 1px, transparent 1px 4px);
+}
+
+:root[data-style='neon'] .board-frame {
+  border-color: var(--color-stroke);
+  background: color-mix(in srgb, var(--color-board) 80%, var(--color-stroke));
+  backdrop-filter: none;
+}
+
+:root[data-style='neon'][data-graphics='high'] .board-frame {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-stroke) 70%, transparent),
+    0 0 22px -2px color-mix(in srgb, var(--color-stroke) 70%, transparent),
+    inset 0 0 18px -6px color-mix(in srgb, var(--color-accent) 60%, transparent);
+}
+
+:root[data-style='neon'] .board-cell {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-grid) 70%, transparent);
+}
+
+/* Paper craft: a sheet of graph paper with a red margin, laid on a stack of
+   cut card. The stack is offset hard shadows, which is what cut paper casts
+   under one light - and costs nothing to draw. */
+:root[data-style='paper'] .board-surface {
+  --sub: calc(100% / (var(--board-size, 3) * 2));
+  --board-material:
+    linear-gradient(
+      90deg,
+      transparent 5.5%,
+      rgb(230 70 90 / 0.42) 5.5%,
+      rgb(230 70 90 / 0.42) calc(5.5% + 1.5px),
+      transparent calc(5.5% + 1.5px)
+    ),
+    linear-gradient(color-mix(in srgb, var(--color-grid) 22%, transparent) 1px, transparent 1px) 0
+      0 / var(--sub) var(--sub),
+    linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-grid) 22%, transparent) 1px,
+        transparent 1px
+      )
+      0 0 / var(--sub) var(--sub);
+}
+
+:root[data-style='paper'] .board-frame {
+  border-color: var(--color-board-edge);
+  background: var(--color-board);
+  backdrop-filter: none;
+}
+
+:root[data-style='paper']:not([data-graphics='low']) .board-frame {
+  box-shadow:
+    5px 6px 0 -1px color-mix(in srgb, var(--color-mark-o) 55%, var(--color-board)),
+    10px 12px 0 -2px color-mix(in srgb, var(--color-mark-x) 45%, var(--color-board)),
+    12px 16px 22px -12px var(--color-shadow);
+}
+
+:root[data-style='paper'] .board-cell {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-grid) 75%, transparent);
+}
+
+/* Ink and Zen: rice paper with its fibres, and rules as thin brush lines. */
+:root[data-style='ink'] .board-surface {
+  --board-material:
+    radial-gradient(circle at 20% 30%, rgb(120 100 70 / 0.07) 0 1.5px, transparent 2.5px) 0 0 / 23px
+      19px,
+    radial-gradient(circle at 70% 60%, rgb(120 100 70 / 0.06) 0 1px, transparent 2px) 0 0 / 31px
+      27px,
+    radial-gradient(ellipse 90% 90% at 50% 50%, transparent 55%, rgb(90 70 40 / 0.1));
+}
+
+:root[data-style='ink'] .board-frame {
+  border-color: color-mix(in srgb, var(--color-ink) 22%, transparent);
+  background: color-mix(in srgb, var(--color-board) 85%, var(--color-ink));
+  backdrop-filter: none;
+}
+
+:root[data-style='ink'] .board-cell {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-grid) 80%, transparent);
+}
+
+/* Chalkboard: slate with the ghosts of old lessons wiped across it, in a
+   wooden frame. The rules stay dashed - chalk skips on slate. */
+:root[data-style='chalkboard'] .board-surface {
+  --board-material:
+    radial-gradient(ellipse 60% 38% at 28% 26%, rgb(255 255 255 / 0.07), transparent 70%),
+    radial-gradient(ellipse 48% 30% at 74% 72%, rgb(255 255 255 / 0.055), transparent 70%),
+    radial-gradient(ellipse 30% 20% at 70% 18%, rgb(255 255 255 / 0.04), transparent 70%);
+}
+
+:root[data-style='chalkboard'] .board-frame {
+  border: 0.45rem solid var(--color-board-edge);
+  background: var(--color-board);
+  backdrop-filter: none;
+}
+
+:root[data-style='chalkboard'] .board-cell {
+  border-color: color-mix(in srgb, var(--color-grid) 55%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   Mark accents
+   --------------------------------------------------------------------------
+   The piece set draws the mark; the style lights it. Every accent here sits on
+   `.board-mark`, the wrapper around one mark on the board, which carries the
+   owner in `data-player`. Filters only ever apply on High - the graphics
+   presets strip them below that anyway - and only on boards small enough that
+   a filter per mark is affordable (`.board-surface[data-dense]` opts out).
+   -------------------------------------------------------------------------- */
+
+.board-mark {
+  isolation: isolate;
+}
+
+.board-mark[data-player='x'] {
+  --mark-glow: var(--color-glow-x);
+}
+
+.board-mark[data-player='o'] {
+  --mark-glow: var(--color-glow-o);
+}
+
+/* Tabletop: a contact shadow under each stone at every quality, and real
+   specular shading on High, lit from the lamp in the top-left. */
+:root[data-style='tabletop']:not([data-graphics='low']) .board-mark::before {
+  content: '';
+  position: absolute;
+  inset: 12% 6% -8% 10%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.45), transparent);
+  pointer-events: none;
+}
+
+:root[data-style='tabletop'][data-graphics='high']
+  .board-surface:not([data-dense])
+  .board-mark
+  > svg {
+  filter: url(#dooz-stone);
+}
+
+/* Neon: a soft halo behind the tube on Balanced, true bloom on High. */
+:root[data-style='neon']:not([data-graphics='low']) .board-mark::before {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--mark-glow), transparent);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+:root[data-style='neon'][data-graphics='high'] .board-surface:not([data-dense]) .board-mark > svg {
+  filter: drop-shadow(0 0 3px var(--mark-glow)) drop-shadow(0 0 9px var(--mark-glow));
+}
+
+/* Paper: each mark is a piece cut out and laid down slightly askew. */
+:root[data-style='paper'] .board-mark {
+  rotate: var(--tilt, 0deg);
+}
+
+:root[data-style='paper'][data-graphics='high'] .board-surface:not([data-dense]) .board-mark > svg {
+  filter: drop-shadow(1.5px 2.5px 0 rgb(0 0 0 / 0.22));
+}
+
+/* Ink: the brush bleeds into the paper at the stroke's edge. */
+:root[data-style='ink'][data-graphics='high'] .board-surface:not([data-dense]) .board-mark > svg {
+  filter: url(#dooz-ink-bleed);
+}
+
+/* Chalk: grain, as if the stick skipped over the slate. */
+:root[data-style='chalkboard'][data-graphics='high']
+  .board-surface:not([data-dense])
+  .board-mark
+  > svg {
+  filter: url(#dooz-chalk-grain);
+}
+
+/* --------------------------------------------------------------------------
+   Rival worlds
+   --------------------------------------------------------------------------
+   A journey rival's world is a tint laid over whatever style the player
+   chose, not a replacement for it: `--world-tint` washes the board surface
+   and `--world-accent` lights its frame. Set from `features/journey/worlds.ts`.
+   -------------------------------------------------------------------------- */
+
+:root[data-world] .board-surface {
+  background:
+    linear-gradient(var(--world-tint, transparent), var(--world-tint, transparent)),
+    var(--board-material, none), var(--color-board);
+}
+
+:root[data-world] .board-frame {
+  border-color: color-mix(
+    in srgb,
+    var(--world-accent, var(--color-stroke)) 70%,
+    var(--color-stroke)
+  );
+}

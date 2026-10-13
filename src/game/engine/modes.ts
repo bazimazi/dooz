@@ -1,4 +1,5 @@
-import { type GameConfig, isGameConfig, sameConfig, type VariantId } from './types.js';
+import { isGameConfig, sameConfig, variantName } from './config.js';
+import type { GameConfig } from './types.js';
 
 /**
  * The curated list of games dooz offers.
@@ -22,7 +23,17 @@ export type ModeId =
   | 'misere'
   | 'vanish'
   | 'gravity'
-  | 'ultimate';
+  | 'ultimate'
+  | 'pente'
+  | 'qubic'
+  | 'quantum'
+  | 'gomoku-pro'
+  | 'connect4'
+  | 'wild'
+  | 'wild-4'
+  | 'order-chaos'
+  | 'obstacles'
+  | 'powers';
 
 export type ModeGroup = 'classic' | 'large' | 'variant';
 
@@ -57,7 +68,9 @@ export const GAME_MODES: readonly GameMode[] = [
     ],
     config: { variant: 'classic', size: 3, winLength: 3 },
     group: 'classic',
-    ranked: true,
+    // Solved: two careful players always draw, so a ladder on it would only
+    // measure who blunders first.
+    ranked: false,
     clock: { initialSeconds: 120, incrementSeconds: 3 },
   },
   {
@@ -113,7 +126,9 @@ export const GAME_MODES: readonly GameMode[] = [
     ],
     config: { variant: 'gomoku', size: 15, winLength: 5 },
     group: 'large',
-    ranked: true,
+    // Freestyle gomoku is a proven first-player win; the ladder lives on Gomoku
+    // Pro, whose opening rules take that edge away.
+    ranked: false,
     clock: { initialSeconds: 480, incrementSeconds: 10 },
   },
   {
@@ -127,7 +142,8 @@ export const GAME_MODES: readonly GameMode[] = [
     ],
     config: { variant: 'misere', size: 3, winLength: 3 },
     group: 'variant',
-    ranked: true,
+    // Solved like the classic board it is played on.
+    ranked: false,
     clock: { initialSeconds: 120, incrementSeconds: 3 },
   },
   {
@@ -177,6 +193,156 @@ export const GAME_MODES: readonly GameMode[] = [
     ranked: true,
     clock: { initialSeconds: 420, incrementSeconds: 8 },
   },
+  {
+    id: 'pente',
+    name: 'Pente',
+    tagline: 'Five in a row — or five captured pairs',
+    rules: [
+      'Take turns placing your mark on any empty point of a 13×13 board.',
+      'Flank exactly two of your opponent’s marks in a line — X O O X — and you capture them: they leave the board.',
+      'Only the mark you place captures. Moving into a flanked spot yourself is safe.',
+      'Win with five in a row, or by capturing five pairs.',
+    ],
+    config: { variant: 'pente', size: 13, winLength: 5 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 420, incrementSeconds: 8 },
+  },
+  {
+    id: 'qubic',
+    name: 'Qubic',
+    tagline: 'Four in a row inside a 4×4×4 cube',
+    rules: [
+      'The board is a cube: four layers of 4×4, stacked.',
+      'Take turns placing your mark in any empty cell of any layer.',
+      'Get four in a row — within a layer, straight down through all four layers, or diagonally through the cube.',
+      'There are 76 lines. Threats in two layers at once are how games are won.',
+    ],
+    config: { variant: 'qubic', size: 8, winLength: 4 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 300, incrementSeconds: 5 },
+  },
+  {
+    id: 'quantum',
+    name: 'Quantum',
+    tagline: 'Every mark is in two places at once',
+    rules: [
+      'Each move puts one spooky mark in two different squares at once, numbered by the move.',
+      'When the spooky marks form a closed loop, the loop collapses: the other player chooses where the newest mark really is, and every mark on the loop settles into one square.',
+      'Collapsed marks are ordinary marks. Three of yours in a row wins.',
+      'If one collapse makes lines for both players, the line whose newest mark is older wins.',
+    ],
+    config: { variant: 'quantum', size: 3, winLength: 3 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 240, incrementSeconds: 5 },
+  },
+  {
+    id: 'gomoku-pro',
+    name: 'Gomoku Pro',
+    tagline: 'Exactly five on 15×15, with the swap',
+    rules: [
+      'Take turns placing your mark on any empty point.',
+      'Get exactly five in a row to win. Six or more in a line does not count.',
+      'Swap rule: after the first mark, the second player may take it as their own instead of replying. The opener then moves again.',
+      'So open with a mark you would be happy to play either side of.',
+    ],
+    config: { variant: 'gomoku', size: 15, winLength: 5, exact: true, opening: 'swap' },
+    group: 'large',
+    ranked: true,
+    clock: { initialSeconds: 600, incrementSeconds: 10 },
+  },
+  {
+    id: 'connect4',
+    name: 'Connect Four',
+    tagline: 'Drop discs — four in a row on 7×6',
+    rules: [
+      'Pick one of the seven columns. Your disc drops to the lowest empty slot in it.',
+      'Get four of your discs in a row — across, down or diagonally.',
+      'Each column holds six discs. A full board with no line is a draw.',
+      'Swap rule: after the first disc, the second player may take it as their own.',
+    ],
+    config: { variant: 'connect4', size: 7, winLength: 4, opening: 'swap' },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 300, incrementSeconds: 5 },
+  },
+  {
+    id: 'wild',
+    name: 'Wild',
+    tagline: 'Place X or O — any line wins for you',
+    rules: [
+      'On your turn, choose X or O, then place it on an empty square.',
+      'Complete three in a row of either mark and you win — whoever made the line.',
+      'Every two-in-a-row is a gift to the next player. Leave none behind.',
+      'A full board with no line is a draw.',
+    ],
+    config: { variant: 'wild', size: 3, winLength: 3 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 120, incrementSeconds: 3 },
+  },
+  {
+    id: 'wild-4',
+    name: 'Wild 4',
+    tagline: 'Wild rules — four in a row on 4×4',
+    rules: [
+      'On your turn, choose X or O, then place it on an empty square.',
+      'Complete four in a row of either mark and you win.',
+      'Three alike with a gap is a win waiting for the next player. Spoil lines with the other mark.',
+      'A full board with no line is a draw.',
+    ],
+    config: { variant: 'wild', size: 4, winLength: 4 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 150, incrementSeconds: 3 },
+  },
+  {
+    id: 'order-chaos',
+    name: 'Order & Chaos',
+    tagline: 'One builds five alike, one spoils it',
+    rules: [
+      'One player is Order, the other is Chaos. Both may place an X or an O on any empty square.',
+      'Order wins as soon as five identical marks stand in a row — whoever placed the last one.',
+      'Chaos wins if the board fills up without one. There are no draws.',
+      'Order sits in the X seat and Chaos in the O seat — the marks themselves belong to nobody.',
+    ],
+    config: { variant: 'order-chaos', size: 6, winLength: 5 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 300, incrementSeconds: 5 },
+  },
+  {
+    id: 'obstacles',
+    name: 'Obstacles',
+    tagline: 'Five in a row around rocks on 9×9',
+    rules: [
+      'A few squares are rocks: nobody can play on them and no line passes through.',
+      'Take turns placing your mark on an empty square.',
+      'Get five of your marks in a row — across, down or diagonally.',
+      'Every game scatters the rocks differently, always in a balanced pattern.',
+    ],
+    config: { variant: 'obstacles', size: 9, winLength: 5 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 300, incrementSeconds: 5 },
+  },
+  {
+    id: 'powers',
+    name: 'Powers',
+    tagline: 'Five in a row with a bomb and a wall',
+    rules: [
+      'Take turns placing your mark. Five in a row wins, on a 9×9 board.',
+      'Once per game you may use a Bomb instead of placing: remove any one of your opponent’s marks.',
+      'Once per game you may build a Wall instead: block an empty square for good.',
+      'Using a power is your whole turn.',
+    ],
+    config: { variant: 'powers', size: 9, winLength: 5 },
+    group: 'variant',
+    ranked: false,
+    clock: { initialSeconds: 360, incrementSeconds: 6 },
+  },
 ];
 
 const BY_ID = new Map<ModeId, GameMode>(GAME_MODES.map((mode) => [mode.id, mode]));
@@ -207,17 +373,8 @@ export function modeForConfig(config: GameConfig): GameMode | null {
 export function describeConfig(config: GameConfig): string {
   const mode = modeForConfig(config);
   if (mode) return mode.name;
-  return `${VARIANT_NAMES[config.variant]} ${config.size}×${config.size} · ${config.winLength} in a row`;
+  return `${variantName(config)} ${config.size}×${config.size} · ${config.winLength} in a row`;
 }
-
-const VARIANT_NAMES: Record<VariantId, string> = {
-  classic: 'Custom',
-  gomoku: 'Gomoku',
-  misere: 'Misère',
-  gravity: 'Gravity',
-  vanish: 'Vanish',
-  ultimate: 'Ultimate',
-};
 
 /** Modes with a ladder, in the order a leaderboard should list them. */
 export const RANKED_MODES: readonly GameMode[] = GAME_MODES.filter((mode) => mode.ranked);

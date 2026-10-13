@@ -56,7 +56,9 @@ export function Tabs<T extends string>({
    * than one per mode.
    */
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    const delta = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    // The strip runs the other way in right-to-left text, and so do the arrows.
+    const forward = getComputedStyle(event.currentTarget).direction === 'rtl' ? -1 : 1;
+    const delta = event.key === 'ArrowRight' ? forward : event.key === 'ArrowLeft' ? -forward : 0;
     if (delta === 0) return;
 
     const index = options.findIndex((option) => option.value === value);

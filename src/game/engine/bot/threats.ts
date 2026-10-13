@@ -1,5 +1,5 @@
 import { hasWinFrom } from '../rules.js';
-import { type Board, Empty, type Player, opponentOf } from '../types.js';
+import { Blocked, type Board, Empty, type Player, opponentOf } from '../types.js';
 
 /**
  * Tactics that do not need a search to find.
@@ -23,10 +23,11 @@ export function completesLine(
   index: number,
   player: Player,
   winLength: number,
+  exact = false,
 ): boolean {
   if (board[index] !== Empty) return false;
   board[index] = player;
-  const won = hasWinFrom(board, size, index, winLength);
+  const won = hasWinFrom(board, size, index, winLength, exact);
   board[index] = Empty;
   return won;
 }
@@ -38,9 +39,10 @@ export function findImmediateWin(
   player: Player,
   winLength: number,
   candidates: readonly number[],
+  exact = false,
 ): number | null {
   for (const move of candidates) {
-    if (completesLine(board, size, move, player, winLength)) return move;
+    if (completesLine(board, size, move, player, winLength, exact)) return move;
   }
   return null;
 }
@@ -58,10 +60,11 @@ export function winningMoves(
   winLength: number,
   candidates: readonly number[],
   limit = Number.POSITIVE_INFINITY,
+  exact = false,
 ): number[] {
   const found: number[] = [];
   for (const move of candidates) {
-    if (!completesLine(board, size, move, player, winLength)) continue;
+    if (!completesLine(board, size, move, player, winLength, exact)) continue;
     found.push(move);
     if (found.length >= limit) break;
   }
@@ -83,6 +86,7 @@ export function findForkMove(
   player: Player,
   winLength: number,
   candidates: readonly number[],
+  exact = false,
 ): number | null {
   const listed = new Set(candidates);
   for (const move of candidates) {
@@ -90,7 +94,17 @@ export function findForkMove(
     board[move] = player;
     // Playing the fork must not itself be a win - that case is handled before
     // this one is ever called - and a move that wins outright is not a fork.
-    const threats = threatsAfter(board, size, player, winLength, candidates, listed, move, 2);
+    const threats = threatsAfter(
+      board,
+      size,
+      player,
+      winLength,
+      candidates,
+      listed,
+      move,
+      2,
+      exact,
+    );
     board[move] = Empty;
     if (threats >= 2) return move;
   }
@@ -113,6 +127,7 @@ export function findForkDefence(
   player: Player,
   winLength: number,
   candidates: readonly number[],
+  exact = false,
 ): number | null {
   const rival = opponentOf(player);
   const listed = new Set(candidates);
@@ -122,8 +137,9 @@ export function findForkDefence(
     if (board[move] !== Empty) continue;
     board[move] = player;
 
-    const forcing = threatsAfter(board, size, player, winLength, candidates, listed, move, 1) > 0;
-    const stillForks = findForkMove(board, size, rival, winLength, candidates) !== null;
+    const forcing =
+      threatsAfter(board, size, player, winLength, candidates, listed, move, 1, exact) > 0;
+    const stillForks = findForkMove(board, size, rival, winLength, candidates, exact) !== null;
     board[move] = Empty;
 
     if (stillForks) continue;
@@ -162,8 +178,9 @@ function threatsAfter(
   listed: ReadonlySet<number>,
   move: number,
   limit: number,
+  exact = false,
 ): number {
-  let found = winningMoves(board, size, player, winLength, candidates, limit).length;
+  let found = winningMoves(board, size, player, winLength, candidates, limit, exact).length;
   if (found >= limit) return found;
 
   const rival = opponentOf(player);
@@ -176,9 +193,12 @@ function threatsAfter(
         const c = col + dc * step * sign;
         if (r < 0 || r >= size || c < 0 || c >= size) break;
         const cell = r * size + c;
-        // A rival mark ends every line through `move` in this direction.
-        if (board[cell] === rival) break;
-        if (listed.has(cell) || !completesLine(board, size, cell, player, winLength)) continue;
+        // A rival mark or a blocked square ends every line through `move` in
+        // this direction.
+        if (board[cell] === rival || board[cell] === Blocked) break;
+        if (listed.has(cell) || !completesLine(board, size, cell, player, winLength, exact)) {
+          continue;
+        }
         if (++found >= limit) return found;
       }
     }

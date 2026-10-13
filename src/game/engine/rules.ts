@@ -1,5 +1,5 @@
 import { colOf, rowOf } from './board.js';
-import { type Board, Empty, type Player, type WinLine } from './types.js';
+import { type Board, Empty, isMark, type Player, type WinLine } from './types.js';
 
 /** Horizontal, vertical, and both diagonals as [rowStep, colStep] pairs. */
 export const DIRECTIONS = [
@@ -18,15 +18,17 @@ export const DIRECTIONS = [
  *
  * Returns the full contiguous run (which may be longer than the win length)
  * ordered from one end to the other, or `null` if `index` is not part of a win.
+ * With `exact`, only a run of exactly `winLength` counts: an overline does not.
  */
 export function findWinLineFrom(
   board: Board,
   size: number,
   index: number,
   winLength: number,
+  exact = false,
 ): WinLine | null {
   const player = board[index];
-  if (player === undefined || player === Empty) return null;
+  if (!isMark(player)) return null;
 
   const row = rowOf(size, index);
   const col = colOf(size, index);
@@ -49,7 +51,7 @@ export function findWinLineFrom(
       c += dCol;
     }
 
-    if (run.length >= winLength) return run;
+    if (exact ? run.length === winLength : run.length >= winLength) return run;
   }
 
   return null;
@@ -61,9 +63,15 @@ export function findWinLineFrom(
  * The allocation-free half of {@link findWinLineFrom}, for the search - which
  * asks this question at every node and never looks at the answer's contents.
  */
-export function hasWinFrom(board: Board, size: number, index: number, winLength: number): boolean {
+export function hasWinFrom(
+  board: Board,
+  size: number,
+  index: number,
+  winLength: number,
+  exact = false,
+): boolean {
   const player = board[index];
-  if (player === undefined || player === Empty) return false;
+  if (!isMark(player)) return false;
 
   const row = rowOf(size, index);
   const col = colOf(size, index);
@@ -84,7 +92,7 @@ export function hasWinFrom(board: Board, size: number, index: number, winLength:
     ) {
       run++;
     }
-    if (run >= winLength) return true;
+    if (exact ? run === winLength : run >= winLength) return true;
   }
 
   return false;
@@ -99,11 +107,12 @@ export function findAnyWinLine(
   board: Board,
   size: number,
   winLength: number,
+  exact = false,
 ): { player: Player; line: WinLine } | null {
   for (let index = 0; index < board.length; index++) {
     const cell = board[index];
-    if (cell === undefined || cell === Empty) continue;
-    const line = findWinLineFrom(board, size, index, winLength);
+    if (!isMark(cell)) continue;
+    const line = findWinLineFrom(board, size, index, winLength, exact);
     if (line) return { player: cell, line };
   }
   return null;
@@ -122,11 +131,12 @@ export function isWinningMove(
   index: number,
   player: Player,
   winLength: number,
+  exact = false,
 ): boolean {
   if (board[index] !== Empty) return false;
 
   board[index] = player;
-  const won = hasWinFrom(board, size, index, winLength);
+  const won = hasWinFrom(board, size, index, winLength, exact);
   board[index] = Empty;
   return won;
 }

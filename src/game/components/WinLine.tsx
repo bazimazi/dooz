@@ -8,6 +8,8 @@ interface WinLineProps {
   winner: Player;
   /** Seconds to hold off - a gravity mark has to finish falling first. */
   delay?: number;
+  /** Rows at the top of the board that are not drawn - Connect Four's blocked one. */
+  top?: number;
 }
 
 /**
@@ -24,7 +26,7 @@ interface WinLineProps {
  * so the win reads as being drawn rather than switched on. Once it is complete
  * two rings pulse out from its middle, which is the moment the win lands.
  */
-export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
+export function WinLine({ line, size, winner, delay = 0, top = 0 }: WinLineProps) {
   const quality = useGraphics();
   const filterId = `dooz-win-glow-${useId().replace(/:/g, '')}`;
   const first = line[0];
@@ -43,7 +45,7 @@ export function WinLine({ line, size, winner, delay = 0 }: WinLineProps) {
 
   return (
     <svg
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`0 ${top} ${size} ${size - top}`}
       className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
       aria-hidden="true"
     >
