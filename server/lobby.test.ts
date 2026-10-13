@@ -1,6 +1,6 @@
 import { modeById, X } from '@/game/engine';
 import { PROTOCOL_VERSION } from '@/protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type Client,
   CONFIGS,
@@ -32,6 +32,28 @@ function matched(h: Harness, config = CONFIGS.classic): { a: Client; b: Client }
   a.send({ type: 'queue', config, ranked: false });
   b.send({ type: 'queue', config, ranked: false });
   return { a, b };
+}
+
+/** A private room with its host and guest seated and the game started. */
+function hosted(h: Harness): { host: Client; guest: Client; code: string } {
+  const host = h.join('Ada');
+  host.send({ type: 'createRoom', config: CONFIGS.classic });
+  const code = host.last('roomCreated')!.code;
+  const guest = h.join('Bob');
+  guest.send({ type: 'joinRoom', code });
+  return { host, guest, code };
+}
+
+/** A fresh connection for the account `client` signed in with. */
+function reconnect(h: Harness, client: Client): Client {
+  const back = h.connect();
+  back.send({
+    type: 'hello',
+    version: PROTOCOL_VERSION,
+    accountId: client.accountId,
+    token: client.token,
+  });
+  return back;
 }
 
 /** The client whose turn it is, and the one waiting. */
@@ -142,6 +164,35 @@ describe('hello', () => {
     expect(first.closed).toBe(true);
     expect(second.last('welcome')).toBeDefined();
   });
+
+  it('stops counting an evicted connection as a watcher', () => {
+    const h = newHarness();
+    const { host, code } = hosted(h);
+    const watcher = h.join('Cat');
+    watcher.send({ type: 'spectate', code });
+    expect(host.last('spectators')?.count).toBe(1);
+
+    reconnect(h, watcher);
+
+    expect(host.last('spectators')?.count).toBe(0);
+  });
+
+  it('closes a connection that never introduces itself', () => {
+    const h = newHarness();
+    const silent = h.connect();
+    const greeted = h.join('Ada');
+    expect(h.lobby.sessionCount).toBe(2);
+
+    h.advance(5_000);
+    expect(silent.closed).toBe(false);
+
+    h.advance(6_000);
+    expect(silent.closed).toBe(true);
+    expect(greeted.closed).toBe(false);
+    expect(h.lobby.sessionCount).toBe(1);
+    // A slow client should reconnect, not be told its credentials are bad.
+    expect(silent.last('error')).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -209,8 +260,8 @@ describe('matchmaking', () => {
     const b = h.join('Bob');
 
     // Put 600 points between them, which no opening band covers.
-    h.accounts.recordResult(a.accountId, 'classic', 'win', 1800);
-    h.accounts.recordResult(b.accountId, 'classic', 'loss', 1100);
+    h.accounts.recordResult(a.accountId, 'classic', 'win', 1800, true);
+    h.accounts.recordResult(b.accountId, 'classic', 'loss', 1100, true);
 
     a.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
     b.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
@@ -233,6 +284,20 @@ describe('matchmaking', () => {
 
     expect(a.last('matched')).toBeUndefined();
     expect(a.last('searching')).toBeDefined();
+  });
+
+  it('tells both players when there is no room to pair them into', () => {
+    const h = newHarness({ maxRooms: 1 });
+    h.join('Host').send({ type: 'createRoom', config: CONFIGS.classic });
+
+    const a = h.join('Ada');
+    const b = h.join('Bob');
+    a.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+
+    expect(a.last('error')?.code).toBe('serverFull');
+    expect(b.last('error')?.code).toBe('serverFull');
+    expect(h.lobby.queuedCount).toBe(0);
   });
 
   it('never matches an account with itself', () => {
@@ -276,6 +341,47 @@ describe('private rooms', () => {
     third.send({ type: 'joinRoom', code });
 
     expect(third.last('error')?.code).toBe('roomFull');
+  });
+
+  it('will not start a game against a host who is not there', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+    host.drop();
+
+    const guest = h.join('Bob');
+    guest.send({ type: 'joinRoom', code });
+    expect(guest.last('error')?.code).toBe('roomNotFound');
+    expect(guest.last('matched')).toBeUndefined();
+
+    // Once the host is back the same code works.
+    reconnect(h, host);
+    guest.send({ type: 'joinRoom', code });
+    expect(guest.last('matched')?.kind).toBe('private');
+  });
+
+  it('puts a returning host back to waiting, not into a game', () => {
+    const h = newHarness();
+    const host = h.join('Ada');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    const code = host.last('roomCreated')!.code;
+    host.drop();
+
+    const back = reconnect(h, host);
+    expect(back.last('welcome')?.resumed).toBe(true);
+    expect(back.last('roomCreated')).toEqual({
+      type: 'roomCreated',
+      code,
+      config: CONFIGS.classic,
+    });
+    expect(back.last('matched')).toBeUndefined();
+
+    // Asking for the room by its own code says the same thing.
+    back.clear();
+    back.send({ type: 'joinRoom', code });
+    expect(back.last('roomCreated')?.code).toBe(code);
+    expect(back.last('matched')).toBeUndefined();
   });
 
   it('refuses an unknown code', () => {
@@ -496,6 +602,38 @@ describe('results', () => {
     expect(resultOf(waiter)?.winner).toBe(waiter.last('matched')!.you);
   });
 
+  it('tells the opponent when a player leaves to do something else', () => {
+    for (const elsewhere of [
+      { type: 'queue', config: CONFIGS.classic, ranked: false },
+      { type: 'createRoom', config: CONFIGS.classic },
+    ] as const) {
+      const h = newHarness();
+      const { a, b } = matched(h);
+      const { mover, waiter } = toMove(a, b);
+      mover.clear();
+
+      mover.send(elsewhere);
+
+      expect(waiter.last('opponentLeft')).toBeDefined();
+      expect(resultOf(waiter)?.reason).toBe('resign');
+      // The leaver has moved on, and is not sent the end of the game it left.
+      expect(resultOf(mover)).toBeUndefined();
+    }
+  });
+
+  it('tells the opponent when a player leaves a finished game for another', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const host = h.join('Cat');
+    host.send({ type: 'createRoom', config: CONFIGS.classic });
+    mover.send({ type: 'joinRoom', code: host.last('roomCreated')!.code });
+
+    expect(waiter.last('opponentLeft')).toBeDefined();
+  });
+
   it('draws by agreement, and only after both sides agree', () => {
     const h = newHarness();
     const { a, b } = matched(h);
@@ -540,6 +678,56 @@ describe('results', () => {
     waiter.send({ type: 'move', index: 1 });
     mover.send({ type: 'offerDraw' });
     expect(waiter.last('drawOffered')).toBeDefined();
+  });
+
+  it('shows a pending draw offer again after a reconnect', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'offerDraw' });
+    waiter.drop();
+    const back = reconnect(h, waiter);
+
+    expect(back.last('drawOffered')).toBeDefined();
+    back.send({ type: 'respondDraw', accept: true });
+    expect(resultOf(mover)?.reason).toBe('agreed');
+  });
+
+  it('tells a player who reconnects after a resignation how the match ended', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    waiter.drop();
+    mover.send({ type: 'resign' });
+    const back = reconnect(h, waiter);
+
+    expect(back.last('matched')).toBeDefined();
+    expect(back.last('result')?.result.reason).toBe('resign');
+    expect(back.last('result')?.result.winner).toBe(waiter.last('matched')!.you);
+  });
+
+  it('writes nothing, and stays open, when recording a result fails', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover } = toMove(a, b);
+
+    const record = vi.spyOn(h.matches, 'record').mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+    expect(() => mover.send({ type: 'resign' })).toThrow('disk full');
+
+    // Neither player's statistics moved, and nobody was told it was over.
+    expect(h.accounts.statsFor(a.accountId, 'classic').played).toBe(0);
+    expect(h.accounts.statsFor(b.accountId, 'classic').played).toBe(0);
+    expect(resultOf(a)).toBeUndefined();
+
+    // The game was not marked decided, so it can still be.
+    record.mockRestore();
+    mover.send({ type: 'resign' });
+    expect(resultsOf(a)).toHaveLength(1);
+    expect(h.accounts.statsFor(a.accountId, 'classic').played).toBe(1);
   });
 
   it('ignores an acceptance nobody offered', () => {
@@ -700,6 +888,42 @@ describe('ratings', () => {
     // Five moves on a 3x3 board is as fast as a win can be.
     expect(unlocked).toContain('sharpshooter');
   });
+
+  it('does not count a resignation as a fast win', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+
+    mover.send({ type: 'move', index: 4 });
+    waiter.send({ type: 'resign' });
+
+    const unlocked = h.accounts.achievements(mover.accountId).map((entry) => entry.id);
+    expect(unlocked).toContain('first-win');
+    expect(unlocked).not.toContain('sharpshooter');
+  });
+
+  it('counts only ranked games towards placement', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    const { mover, waiter } = toMove(a, b);
+    playMoves(mover, waiter, [0, 3, 1, 4, 2]);
+
+    const casual = h.accounts.statsFor(a.accountId, 'classic');
+    expect(casual.played).toBe(1);
+    expect(casual.rankedPlayed).toBe(0);
+
+    const c = h.join('Cat');
+    const d = h.join('Dan');
+    c.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    d.send({ type: 'queue', config: CONFIGS.classic, ranked: true });
+    c.send({ type: 'resign' });
+
+    expect(resultOf(c)?.kind).toBe('ranked');
+    expect(h.accounts.statsFor(c.accountId, 'classic')).toMatchObject({
+      played: 1,
+      rankedPlayed: 1,
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -761,16 +985,33 @@ describe('reconnection', () => {
     expect(resultOf(waiter)?.winner).toBe(waiter.last('matched')!.you);
   });
 
-  it('does not award a game when both players have gone', () => {
+  it('gives a game both players left to whoever stayed longer', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+
+    a.drop();
+    h.advance(10_000);
+    b.drop();
+    h.advance(50_000);
+
+    expect(h.lobby.roomCount).toBe(0);
+    expect(h.accounts.statsFor(a.accountId, 'classic')).toMatchObject({ played: 1, lost: 1 });
+    expect(h.accounts.statsFor(b.accountId, 'classic')).toMatchObject({ played: 1, won: 1 });
+    const [record] = h.matches.recentFor(a.accountId, 1, (id) => h.accounts.get(id));
+    expect(record?.reason).toBe('abandoned');
+  });
+
+  it('draws a game both players left at the same moment', () => {
     const h = newHarness();
     const { a, b } = matched(h);
 
     a.drop();
     b.drop();
-    h.advance(61_000);
+    h.advance(46_000);
 
-    expect(resultOf(a)).toBeUndefined();
-    expect(resultOf(b)).toBeUndefined();
+    expect(h.lobby.roomCount).toBe(0);
+    expect(h.accounts.statsFor(a.accountId, 'classic')).toMatchObject({ played: 1, drawn: 1 });
+    expect(h.accounts.statsFor(b.accountId, 'classic')).toMatchObject({ played: 1, drawn: 1 });
   });
 
   it('drops a room once everyone has been gone past the grace period', () => {
@@ -805,6 +1046,30 @@ describe('rematch', () => {
     const fresh = currentSnapshot(a)!;
     expect(fresh.status).toBe('playing');
     expect(fresh.board.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it('offers a rematch after a game that ended off the board', () => {
+    for (const end of ['resign', 'draw'] as const) {
+      const h = newHarness();
+      const { a, b } = matched(h);
+      const { mover, waiter } = toMove(a, b);
+
+      if (end === 'resign') {
+        mover.send({ type: 'resign' });
+      } else {
+        mover.send({ type: 'offerDraw' });
+        waiter.send({ type: 'respondDraw', accept: true });
+      }
+      expect(currentSnapshot(a)!.status).toBe('playing');
+
+      a.send({ type: 'rematch' });
+      expect(b.last('rematchOffered')).toBeDefined();
+      b.clear();
+      b.send({ type: 'rematch' });
+
+      expect(b.last('matched')).toBeDefined();
+      expect(currentSnapshot(b)!.moves).toEqual([]);
+    }
   });
 
   it('starts a fresh clock for the rematch', () => {
@@ -914,6 +1179,22 @@ describe('emotes', () => {
     a.send({ type: 'emote', emote: 'hurry' });
 
     expect(b.last('emote')).toBeUndefined();
+  });
+
+  it('does not carry a mute into the next game', () => {
+    const h = newHarness();
+    const { a, b } = matched(h);
+    b.send({ type: 'mute', muted: true });
+
+    const c = h.join('Cat');
+    b.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    c.send({ type: 'queue', config: CONFIGS.classic, ranked: false });
+    expect(b.last('matched')?.code).toBe(c.last('matched')?.code);
+    b.clear();
+
+    c.send({ type: 'emote', emote: 'hello' });
+    expect(b.last('emote')?.emote).toBe('hello');
+    expect(a.last('opponentLeft')).toBeDefined();
   });
 
   it('rate-limits a player spamming emotes', () => {

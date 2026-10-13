@@ -135,3 +135,73 @@ describe('local account', () => {
     expect(account.getState().changes).toEqual({});
   });
 });
+
+describe('rejected and expired', () => {
+  it('drops an edit the server refuses instead of retrying it forever', async () => {
+    localStorage.setItem(
+      'dooz.account',
+      JSON.stringify({ accountId: 'server-account', token: 'token' }),
+    );
+    localStorage.setItem('dooz.local-profile', JSON.stringify({ profile: profile(), changes: {} }));
+    const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    const account = await store();
+    await account.getState().rename('Taken');
+    // The edit's own background sync fails offline first.
+    expect(await account.getState().ensureOnline()).toBe(false);
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ profile: profile(), ranks: [] }), { status: 200 }),
+    );
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'That name is already taken' }), { status: 409 }),
+    );
+    expect(await account.getState().ensureOnline()).toBe(true);
+    expect(account.getState().onlineStatus).toBe('ready');
+    expect(account.getState().changes).toEqual({});
+    expect(account.getState().profile?.displayName).toBe('Remote');
+    expect(account.getState().error).toBe('That name is already taken');
+  });
+
+  it('replaces a guest account whose token the server no longer accepts', async () => {
+    localStorage.setItem(
+      'dooz.account',
+      JSON.stringify({ accountId: 'server-account', token: 'old' }),
+    );
+    localStorage.setItem('dooz.local-profile', JSON.stringify({ profile: profile(), changes: {} }));
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'Sign in again' }), { status: 401 }),
+    );
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          accountId: 'new-account',
+          token: 'new',
+          profile: { ...profile(), accountId: 'new-account' },
+        }),
+        { status: 201 },
+      ),
+    );
+    const account = await store();
+    expect(await account.getState().ensureOnline()).toBe(true);
+    expect(account.getState().credentials).toEqual({ accountId: 'new-account', token: 'new' });
+  });
+
+  it('asks a claimed account to sign in again rather than replacing it', async () => {
+    localStorage.setItem(
+      'dooz.account',
+      JSON.stringify({ accountId: 'server-account', token: 'old' }),
+    );
+    localStorage.setItem(
+      'dooz.local-profile',
+      JSON.stringify({ profile: { ...profile(), claimed: true }, changes: {} }),
+    );
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'Sign in again' }), { status: 401 }));
+    const account = await store();
+    expect(await account.getState().ensureOnline()).toBe(false);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(account.getState().credentials).toBeNull();
+    expect(account.getState().syncError).toMatch(/Sign in again/);
+  });
+});

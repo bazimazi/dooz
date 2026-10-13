@@ -166,17 +166,27 @@ class SoundEngine {
 
   private listenForUnlock() {
     if (typeof document === 'undefined') return;
+    // A touch's pointerdown does not count as a user activation in every
+    // browser - pointerup, touchend and click do - so keep listening on all of
+    // them until the context is actually running.
+    const events = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'] as const;
+    const stop = () => events.forEach((name) => document.removeEventListener(name, unlock, true));
     const unlock = () => {
       const context = this.audio();
       if (!context) return;
-      if (context.state === 'suspended') void context.resume().catch(() => undefined);
-      this.unlocked = true;
-      unlockListeners.forEach((listener) => listener());
-      document.removeEventListener('pointerdown', unlock, true);
-      document.removeEventListener('keydown', unlock, true);
+      if (!this.unlocked) {
+        this.unlocked = true;
+        unlockListeners.forEach((listener) => listener());
+      }
+      if (context.state === 'running') return stop();
+      void context
+        .resume()
+        .then(() => {
+          if (context.state === 'running') stop();
+        })
+        .catch(() => undefined);
     };
-    document.addEventListener('pointerdown', unlock, true);
-    document.addEventListener('keydown', unlock, true);
+    events.forEach((name) => document.addEventListener(name, unlock, true));
   }
 
   /** A context ready to schedule into, or `null` when effects are off. */

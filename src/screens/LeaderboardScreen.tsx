@@ -25,6 +25,8 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
   // Clearing the previous mode's table during render rather than in the effect
   // means the new tab never shows the old mode's rows for a frame.
   const [loadedFor, setLoadedFor] = useState<ModeId | null>(null);
+  // Bumped by "Try again", so the same mode is fetched once more.
+  const [attempt, setAttempt] = useState(0);
   if (loadedFor !== selected) {
     setLoadedFor(selected);
     setData(null);
@@ -43,7 +45,7 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
       });
 
     return () => controller.abort();
-  }, [selected]);
+  }, [selected, attempt]);
 
   return (
     <Screen width="wide" scroll>
@@ -76,7 +78,14 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
             title="Could not load the leaderboard"
             body={error}
             action={
-              <Button size="small" className="w-auto px-4" onClick={() => setLoadedFor(null)}>
+              <Button
+                size="small"
+                className="w-auto px-4"
+                onClick={() => {
+                  setLoadedFor(null);
+                  setAttempt((count) => count + 1);
+                }}
+              >
                 Try again
               </Button>
             }
@@ -89,7 +98,7 @@ export function LeaderboardScreen({ mode }: { mode: ModeId }) {
             title="Nobody has qualified yet"
             body={`Play ${data.placementGames} ranked matches in this mode to appear here.`}
             action={
-              <Button as={ReturnLink} to="/" size="small" className="w-auto px-4">
+              <Button as={ReturnLink} to="/" size="small" className="w-auto px-4 whitespace-nowrap">
                 Play a ranked match
               </Button>
             }

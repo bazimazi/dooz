@@ -30,6 +30,11 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
   const { you = null, threats = 0, replay = false } = options;
   const previous = useRef<GameState | null>(null);
   const previousThreats = useRef(threats);
+  // Delayed cues belong to the position that scheduled them. A take-back, a
+  // new game or leaving the screen cancels them; the same position arriving
+  // again - a server echoing its final state - does not.
+  const delayed = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => cancelAll(delayed.current), []);
 
   useEffect(() => {
     const before = previous.current;
@@ -51,6 +56,8 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
     const rewound = played < 0 && game.moves.every((move, ply) => before.moves[ply] === move);
     const continued = played > 0 && before.moves.every((move, ply) => game.moves[ply] === move);
     const unrelated = played !== 0 && !rewound && !continued;
+
+    if (played < 0 || unrelated || !sameConfig) cancelAll(delayed.current);
 
     if (!sameConfig || unrelated || (rewound && game.moves.length === 0 && !replay)) {
       sfx.start();
@@ -79,31 +86,35 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
 
     if (vanishedBy(game) !== null) sfx.vanish();
 
+    const timers = delayed.current;
+
     // An Ultimate small board changing hands is an event of its own.
     const claimed = game.ultimate?.boards.findIndex(
       (owner, board) => owner !== Empty && before.ultimate?.boards[board] === Empty,
     );
     if (claimed !== undefined && claimed >= 0) {
       const owner = game.ultimate!.boards[claimed]!;
-      setTimeout(() => sfx.claim(owner === 1 ? 1 : 2), 140);
+      timers.push(setTimeout(() => sfx.claim(owner === 1 ? 1 : 2), 140));
     }
 
     if (before.status === 'playing' && game.status !== 'playing' && !replay) {
       const outcome =
         game.status === 'draw' ? 'draw' : you === null || game.winner === you ? 'win' : 'loss';
       const delay = game.config.variant === 'gravity' ? RESULT_DELAY_MS + 250 : RESULT_DELAY_MS;
-      setTimeout(() => {
-        if (outcome === 'win') {
-          sfx.win();
-          haptics.buzz([30, 50, 30, 50, 90]);
-        } else if (outcome === 'loss') {
-          sfx.lose();
-          haptics.buzz(140);
-        } else {
-          sfx.draw();
-          haptics.buzz([20, 40, 20]);
-        }
-      }, delay);
+      timers.push(
+        setTimeout(() => {
+          if (outcome === 'win') {
+            sfx.win();
+            haptics.buzz([30, 50, 30, 50, 90]);
+          } else if (outcome === 'loss') {
+            sfx.lose();
+            haptics.buzz(140);
+          } else {
+            sfx.draw();
+            haptics.buzz([20, 40, 20]);
+          }
+        }, delay),
+      );
     }
   }, [game, you, replay]);
 
@@ -117,4 +128,10 @@ export function useGameFeedback(game: GameState, options: FeedbackOptions = {}):
     previousThreats.current = threats;
     return undefined;
   }, [threats]);
+}
+
+/** Clears the timers and empties the list in place. */
+function cancelAll(timers: ReturnType<typeof setTimeout>[]): void {
+  timers.forEach(clearTimeout);
+  timers.length = 0;
 }

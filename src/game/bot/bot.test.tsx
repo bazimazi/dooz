@@ -1,13 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMove, createGame, O, X } from '@/game/engine';
+import type * as BotModule from '@/game/engine/bot';
 import { chooseMove } from '@/game/engine/bot';
 import { BotSearch } from './BotSearch';
 import { useBotOpponent } from './useBotOpponent';
 import { useSuggestion } from './useSuggestion';
 
 vi.mock('@/game/engine/bot', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/game/engine/bot')>(),
+  ...(await importOriginal<typeof BotModule>()),
   chooseMove: vi.fn(),
 }));
 
@@ -21,9 +22,11 @@ class TestWorker extends EventTarget {
   }
   answer(move = 4) {
     const request = this.postMessage.mock.lastCall![0];
-    this.dispatchEvent(new MessageEvent('message', {
-      data: { id: request.id, move, nodes: 10, depth: 2, reason: 'search', score: 0 },
-    }));
+    this.dispatchEvent(
+      new MessageEvent('message', {
+        data: { id: request.id, move, nodes: 10, depth: 2, reason: 'search', score: 0 },
+      }),
+    );
   }
 }
 
@@ -32,7 +35,13 @@ beforeEach(() => {
   TestWorker.instances = [];
   vi.stubGlobal('Worker', TestWorker);
   vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-  vi.mocked(chooseMove).mockReturnValue({ move: 4, nodes: 1, depth: 1, reason: 'search', score: 0 });
+  vi.mocked(chooseMove).mockReturnValue({
+    move: 4,
+    nodes: 1,
+    depth: 1,
+    reason: 'search',
+    score: 0,
+  });
 });
 
 afterEach(() => {
@@ -71,9 +80,13 @@ describe('bot search lifecycle', () => {
     worker.dispatchEvent(new Event('error', { cancelable: true }));
     await vi.runAllTimersAsync();
     expect(worker.terminate).toHaveBeenCalledOnce();
-    expect(chooseMove).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      difficulty: 'master', timeBudgetMs: 24,
-    }));
+    expect(chooseMove).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        difficulty: 'master',
+        timeBudgetMs: 24,
+      }),
+    );
     expect(answer).toHaveBeenCalledOnce();
     search.search(createGame(3), {}, answer);
     await vi.runAllTimersAsync();
@@ -116,7 +129,10 @@ describe('suggestion lifecycle', () => {
       initialProps: { game },
     });
     expect(TestWorker.instances).toHaveLength(0);
-    act(() => { result.current.suggest(); result.current.suggest(); });
+    act(() => {
+      result.current.suggest();
+      result.current.suggest();
+    });
     expect(TestWorker.instances).toHaveLength(1);
     const worker = TestWorker.instances[0]!;
     expect(worker.postMessage).toHaveBeenCalledOnce();
@@ -134,7 +150,9 @@ describe('suggestion lifecycle', () => {
     const hook = renderHook(() => useSuggestion(game));
     act(() => hook.result.current.suggest());
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(TestWorker.instances[0]!.terminate).toHaveBeenCalledOnce();
     expect(hook.result.current.thinking).toBe(false);
     hook.unmount();
@@ -145,20 +163,33 @@ describe('opponent lifecycle', () => {
   it('stops background work and resumes the same turn without applying a stale move', () => {
     const game = createGame(3, O);
     const onMove = vi.fn();
-    const { unmount } = renderHook(() => useBotOpponent({ game, botPlayer: O, difficulty: 'master', onMove }));
+    const { unmount } = renderHook(() =>
+      useBotOpponent({ game, botPlayer: O, difficulty: 'master', onMove }),
+    );
     const worker = TestWorker.instances[0]!;
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(worker.terminate).toHaveBeenCalledOnce();
-    act(() => { worker.answer(); vi.advanceTimersByTime(2000); });
+    act(() => {
+      worker.answer();
+      vi.advanceTimersByTime(2000);
+    });
     expect(onMove).not.toHaveBeenCalled();
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     const resumed = TestWorker.instances[1]!;
     act(() => resumed.answer());
-    act(() => vi.advanceTimersByTime(1099));
+    act(() => {
+      vi.advanceTimersByTime(1099);
+    });
     expect(onMove).not.toHaveBeenCalled();
-    act(() => vi.advanceTimersByTime(1));
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     expect(onMove).toHaveBeenCalledExactlyOnceWith(4);
     unmount();
     expect(resumed.terminate).toHaveBeenCalledOnce();

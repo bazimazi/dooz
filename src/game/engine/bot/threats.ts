@@ -84,12 +84,13 @@ export function findForkMove(
   winLength: number,
   candidates: readonly number[],
 ): number | null {
+  const listed = new Set(candidates);
   for (const move of candidates) {
     if (board[move] !== Empty) continue;
     board[move] = player;
     // Playing the fork must not itself be a win - that case is handled before
     // this one is ever called - and a move that wins outright is not a fork.
-    const threats = winningMoves(board, size, player, winLength, candidates, 2).length;
+    const threats = threatsAfter(board, size, player, winLength, candidates, listed, move, 2);
     board[move] = Empty;
     if (threats >= 2) return move;
   }
@@ -114,13 +115,14 @@ export function findForkDefence(
   candidates: readonly number[],
 ): number | null {
   const rival = opponentOf(player);
+  const listed = new Set(candidates);
   let quiet: number | null = null;
 
   for (const move of candidates) {
     if (board[move] !== Empty) continue;
     board[move] = player;
 
-    const forcing = winningMoves(board, size, player, winLength, candidates, 1).length > 0;
+    const forcing = threatsAfter(board, size, player, winLength, candidates, listed, move, 1) > 0;
     const stillForks = findForkMove(board, size, rival, winLength, candidates) !== null;
     board[move] = Empty;
 
@@ -130,4 +132,56 @@ export function findForkDefence(
   }
 
   return quiet;
+}
+
+/** The four line directions, as row and column steps. */
+const DIRECTIONS = [
+  [0, 1],
+  [1, 0],
+  [1, 1],
+  [1, -1],
+] as const;
+
+/**
+ * How many winning squares `player` has once `move` is on the board, up to
+ * `limit`.
+ *
+ * The candidate list was drawn up before `move` was played, so it can miss a
+ * square that only the new mark is near - and that is exactly where the new
+ * mark's threat tends to be: extending a pair to an open three on a 6x6 board
+ * puts the winning square two steps from the old marks. Threats the move did
+ * not create are counted from the candidates as before; one it did create runs
+ * through it, so the squares on its lines are the only ones to add.
+ */
+function threatsAfter(
+  board: Board,
+  size: number,
+  player: Player,
+  winLength: number,
+  candidates: readonly number[],
+  listed: ReadonlySet<number>,
+  move: number,
+  limit: number,
+): number {
+  let found = winningMoves(board, size, player, winLength, candidates, limit).length;
+  if (found >= limit) return found;
+
+  const rival = opponentOf(player);
+  const row = Math.floor(move / size);
+  const col = move % size;
+  for (const [dr, dc] of DIRECTIONS) {
+    for (const sign of [-1, 1]) {
+      for (let step = 1; step < winLength; step++) {
+        const r = row + dr * step * sign;
+        const c = col + dc * step * sign;
+        if (r < 0 || r >= size || c < 0 || c >= size) break;
+        const cell = r * size + c;
+        // A rival mark ends every line through `move` in this direction.
+        if (board[cell] === rival) break;
+        if (listed.has(cell) || !completesLine(board, size, cell, player, winLength)) continue;
+        if (++found >= limit) return found;
+      }
+    }
+  }
+  return found;
 }

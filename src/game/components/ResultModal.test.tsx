@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Button } from '@/components/ui/Button';
-import { ResultModal } from './ResultModal';
+import { describeReason, describeReasonFor, ResultModal } from './ResultModal';
 
 const actions = (
   <>
@@ -103,5 +103,20 @@ describe('ResultModal: reveal delay', () => {
       document.dispatchEvent(new Event('pointerdown'));
     });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('describeReason', () => {
+  it('credits the completed line to the loser under misère', () => {
+    expect(describeReason('line', 'win')).toBe('You completed the line');
+    expect(describeReason('line', 'win', true)).toBe('Your opponent completed the line');
+    expect(describeReason('line', 'loss', true)).toBe('You completed the line');
+  });
+
+  it('tells spectators about the players by name', () => {
+    const names = { winner: 'Ada', loser: 'Bob' };
+    expect(describeReasonFor('resign', names)).toBe('Bob resigned');
+    expect(describeReasonFor('line', names)).toBe('Ada completed the line');
+    expect(describeReasonFor('line', names, true)).toBe('Bob completed the line');
   });
 });

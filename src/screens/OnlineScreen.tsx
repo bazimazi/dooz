@@ -18,8 +18,8 @@ import { EmoteBar, EmoteToast } from '@/game/components/EmoteBar';
 import { GameHeader } from '@/game/components/GameHeader';
 import {
   describeReason,
+  describeReasonFor,
   outcomeFace,
-  outcomeFor,
   ResultModal,
   revealDelayFor,
 } from '@/game/components/ResultModal';
@@ -57,7 +57,8 @@ export function OnlineScreen({ mode, host, code, watch, ranked }: OnlineSearch) 
   const initialise = useAccountStore((state) => state.ensureOnline);
 
   // The intent behind this visit is acted on once, as soon as the socket is
-  // ready; re-running it on every render would spam the server.
+  // ready; re-running it on every render would spam the server. A queue place
+  // or room lost to a reconnect is asked for again by the store itself.
   const intentSent = useRef(false);
 
   // An intentional page departure releases the room/queue immediately.
@@ -207,7 +208,7 @@ function OnlineLobby({ mode, ranked }: { mode: ModeId; ranked: boolean }) {
                 <Button
                   size="small"
                   variant="ghost"
-                  className="w-auto px-4"
+                  className="w-auto px-3 whitespace-nowrap"
                   onClick={() => queue(detail.config, false)}
                 >
                   Find anyone instead
@@ -368,7 +369,11 @@ function OnlineGame({ mode }: { mode: ModeId }) {
     !watching && game.status === 'playing' && game.currentPlayer === you && !reconnecting;
 
   const finished = result !== null || game.status !== 'playing' || phase === 'opponentLeft';
-  const outcome = watching ? 'draw' : outcomeFor(game, you);
+  // The server's verdict wins over the board: a resignation, a flag or an
+  // abandoned seat ends the match while the board itself is still in play.
+  const winner = result ? result.winner : game.status === 'won' ? game.winner : null;
+  const outcome = watching || winner === null ? 'draw' : winner === you ? 'win' : 'loss';
+  const misere = game.config.variant === 'misere';
 
   const xSeat = seats.find((seat) => seat.player === X);
   const oSeat = seats.find((seat) => seat.player === O);
@@ -387,9 +392,9 @@ function OnlineGame({ mode }: { mode: ModeId }) {
     phase === 'opponentLeft' && !result
       ? 'Opponent left'
       : watching
-        ? game.winner === null
+        ? winner === null
           ? 'Draw'
-          : `${(game.winner === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} wins`
+          : `${(winner === X ? xSeat : oSeat)?.profile.displayName ?? 'Player'} wins`
         : outcome === 'win'
           ? 'You win!'
           : outcome === 'loss'
@@ -548,7 +553,16 @@ function OnlineGame({ mode }: { mode: ModeId }) {
           art={phase === 'opponentLeft' && !result ? <WifiOffIcon /> : outcomeFace(outcome)}
           note={
             result
-              ? describeReason(result.reason, outcome)
+              ? watching
+                ? describeReasonFor(
+                    result.reason,
+                    {
+                      winner: (winner === O ? oSeat : xSeat)?.profile.displayName ?? 'Player',
+                      loser: (winner === O ? xSeat : oSeat)?.profile.displayName ?? 'Player',
+                    },
+                    misere,
+                  )
+                : describeReason(result.reason, outcome, misere)
               : phase === 'opponentLeft'
                 ? 'They closed the game'
                 : undefined

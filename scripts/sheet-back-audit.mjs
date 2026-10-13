@@ -20,7 +20,7 @@ const back = async () => {
 };
 const assertHome = () => assert.equal(new URL(page.url()).pathname, '/');
 try {
-  await page.goto(process.env.DOOZ_URL ?? 'http://127.0.0.1:4173');
+  await page.goto(process.env.AUDIT_URL ?? process.env.DOOZ_URL ?? 'http://127.0.0.1:4173');
   await page.waitForTimeout(700);
   const dialog = page.getByRole('dialog');
   // Back must dismiss even when there is no earlier in-app page.

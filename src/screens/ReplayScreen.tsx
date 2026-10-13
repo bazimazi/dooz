@@ -1,5 +1,5 @@
 import { ReturnLink } from '@/components/ui/ReturnLink';
-import { describeConfig, type GameState, X } from '@/game/engine';
+import { describeConfig, type GameState, O, X } from '@/game/engine';
 import type { Avatar, MatchRecord } from '@/protocol';
 import { useEffect, useState } from 'react';
 import { AvatarBadge } from '@/components/art/avatars';
@@ -24,13 +24,14 @@ import { api } from '@/lib/api';
 import { cx } from '@/lib/cx';
 import { duration, fullDate, signed, timeAgo } from '@/lib/format';
 import { shareOrCopy } from '@/lib/invite';
-import { describeReason } from '@/game/components/ResultModal';
+import { describeReason, describeReasonFor } from '@/game/components/ResultModal';
 
 export function ReplayScreen({ matchId }: { matchId: string }) {
   const credentials = useAccountStore((state) => state.credentials);
   const [record, setRecord] = useState<MatchRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reported, setReported] = useState(false);
+  const [reporting, setReporting] = useState<'idle' | 'sending' | 'failed'>('idle');
 
   // Clearing during render rather than in the effect, so following a link from
   // one replay to another never shows the previous game's board first.
@@ -40,6 +41,7 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
     setRecord(null);
     setError(null);
     setReported(false);
+    setReporting('idle');
   }
 
   useEffect(() => {
@@ -63,7 +65,13 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
   useEffect(() => {
     if (!replay) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
+      // Leave keys that already mean something alone: browser shortcuts, text
+      // fields, a focused control's own Space, and the board grid's arrows.
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('input, textarea, select')) return;
+      if (event.key === ' ' && target?.closest('button, a')) return;
+      if (event.key.startsWith('Arrow') && target?.closest('[role="grid"]')) return;
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         replay.next();
@@ -110,6 +118,17 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
   }
 
   const total = replay.frames.length - 1;
+  // The server tells a replay from the viewer's side, or X's for anyone who
+  // did not play; only a participant gets the first-person result.
+  const seat =
+    credentials?.accountId === record.players.x.accountId
+      ? X
+      : credentials?.accountId === record.players.o.accountId
+        ? O
+        : null;
+  const misere = record.config.variant === 'misere';
+  const winnerName = (record.winner === O ? record.players.o : record.players.x).displayName;
+  const loserName = (record.winner === O ? record.players.x : record.players.o).displayName;
 
   return (
     <Screen scroll>
@@ -167,7 +186,11 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
                 <StepBackIcon />
               </IconButton>
 
-              <IconButton label={replay.playing ? 'Pause' : 'Play'} onClick={replay.toggle}>
+              <IconButton
+                label={replay.playing ? 'Pause' : 'Play'}
+                disabled={total === 0}
+                onClick={replay.toggle}
+              >
                 {replay.playing ? <PauseIcon /> : <PlayIcon />}
               </IconButton>
 
@@ -189,17 +212,33 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
         </div>
 
         <div className="grid w-full max-w-board grid-cols-3 gap-2">
-          <StatTile
-            label="Result"
-            value={record.outcome === 'win' ? 'Win' : record.outcome === 'loss' ? 'Loss' : 'Draw'}
-            tone={record.outcome === 'win' ? 'good' : record.outcome === 'loss' ? 'bad' : 'plain'}
-            hint={describeReason(record.reason, record.outcome)}
-          />
+          {seat !== null ? (
+            <StatTile
+              label="Result"
+              value={record.outcome === 'win' ? 'Win' : record.outcome === 'loss' ? 'Loss' : 'Draw'}
+              tone={record.outcome === 'win' ? 'good' : record.outcome === 'loss' ? 'bad' : 'plain'}
+              hint={describeReason(record.reason, record.outcome, misere)}
+            />
+          ) : (
+            <StatTile
+              label="Result"
+              value={record.winner === null ? 'Draw' : `${record.winner === X ? 'X' : 'O'} won`}
+              hint={describeReasonFor(
+                record.reason,
+                { winner: winnerName, loser: loserName },
+                misere,
+              )}
+            />
+          )}
           <StatTile label="Moves" value={record.moves.length} />
           <StatTile
             label="Length"
             value={duration(record.durationMs)}
-            hint={record.ratingDelta !== null ? `${signed(record.ratingDelta)} rating` : undefined}
+            hint={
+              seat !== null && record.ratingDelta !== null
+                ? `${signed(record.ratingDelta)} rating`
+                : undefined
+            }
           />
         </div>
 
@@ -214,22 +253,25 @@ export function ReplayScreen({ matchId }: { matchId: string }) {
             Share
           </Button>
 
-          {credentials && !reported ? (
+          {credentials && seat !== null && !reported ? (
             <Button
               size="small"
               variant="ghost"
               className="w-auto px-4"
               icon={<FlagReportIcon />}
+              disabled={reporting === 'sending'}
               onClick={async () => {
+                setReporting('sending');
                 try {
                   await api.report(credentials, matchId, 'other');
                   setReported(true);
+                  setReporting('idle');
                 } catch {
-                  setReported(false);
+                  setReporting('failed');
                 }
               }}
             >
-              Report
+              {reporting === 'failed' ? 'Report failed — retry' : 'Report'}
             </Button>
           ) : reported ? (
             <span className="text-xs text-ink-faint" role="status">

@@ -78,7 +78,7 @@ export function JourneyScreen() {
             />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-xs tracking-wide text-ink-faint uppercase">Up next</span>
-              <span className="truncate font-display text-lg">
+              <span className="font-display text-lg leading-tight">
                 {upNext.rival.name} · {modeById(upNext.mode).name}
               </span>
               <span className="text-xs text-ink-faint">

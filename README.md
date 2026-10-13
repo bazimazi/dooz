@@ -333,6 +333,7 @@ Nothing. Beyond the rules above:
   parsed again by the client — including cross-field checks, so a board that
   disagrees with the config it claims is rejected rather than rendered.
 - Nothing but `hello` is accepted before a connection has proved who it is.
+  A connection that has not done so within ten seconds is closed.
 - The WebSocket upgrade checks `Origin` against `ALLOWED_ORIGINS`. The CORS
   middleware does not cover this: a WebSocket handshake is not subject to the
   same-origin policy, so without the check any page could open a socket here.
@@ -341,10 +342,14 @@ Nothing. Beyond the rules above:
 - A wrong password and an unknown name produce the same answer, after the same
   work.
 - Inbound messages are rate-limited per connection, emotes far more tightly than
-  that, account creation per address, frames are size-capped, dead sockets are
+  that, account creation and sign-in per address, failed sign-ins per account
+  name, frames are size-capped, dead sockets are
   dropped by heartbeat, and there are ceilings on sessions, rooms and spectators
   so no map can grow without bound.
 - A declined draw offer cannot be repeated until the position has changed.
+- The client address is the socket's own. `X-Forwarded-For` is read only when
+  `TRUST_PROXY=1`, because without a proxy that header is whatever the client
+  chose to send.
 
 ## Design
 

@@ -86,6 +86,22 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX reports_by_match ON reports(match_id);
     `);
   },
+  (db) => {
+    // Ranked games counted on their own, for the K-factor and the placement
+    // threshold; `played` keeps counting every game for the profile. Existing
+    // rows are backfilled from the match records, which hold every ranked game
+    // that was ever scored.
+    db.exec(`
+      ALTER TABLE stats ADD COLUMN ranked_played INTEGER NOT NULL DEFAULT 0;
+
+      UPDATE stats SET ranked_played = (
+        SELECT COUNT(*) FROM matches m
+        WHERE m.mode = stats.mode
+          AND m.kind = 'ranked'
+          AND (m.x_id = stats.account_id OR m.o_id = stats.account_id)
+      );
+    `);
+  },
 ];
 
 export function migrate(db: BetterSqlite3.Database): void {

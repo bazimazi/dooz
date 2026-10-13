@@ -388,3 +388,41 @@ describe('seatsFor', () => {
     expect(theirs).toMatchObject({ player: 2 });
   });
 });
+
+describe('a reconnect with nothing to resume', () => {
+  const welcome = (): ServerMessage => ({
+    type: 'welcome',
+    version: PROTOCOL_VERSION,
+    profile: { accountId: 'me', displayName: 'Ada', avatar: 'fox', rating: null },
+    resumed: false,
+  });
+
+  it('asks again for a queue place the server lost', () => {
+    connect();
+    useOnlineStore.getState().queue(CLASSIC, false);
+    FakeSocket.latest.deliver({ type: 'searching', config: CLASSIC, ranked: false, queued: 1 });
+    FakeSocket.latest.close();
+    vi.advanceTimersByTime(10_000);
+    FakeSocket.latest.open();
+    FakeSocket.latest.deliver(welcome());
+    expect(FakeSocket.latest.sent.at(-1)).toEqual({
+      type: 'queue',
+      config: CLASSIC,
+      ranked: false,
+    });
+  });
+
+  it('clears a game the server no longer has and says so', () => {
+    connect();
+    FakeSocket.latest.deliver(matched());
+    FakeSocket.latest.close();
+    vi.advanceTimersByTime(10_000);
+    FakeSocket.latest.open();
+    FakeSocket.latest.deliver(welcome());
+    const state = useOnlineStore.getState();
+    expect(state.phase).toBe('idle');
+    expect(state.game).toBeNull();
+    expect(state.error).toMatch(/could not be resumed/);
+    expect(FakeSocket.latest.sent.some((sent) => sent.type === 'queue')).toBe(false);
+  });
+});

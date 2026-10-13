@@ -1,3 +1,4 @@
+import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH } from '@/protocol';
 import { useState } from 'react';
 import { LinkIcon, SearchPlayerIcon } from '@/components/art/icons';
 import { TrophyIcon, UsersIcon } from '@/components/art/ui-icons';
@@ -36,7 +37,7 @@ export function OnlineSheet({
   const { closing, close } = useClosing(onClose);
   const panelRef = useDialog<HTMLDivElement>(close);
   const [code, setCode] = useState('');
-  const ready = code.trim().length === 6;
+  const ready = code.length === ROOM_CODE_LENGTH;
 
   return (
     <div
@@ -95,14 +96,14 @@ export function OnlineSheet({
             className="grid grid-cols-2 gap-2 pt-1"
             onSubmit={(event) => {
               event.preventDefault();
-              if (ready) onJoin(code.trim().toUpperCase());
+              if (ready) onJoin(code);
             }}
           >
             <label className="col-span-2 flex flex-col gap-1 text-xs text-ink-faint">
               <span className="px-1">Have a code?</span>
               <input
                 value={code}
-                onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 6))}
+                onChange={(event) => setCode(roomCodeFrom(event.target.value))}
                 placeholder="ABC123"
                 aria-label="Room code"
                 autoComplete="off"
@@ -176,4 +177,16 @@ function SheetAction({
       </span>
     </button>
   );
+}
+
+/**
+ * The room code in whatever was typed or pasted: an invite link's `code=`, or
+ * the code itself with spaces and characters no code contains dropped.
+ */
+function roomCodeFrom(input: string): string {
+  const linked = /[?&]code=([^&#]*)/i.exec(input)?.[1];
+  return (linked ?? input)
+    .toUpperCase()
+    .replace(new RegExp(`[^${ROOM_CODE_ALPHABET}]`, 'g'), '')
+    .slice(0, ROOM_CODE_LENGTH);
 }

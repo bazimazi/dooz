@@ -1,5 +1,6 @@
 import type { BotDifficulty, ModeId } from '@/game/engine';
 import { create } from 'zustand';
+import { stageById } from '@/features/journey/stages';
 
 const STORAGE_KEY = 'dooz.progress';
 
@@ -73,7 +74,7 @@ function load(): ProgressData {
         streak: count(parsed.daily?.streak),
         best: count(parsed.daily?.best),
       },
-      journey: isStarMap(parsed.journey) ? parsed.journey : {},
+      journey: starMap(parsed.journey),
       announced: Array.isArray(parsed.announced)
         ? parsed.announced.filter((id): id is string => typeof id === 'string')
         : [],
@@ -99,11 +100,15 @@ function isRecordMap(value: unknown): value is Record<string, BotRecord> {
   );
 }
 
-function isStarMap(value: unknown): value is Record<string, number> {
-  if (typeof value !== 'object' || value === null) return false;
-  return Object.values(value).every(
-    (stars) => typeof stars === 'number' && stars >= 0 && stars <= 3,
-  );
+/** Stars per stage, keeping only stages that exist and whole star counts. */
+function starMap(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      ([stage, stars]) =>
+        stageById(stage) !== undefined && Number.isInteger(stars) && stars >= 0 && stars <= 3,
+    ),
+  ) as Record<string, number>;
 }
 
 function save(data: ProgressData): void {

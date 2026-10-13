@@ -133,7 +133,7 @@ export function SettingsSheet({ onClose }: { onClose: () => void }) {
           <Group title="Help">
             <Toggle
               label="Practice hints"
-              description="Ring the winning and losing squares in local games."
+              description="Ring the winning and losing squares in local and bot games."
               checked={preferences.hints}
               onChange={(hints) => update({ hints })}
             />

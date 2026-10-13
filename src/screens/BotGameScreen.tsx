@@ -30,16 +30,17 @@ import { RivalBubble } from '@/game/components/RivalBubble';
 import { Stars } from '@/game/components/Stars';
 import { VariantStatus } from '@/game/components/VariantStatus';
 import { Button } from '@/components/ui/Button';
+import { Card, EmptyState } from '@/components/ui/Card';
 import { Segmented } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { DIFFICULTY_LABELS } from '@/game/bot/labels';
 import { useBotOpponent } from '@/game/bot/useBotOpponent';
 import { useSuggestion } from '@/game/bot/useSuggestion';
-import { useGame } from '@/game/useGame';
+import { forgetGame, useGame } from '@/game/useGame';
 import { useGameFeedback } from '@/game/useGameFeedback';
 import { useTurnTint } from '@/game/useTurnTint';
-import { type Stage, stageAfter, stageById, starsFor } from '@/features/journey/stages';
+import { isUnlocked, type Stage, stageAfter, stageById, starsFor } from '@/features/journey/stages';
 import { type BotRecord, useProgressStore } from '@/features/progress/store';
 import { cx } from '@/lib/cx';
 import { hintsFor } from '@/game/hints';
@@ -74,7 +75,26 @@ export function BotGameScreen({
   stage: stageId,
 }: BotGameScreenProps) {
   const stage = stageId ? stageById(stageId) : undefined;
+  const journey = useProgressStore((state) => state.journey);
   if (stageId && !stage) return <BotGame mode={mode} difficulty={difficulty} practice={practice} />;
+  // A link can name any stage; the journey decides which are open.
+  if (stage && !isUnlocked(stage, journey)) {
+    return (
+      <Screen scroll>
+        <Card className="w-full">
+          <EmptyState
+            title="Stage locked"
+            body={`Earn stars on the earlier stages to face ${stage.rival.name} here.`}
+            action={
+              <Button as={ReturnLink} to="/journey" size="small" className="w-auto px-4">
+                Journey map
+              </Button>
+            }
+          />
+        </Card>
+      </Screen>
+    );
+  }
   return (
     <BotGame
       // Stages and practice have their own saved positions and help settings.
@@ -109,6 +129,8 @@ function BotGame({
   const [hintsOn, setHintsOn] = useState(() => !stage && (practice || loadPreferences().hints));
   const [pendingChange, setPendingChange] = useState<'restart' | BotDifficulty | null>(null);
   const [reviewedRound, setReviewedRound] = useState(-1);
+  // A result reopened with "Show result" appears at once, not after the reveal.
+  const [reopenedRound, setReopenedRound] = useState(-1);
   const recordBotGame = useProgressStore((state) => state.recordBotGame);
   const recordStage = useProgressStore((state) => state.recordStage);
 
@@ -186,6 +208,9 @@ function BotGame({
       ...(practice ? { practice: true as const } : {}),
     };
     savePreferences({ mode: search.mode, difficulty: search.difficulty });
+    // Another level is a new round, not one left there earlier.
+    if (search.mode !== mode || search.difficulty !== difficulty)
+      forgetGame(`bot:${search.mode}:${search.difficulty}:${practice}`);
     // A confirmation/result overlay must release its temporary entry before
     // replacing game settings, or Back would restore the old difficulty.
     await consumeDialogHistory(router.history);
@@ -272,8 +297,9 @@ function BotGame({
           />
           <OpenerBanner
             round={round}
-            player={game.currentPlayer}
-            label={game.currentPlayer === X ? 'You go first' : `${rivalName} goes first`}
+            player={startingPlayerOf(game)}
+            label={startingPlayerOf(game) === X ? 'You go first' : `${rivalName} goes first`}
+            fresh={game.moves.length === 0}
           />
         </div>
 
@@ -291,7 +317,11 @@ function BotGame({
         ) : null}
 
         {stage ? (
-          <StageGoal stage={stage} moves={yourMoves} finished={finished} />
+          <StageGoal
+            stage={stage}
+            moves={yourMoves}
+            earned={finished ? starsFor(stage, outcome === 'win', yourMoves) : null}
+          />
         ) : (
           <ThinkingIndicator thinking={thinking} />
         )}
@@ -302,7 +332,14 @@ function BotGame({
         style={{ animationDelay: '0.22s' }}
       >
         {finished && reviewedRound === round ? (
-          <Button size="small" variant="ghost" onClick={() => setReviewedRound(-1)}>
+          <Button
+            size="small"
+            variant="ghost"
+            onClick={() => {
+              setReopenedRound(round);
+              setReviewedRound(-1);
+            }}
+          >
             Show result
           </Button>
         ) : null}
@@ -374,7 +411,9 @@ function BotGame({
           }
           note={
             stage
-              ? `“${outcome === 'win' ? stage.rival.concede : stage.rival.gloat}”`
+              ? outcome === 'draw'
+                ? `${stage.rival.name} held you to a draw.`
+                : `“${outcome === 'win' ? stage.rival.concede : stage.rival.gloat}”`
               : outcome === 'draw' && perfectClassic
                 ? 'You held a draw against a bot that plays perfectly. Well played.'
                 : `${DIFFICULTY_LABELS[difficulty]} bot · ${modeById(mode).name}`
@@ -390,7 +429,7 @@ function BotGame({
             ) : null
           }
           celebrate={outcome === 'win'}
-          revealDelay={revealDelayFor(game)}
+          revealDelay={reopenedRound === round ? 0 : revealDelayFor(game)}
           actions={
             stage ? (
               <>
@@ -455,6 +494,7 @@ function BotGame({
                   <Button
                     onClick={async () => {
                       await consumeDialogHistory(router.history);
+                      forgetGame(`bot:${mode}:${difficulty}:true`);
                       void navigate({
                         to: '/play/bot',
                         search: { mode, difficulty, practice: true },
@@ -492,6 +532,8 @@ function BotGame({
               setPendingChange(null);
               restart();
             } else {
+              // The dialog promised to replace this round, not to shelve it.
+              forgetGame(`bot:${mode}:${difficulty}:${practice}`);
               // goTo consumes the dialog entry before updating the URL.
               void goTo({ difficulty: change }).then(() => setPendingChange(null));
             }
@@ -522,15 +564,24 @@ function harder(difficulty: BotDifficulty): BotDifficulty {
  * for each star. It counts up as you play, so the target is never a surprise
  * on the result screen.
  */
-function StageGoal({ stage, moves, finished }: { stage: Stage; moves: number; finished: boolean }) {
+function StageGoal({
+  stage,
+  moves,
+  earned,
+}: {
+  stage: Stage;
+  moves: number;
+  /** The stars the finished game earned; null while it is still being played. */
+  earned: number | null;
+}) {
   const [two, three] = stage.par;
   const onPace = moves <= three ? 3 : moves <= two ? 2 : 1;
   return (
-    <div className="flex h-5 items-center gap-2 text-sm text-ink-muted">
-      <span className="tnum">Your moves: {moves}</span>
+    <div className="flex min-h-5 flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-sm text-ink-muted">
+      <span className="tnum whitespace-nowrap">Your moves: {moves}</span>
       <span aria-hidden="true">·</span>
-      <Stars earned={finished ? 0 : onPace} className="text-sm" />
-      <span className="tnum text-xs text-ink-faint">
+      <Stars earned={earned ?? onPace} className="text-sm" />
+      <span className="tnum text-xs whitespace-nowrap text-ink-faint">
         ≤{three} for three · ≤{two} for two
       </span>
     </div>

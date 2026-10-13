@@ -119,6 +119,72 @@ describe('account creation', () => {
     expect((await make()).status).toBe(201);
     expect((await make()).status).toBe(429);
   });
+
+  /** A request as the Node server hands it over, from a given socket address. */
+  function fromSocket(app: Hono, address: string, headers: Record<string, string> = {}) {
+    return app.request(
+      '/api/accounts',
+      { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: '{}' },
+      { incoming: { socket: { remoteAddress: address } } },
+    );
+  }
+
+  it('keys the limit on the socket, not on a forwarded header it was not told to trust', async () => {
+    const api2 = createApi({
+      accounts,
+      matches,
+      db,
+      now: () => clock,
+      signupsPerHour: 2,
+      health: () => ({ sessions: 0, rooms: 0, queued: 0 }),
+    });
+
+    // A made-up address per request does not buy a fresh allowance.
+    for (const [index, status] of [201, 201, 429].entries()) {
+      const response = await fromSocket(api2, '198.51.100.1', {
+        'x-forwarded-for': `203.0.113.${index}`,
+      });
+      expect(response.status).toBe(status);
+    }
+    // A different machine still gets its own.
+    expect((await fromSocket(api2, '198.51.100.2')).status).toBe(201);
+  });
+
+  it('takes the address the proxy appended when told to trust it', async () => {
+    const api2 = createApi({
+      accounts,
+      matches,
+      db,
+      now: () => clock,
+      signupsPerHour: 2,
+      trustProxy: true,
+      health: () => ({ sessions: 0, rooms: 0, queued: 0 }),
+    });
+    const via = (forwarded: string) =>
+      fromSocket(api2, '10.0.0.1', { 'x-forwarded-for': forwarded });
+
+    // Whatever the client wrote to the left of the proxy's entry is ignored.
+    expect((await via('1.1.1.1, 203.0.113.7')).status).toBe(201);
+    expect((await via('2.2.2.2, 203.0.113.7')).status).toBe(201);
+    expect((await via('3.3.3.3, 203.0.113.7')).status).toBe(429);
+    expect((await via('1.1.1.1, 203.0.113.8')).status).toBe(201);
+  });
+
+  it('opens a new window once the hour is over', async () => {
+    const api2 = createApi({
+      accounts,
+      matches,
+      db,
+      now: () => clock,
+      signupsPerHour: 1,
+      health: () => ({ sessions: 0, rooms: 0, queued: 0 }),
+    });
+
+    expect((await fromSocket(api2, '198.51.100.1')).status).toBe(201);
+    expect((await fromSocket(api2, '198.51.100.1')).status).toBe(429);
+    clock += 3_600_001;
+    expect((await fromSocket(api2, '198.51.100.1')).status).toBe(201);
+  });
 });
 
 describe('profile', () => {
@@ -242,13 +308,48 @@ describe('claim and login', () => {
     expect(missing.status).toBe(401);
     expect(wrong.body).toEqual(missing.body);
   });
+
+  it('locks a name after repeated wrong passwords, whatever the address', async () => {
+    api = createApi({
+      accounts,
+      matches,
+      db,
+      now: () => clock,
+      loginFailuresPerName: 3,
+      health: () => ({ sessions: 0, rooms: 0, queued: 0 }),
+    });
+    const ada = await signUp('Ada');
+    await call('/api/accounts/claim', {
+      method: 'POST',
+      auth: ada,
+      body: JSON.stringify({ password: 'correct horse battery' }),
+    });
+    const login = (password: string, displayName = 'Ada') =>
+      call('/api/accounts/login', {
+        method: 'POST',
+        body: JSON.stringify({ displayName, password }),
+      });
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect((await login('not the password')).status).toBe(401);
+    }
+    // Locked: even the right password is refused, and the name is matched
+    // however it is cased.
+    expect((await login('correct horse battery')).status).toBe(429);
+    expect((await login('correct horse battery', 'ADA')).status).toBe(429);
+    // Other names are unaffected.
+    expect((await login('whatever it is', 'Bob')).status).toBe(401);
+
+    clock += 15 * 60_000 + 1;
+    expect((await login('correct horse battery')).status).toBe(200);
+  });
 });
 
 describe('leaderboard', () => {
   async function seed(name: string, rating: number, played: number) {
     const account = await signUp(name);
     for (let game = 0; game < played; game++) {
-      accounts.recordResult(account.accountId, 'classic', 'win', rating);
+      accounts.recordResult(account.accountId, 'classic', 'win', rating, true);
     }
     return account;
   }

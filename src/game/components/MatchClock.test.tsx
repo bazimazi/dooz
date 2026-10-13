@@ -39,11 +39,16 @@ describe('clock scheduling', () => {
 
   it('updates seconds without committing a React render on every frame', () => {
     const commits = vi.fn();
-    render(<Profiler id="clock" onRender={commits}>
-      <MatchClock remainingMs={120_000} ticking />
-    </Profiler>);
+    render(
+      <Profiler id="clock" onRender={commits}>
+        <MatchClock remainingMs={120_000} ticking />
+      </Profiler>,
+    );
     commits.mockClear();
-    for (let second = 0; second < 5; second++) act(() => vi.advanceTimersByTime(1000));
+    for (let second = 0; second < 5; second++)
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
     expect(screen.getByText('1:55')).toBeInTheDocument();
     expect(commits.mock.calls.length).toBeLessThanOrEqual(5);
   });
@@ -51,11 +56,17 @@ describe('clock scheduling', () => {
   it('changes to tenths at ten seconds and stops scheduling at zero', () => {
     render(<MatchClock remainingMs={10_000} ticking />);
     expect(screen.getByText('0:10')).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(1));
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     expect(screen.getByText('10.0')).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(100));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
     expect(screen.getByText('9.9')).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(10_000));
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
     expect(screen.getByText('0.0')).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -63,11 +74,17 @@ describe('clock scheduling', () => {
   it('stops hidden-tab timers and catches up on return', () => {
     const { unmount } = render(<MatchClock remainingMs={30_000} ticking />);
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(vi.getTimerCount()).toBe(0);
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
-    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(screen.getByText('0:25')).toBeInTheDocument();
     unmount();
     expect(vi.getTimerCount()).toBe(0);
@@ -75,9 +92,13 @@ describe('clock scheduling', () => {
 
   it('uses new server values and cancels the previous countdown', () => {
     const { rerender } = render(<MatchClock remainingMs={30_000} ticking />);
-    act(() => vi.advanceTimersByTime(2000));
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
     rerender(<MatchClock remainingMs={60_000} ticking={false} />);
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(screen.getByText('1:00')).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -103,5 +124,15 @@ describe('MatchClock', () => {
   it('stays quiet when there is plenty of time, even while running', () => {
     const { container } = render(<MatchClock remainingMs={120_000} ticking />);
     expect(container.firstElementChild).toHaveAttribute('aria-live', 'off');
+  });
+});
+
+describe('formatClock', () => {
+  it('never reads lower than the time left', () => {
+    expect(formatClock(10_000)).toBe('0:10');
+    expect(formatClock(9_950)).toBe('10.0');
+    expect(formatClock(9_900)).toBe('9.9');
+    expect(formatClock(50)).toBe('0.1');
+    expect(formatClock(0)).toBe('0.0');
   });
 });

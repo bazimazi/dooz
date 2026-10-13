@@ -30,7 +30,10 @@ export const SKIN_UNLOCKS: readonly SkinUnlock[] = [
     name: 'Neon',
     requirement: 'Win 3 games against the bot.',
     need: 3,
-    have: (progress) => totalBotWins(progress.bot),
+    // Journey stages are bot games too; a stage with stars was a win.
+    have: (progress) =>
+      totalBotWins(progress.bot) +
+      Object.values(progress.journey).filter((stars) => stars > 0).length,
   },
   {
     skin: 'chalk',

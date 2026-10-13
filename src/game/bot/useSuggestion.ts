@@ -21,13 +21,15 @@ export function useSuggestion(game: GameState): {
     return () => search.dispose();
   }, []);
 
-  useEffect(() => {
-    setAsking(null);
-    return () => {
+  // A new position or a hidden tab cancels the request in flight.
+  useEffect(
+    () => () => {
       pending.current?.();
       pending.current = null;
-    };
-  }, [game, visible]);
+      setAsking(null);
+    },
+    [game, visible],
+  );
 
   const suggest = useCallback(() => {
     if (game.status !== 'playing' || !visible || pending.current) return;

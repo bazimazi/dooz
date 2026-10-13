@@ -215,16 +215,24 @@ export function vanishVerdict(state: GameState): VanishVerdict {
  * Their oldest mark is lifted first when they already have three down, so a
  * "two in a row" that leans on that mark is not a threat at all - which is
  * precisely the thing this variant makes hard to see.
+ *
+ * Asked about the player who is waiting, it counts the move in between too:
+ * the mover's oldest mark leaves before the waiting player places again, and
+ * the square it frees is one they may finish a line on. Nothing can block that
+ * one: it still holds the mover's own mark when the mover plays.
  */
 export function vanishWinningMoves(state: GameState, player: Player): number[] {
   const { mover, other } = vanishQueues(state);
-  const own = player === state.currentPlayer ? mover : other;
+  const waiting = player !== state.currentPlayer;
+  const own = waiting ? other : mover;
   const board = state.board.slice();
   if (own.length >= VANISH_KEEP) board[own[0]!] = Empty;
+  const freed = waiting && mover.length >= VANISH_KEEP ? mover[0]! : -1;
+  if (freed >= 0) board[freed] = Empty;
 
   const wins: number[] = [];
   for (let cell = 0; cell < CELLS; cell++) {
-    if (state.board[cell] !== Empty) continue;
+    if (state.board[cell] !== Empty && cell !== freed) continue;
     board[cell] = player;
     if (findWinLineFrom(board, 3, cell, 3)) wins.push(cell);
     board[cell] = Empty;

@@ -1,4 +1,4 @@
-import { countEmpty, emptyIndices, gravityMoves } from '../board.js';
+import { countEmpty, emptyIndices, gravityMoves, ultimateBoardOf } from '../board.js';
 import { applyMove, legalMoves } from '../game.js';
 import { type Board, Empty, type GameState, opponentOf, type Player } from '../types.js';
 import { TRIPLES } from '../variants/ultimate.js';
@@ -6,7 +6,8 @@ import { candidateMoves } from './candidates.js';
 import { type BotDifficulty, profileForBoard, radiusFor } from './difficulty.js';
 import { moveHeuristic, WIN_SCORE } from './evaluate.js';
 import { type RootScore, search } from './search.js';
-import { findForkDefence, findForkMove, findImmediateWin } from './threats.js';
+import { completesLine, findForkDefence, findForkMove, findImmediateWin } from './threats.js';
+import { UltimatePosition } from './ultimate.js';
 import { searchUltimate } from './ultimate-search.js';
 import { vanishPliesLeft, vanishQueues, vanishVerdict } from './vanish.js';
 
@@ -97,11 +98,19 @@ function chooseLineMove(
   // look broken rather than merely weak - so even the beginner draws from here.
   // Under gravity the columns already narrow it to one square each, all of them
   // reachable and none of them pointless.
-  const radius = radiusFor(profile, board.length - countEmpty(board));
+  const radius = radiusFor(profile, board.length - countEmpty(board), board.length);
   const near = gravity ? gravityMoves(board, size) : candidateMoves(board, size, radius);
   const nearSet = new Set(near);
   const sensible = legal.filter((move) => nearSet.has(move));
-  const pool = sensible.length > 0 ? sensible : legal;
+  const nearby = sensible.length > 0 ? sensible : legal;
+  // Under misere completing your own line is the one move that loses on the
+  // spot, so the moves that pick without searching - the beginner's, and the
+  // fallback when the clock beat the search - never take it while anything else
+  // is left. The search proves it lost at the first ply and drops it itself.
+  const safe = misere
+    ? nearby.filter((move) => !completesLine(board, size, move, me, winLength))
+    : nearby;
+  const pool = safe.length > 0 ? safe : nearby;
 
   // Under misere a completed line loses, so none of the tactical shortcuts
   // below mean what they say - "take the win" would be taking the loss. The
@@ -229,9 +238,7 @@ function chooseUltimateMove(
   const profile = profileForBoard(difficulty, 81, countEmpty(state.board));
   const now = options.now ?? Date.now;
 
-  if (profile.plies <= 0) {
-    return { move: randomFrom(legal, random), reason: 'heuristic', depth: 0, nodes: 0, score: 0 };
-  }
+  if (profile.plies <= 0) return ultimateReflexMove(state, legal, random);
 
   const result = searchUltimate(state, {
     // Ultimate's branching factor is small when a board is forced and large
@@ -262,6 +269,67 @@ function chooseUltimateMove(
   }
 
   return { move: randomFrom(legal, random), reason: 'heuristic', depth: 0, nodes: 0, score: 0 };
+}
+
+/**
+ * Ultimate without a search: the beginner's move.
+ *
+ * It still sees what every level sees. A move that wins the game is taken, and
+ * a move that hands the opponent the game with their next mark is avoided while
+ * anything else is left - which in Ultimate is what blocking means, because the
+ * square that loses is usually one the opponent is *sent* to rather than one
+ * already in their reach. Past that it takes a small board when one is on offer,
+ * the one thing a beginner never misses, and otherwise plays at random.
+ */
+function ultimateReflexMove(state: GameState, legal: number[], random: () => number): BotMove {
+  const position = new UltimatePosition(state);
+  const me = state.currentPlayer;
+  const safe: number[] = [];
+  const takesBoard: number[] = [];
+
+  for (const move of legal) {
+    position.play(move);
+    const wins = position.winner === me;
+    const takes = position.boards[ultimateBoardOf(move)] === me;
+    const losing = !wins && opponentWinsNext(position);
+    position.unplay();
+
+    if (wins) return { move, reason: 'win', depth: 0, nodes: 0, score: WIN_SCORE };
+    if (losing) continue;
+    safe.push(move);
+    if (takes) takesBoard.push(move);
+  }
+
+  if (takesBoard.length > 0) {
+    return {
+      move: randomFrom(takesBoard, random),
+      reason: 'heuristic',
+      depth: 0,
+      nodes: 0,
+      score: 0,
+    };
+  }
+  // Nothing safe means every move loses; any of them will do.
+  const pool = safe.length > 0 ? safe : legal;
+  return {
+    move: randomFrom(pool, random),
+    reason: safe.length < legal.length ? 'block' : 'heuristic',
+    depth: 0,
+    nodes: 0,
+    score: 0,
+  };
+}
+
+/** Whether the player to move in `position` can win the game with one mark. */
+function opponentWinsNext(position: UltimatePosition): boolean {
+  const player = position.toMove;
+  for (const reply of position.moves()) {
+    position.play(reply);
+    const won = position.winner === player;
+    position.unplay();
+    if (won) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -407,8 +475,13 @@ function pickWithSlack(
     const pool = usable.filter(
       (entry) => entry.score >= bestScore - slack && entry.score > -MATE_THRESHOLD,
     );
-    const from = pool.length > 0 ? pool : usable;
-    return from[Math.min(from.length - 1, Math.floor(random() * from.length))]!.move;
+    if (pool.length > 0) {
+      return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))]!.move;
+    }
+    // Every move loses. A random one of them would hand the game over sooner
+    // than it has to - under misere, often by completing a line on the spot -
+    // so a lost position is played as the strong levels play it: the move
+    // that holds out longest.
   }
 
   const tied = usable.filter((entry) => entry.score === bestScore);

@@ -36,7 +36,19 @@ const DATA_FILE = process.env['DATA_FILE'] ?? './data/dooz.sqlite';
  */
 const SIGNUPS_PER_HOUR = Number(process.env['SIGNUPS_PER_HOUR'] ?? 20);
 
-/** How often clocks, abandoned games and the matchmaking bands are re-examined. */
+/**
+ * Whether a reverse proxy in front of the server sets `X-Forwarded-For`.
+ *
+ * Off by default, because without a proxy that header is whatever the client
+ * wrote in it, and believing it would let one machine dodge every per-address
+ * limit by making up a new address per request.
+ */
+const TRUST_PROXY = process.env['TRUST_PROXY'] === '1';
+
+/**
+ * How often clocks, abandoned games, sockets that never said `hello` and the
+ * matchmaking bands are re-examined.
+ */
 const TICK_INTERVAL_MS = 1000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 /** Refuse frames larger than any legitimate client message could possibly be. */
@@ -77,6 +89,7 @@ app.route(
     matches,
     db,
     signupsPerHour: Number.isFinite(SIGNUPS_PER_HOUR) ? SIGNUPS_PER_HOUR : 20,
+    trustProxy: TRUST_PROXY,
     health: () => ({
       sessions: lobby.sessionCount,
       rooms: lobby.roomCount,

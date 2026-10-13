@@ -1,5 +1,5 @@
 import type { GameConfig, GameState, Player } from '@/game/engine';
-import type { EndReason, MatchKind, ServerMessage } from '@/protocol';
+import type { EndReason, MatchKind, MatchResult, ServerMessage } from '@/protocol';
 import type { MatchClock } from './clock.js';
 import type { AccountRow } from './db/accounts.js';
 
@@ -29,13 +29,15 @@ export interface Session {
   connected: boolean;
   /** `hello` is accepted once per connection; this records that it happened. */
   greeted: boolean;
+  /** When the connection opened, for the deadline on `hello`. */
+  readonly connectedAt: number;
   /** Token bucket state for rate limiting. */
   tokens: number;
   lastRefill: number;
   /** Separate, much tighter bucket for emotes. */
   emoteTokens: number;
   emoteRefill: number;
-  /** This player has muted the opponent for the rest of the match. */
+  /** This player has muted the opponent. Cleared whenever they take a new seat. */
   muted: boolean;
 }
 
@@ -77,6 +79,12 @@ export interface Room {
   moveTimesMs: number[];
   /** Set once the current game has been scored, so it is never scored twice. */
   settled: boolean;
+  /**
+   * How the current game was scored, for anyone who arrives after the fact: a
+   * reconnecting player or a spectator would otherwise see a resignation as a
+   * board still in play.
+   */
+  result: MatchResult | null;
 }
 
 /** The outcome of a game, as the lobby decides it. */

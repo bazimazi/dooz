@@ -499,6 +499,11 @@ const BoardCell = memo(function BoardCell({
   const falling = gravity && isLastMove && animate;
   const fall = row + 1;
   const landedAt = falling ? dropTime(fall) * 0.66 : 0;
+  // Landing effects wait out the fall unseen: a backwards fill would show
+  // their first frame in the empty square while the mark is still dropping.
+  const untilLanded: CSSProperties | undefined = falling
+    ? { opacity: 0, animationFillMode: 'forwards' }
+    : undefined;
 
   return (
     <button
@@ -565,7 +570,11 @@ const BoardCell = memo(function BoardCell({
             <span
               aria-hidden="true"
               className="pointer-events-none absolute inset-[14%] animate-stamp rounded-full"
-              style={{ boxShadow: `0 0 0 2px ${soft}`, animationDelay: `${landedAt}s` }}
+              style={{
+                ...untilLanded,
+                boxShadow: `0 0 0 2px ${soft}`,
+                animationDelay: `${landedAt}s`,
+              }}
             />
           ) : null}
 
@@ -657,6 +666,7 @@ const BoardCell = memo(function BoardCell({
                     {
                       '--dx': `${(spark.dx * 2.5) / size}px`,
                       '--dy': `${(spark.dy * 2.5) / size}px`,
+                      ...untilLanded,
                       background: soft,
                       animationDelay: `${landedAt + 0.04}s`,
                     } as CSSProperties
@@ -673,7 +683,7 @@ const BoardCell = memo(function BoardCell({
             <span
               aria-hidden="true"
               className={cx(
-                'last-move-ring pointer-events-none absolute rounded-full ring-2 ring-g10/70',
+                'last-move-ring pointer-events-none absolute rounded-full ring-2 ring-ink/70',
                 big ? 'inset-[6%]' : 'inset-[10%]',
               )}
               style={falling ? { animation: `fade-in 0.2s ${landedAt}s both` } : undefined}

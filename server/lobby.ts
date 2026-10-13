@@ -47,6 +47,8 @@ export interface LobbyOptions {
   reconnectGraceMs?: number;
   /** How long before a disconnected player forfeits a game in progress. */
   abandonAfterMs?: number;
+  /** How long a connection may stay open without completing `hello`. */
+  helloTimeoutMs?: number;
   /** Token bucket: burst size and refill rate for inbound messages. */
   messageBurst?: number;
   messagesPerSecond?: number;
@@ -60,6 +62,7 @@ export interface LobbyOptions {
 
 const DEFAULT_RECONNECT_GRACE_MS = 45_000;
 const DEFAULT_ABANDON_AFTER_MS = 60_000;
+const DEFAULT_HELLO_TIMEOUT_MS = 10_000;
 const DEFAULT_MESSAGE_BURST = 30;
 const DEFAULT_MESSAGES_PER_SECOND = 10;
 const DEFAULT_MAX_SESSIONS = 5000;
@@ -114,6 +117,7 @@ export class Lobby {
   private readonly newId: () => string;
   private readonly reconnectGraceMs: number;
   private readonly abandonAfterMs: number;
+  private readonly helloTimeoutMs: number;
   private readonly messageBurst: number;
   private readonly messagesPerSecond: number;
   private readonly maxSessions: number;
@@ -131,6 +135,7 @@ export class Lobby {
     this.newId = options.newId ?? (() => randomUUID());
     this.reconnectGraceMs = options.reconnectGraceMs ?? DEFAULT_RECONNECT_GRACE_MS;
     this.abandonAfterMs = options.abandonAfterMs ?? DEFAULT_ABANDON_AFTER_MS;
+    this.helloTimeoutMs = options.helloTimeoutMs ?? DEFAULT_HELLO_TIMEOUT_MS;
     this.messageBurst = options.messageBurst ?? DEFAULT_MESSAGE_BURST;
     this.messagesPerSecond = options.messagesPerSecond ?? DEFAULT_MESSAGES_PER_SECOND;
     this.maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
@@ -167,6 +172,7 @@ export class Lobby {
       spectating: null,
       connected: true,
       greeted: false,
+      connectedAt: this.now(),
       tokens: this.messageBurst,
       lastRefill: this.now(),
       emoteTokens: EMOTE_BURST,
@@ -192,12 +198,7 @@ export class Lobby {
       this.byAccount.delete(session.accountId);
     }
     this.removeFromQueues(session.id);
-
-    const watching = session.spectating ? this.rooms.get(session.spectating) : undefined;
-    if (watching) {
-      watching.spectators.delete(session.id);
-      this.announceSpectators(watching);
-    }
+    this.stopWatching(session);
 
     const room = session.roomCode ? this.rooms.get(session.roomCode) : undefined;
     log.info('conn.close', {
@@ -234,6 +235,7 @@ export class Lobby {
    * to look when something expires at the wrong moment.
    */
   tick(): void {
+    this.closeUnintroduced();
     this.flushQueues();
     this.checkClocks();
     this.checkAbandoned();
@@ -339,8 +341,12 @@ export class Lobby {
         message: 'This account was opened somewhere else.',
       });
       previous.transport.close();
+      previous.connected = false;
       this.sessions.delete(previous.id);
       this.removeFromQueues(previous.id);
+      // The socket's own close event will find this session already replaced
+      // and do nothing, so anything it was watching has to be let go here.
+      this.stopWatching(previous);
     }
 
     session.accountId = account.id;
@@ -376,22 +382,45 @@ export class Lobby {
   private resumeRoom(session: Session): void {
     if (!session.accountId) return;
 
-    for (const room of this.rooms.values()) {
-      const seat = room.seats.find((candidate) => candidate.accountId === session.accountId);
-      if (!seat) continue;
+    const room = this.roomOf(session.accountId);
+    const seat = room?.seats.find((candidate) => candidate.accountId === session.accountId);
+    if (!room || !seat) return;
 
-      seat.connected = true;
-      seat.disconnectedAt = null;
-      if (session.account) seat.account = session.account;
-      session.roomCode = room.code;
-      room.vacantSince = null;
-      // Whoever is to move has been losing time to a clock they could not see.
-      // It kept running on purpose - a disconnection is not a pause button, or
-      // it would be the cheapest way out of a lost position there is.
-      this.sendMatched(room, session);
+    // Whoever is to move has been losing time to a clock they could not see.
+    // It kept running on purpose - a disconnection is not a pause button, or
+    // it would be the cheapest way out of a lost position there is.
+    this.rejoin(room, seat, session);
+    log.info('room.resume', { accountId: session.accountId, room: room.code });
+  }
+
+  /** Put `session` back into a seat that was held open for it. */
+  private rejoin(room: Room, seat: Seat, session: Session): void {
+    seat.connected = true;
+    seat.disconnectedAt = null;
+    if (session.account) seat.account = session.account;
+    session.roomCode = room.code;
+    room.vacantSince = null;
+
+    // A host who dropped while still waiting for a friend goes back to
+    // waiting. A `matched` for a room with one seat in it would show them a
+    // board with nobody on the other side of it.
+    if (room.seats.length < 2) {
+      session.transport.send({ type: 'roomCreated', code: room.code, config: room.config });
       this.announceSeats(room);
-      log.info('room.resume', { accountId: session.accountId, room: room.code });
       return;
+    }
+
+    this.sendMatched(room, session);
+    if (room.result) session.transport.send({ type: 'result', result: room.result });
+    this.announceSeats(room);
+
+    // Anything the opponent asked for while this side was away still stands,
+    // and the banner for it went to a socket that is no longer there.
+    const other = room.seats.find((candidate) => candidate.accountId !== seat.accountId);
+    if (this.isLive(room)) {
+      if (other?.offeredDraw) session.transport.send({ type: 'drawOffered' });
+    } else if (other?.wantsRematch) {
+      session.transport.send({ type: 'rematchOffered' });
     }
   }
 
@@ -517,11 +546,21 @@ export class Lobby {
   private pair(config: GameConfig, ranked: boolean, first: QueueEntry, second: QueueEntry): void {
     const firstSession = this.sessions.get(first.sessionId);
     const secondSession = this.sessions.get(second.sessionId);
-    if (!firstSession || !secondSession) return;
+    if (!firstSession || !secondSession) {
+      // Both entries are already out of the queue. Whoever is still here goes
+      // back to the front of it, keeping the wait they had already put in.
+      const survivor = firstSession ? first : secondSession ? second : null;
+      if (survivor) this.requeue(config, ranked, survivor);
+      return;
+    }
 
     const room = this.openRoom(config, ranked ? 'ranked' : 'casual');
     if (!room) {
-      this.fail(secondSession, 'serverFull', 'The server is busy. Try again in a moment.');
+      // Neither is in the queue any more, so both have to be told; one left
+      // silently waiting would sit on a "searching" screen for ever.
+      for (const session of [firstSession, secondSession]) {
+        this.fail(session, 'serverFull', 'The server is busy. Try again in a moment.');
+      }
       return;
     }
 
@@ -534,6 +573,13 @@ export class Lobby {
       kind: room.kind,
       ratingGap: Math.abs(first.rating - second.rating),
     });
+  }
+
+  private requeue(config: GameConfig, ranked: boolean, entry: QueueEntry): void {
+    const key = this.queueKey(config, ranked);
+    const queue = this.queues.get(key) ?? [];
+    this.queues.set(key, queue);
+    if (!queue.some((item) => item.sessionId === entry.sessionId)) queue.unshift(entry);
   }
 
   private onCreateRoom(session: Session, config: GameConfig): void {
@@ -568,18 +614,21 @@ export class Lobby {
       // behind there that nothing will ever clear.
       if (session.roomCode !== room.code) this.onLeave(session, { silent: true });
 
-      existing.connected = true;
-      existing.disconnectedAt = null;
-      if (session.account) existing.account = session.account;
-      session.roomCode = room.code;
-      room.vacantSince = null;
-      this.sendMatched(room, session);
-      this.announceSeats(room);
+      this.rejoin(room, existing, session);
       return;
     }
 
     if (room.seats.length >= 2) {
       this.fail(session, 'roomFull', 'That game already has two players.');
+      return;
+    }
+
+    // A host whose connection has dropped is not there to play. Starting the
+    // game anyway would run their clock and then award it on abandonment to a
+    // guest who has done nothing but turn up, so the room is treated as gone
+    // until the host is back.
+    if (room.seats.some((seat) => !seat.connected)) {
+      this.fail(session, 'roomNotFound', 'The host of that game is not here right now.');
       return;
     }
 
@@ -609,18 +658,23 @@ export class Lobby {
     room.spectators.add(session.id);
     session.spectating = room.code;
     this.sendMatched(room, session);
+    if (room.result) session.transport.send({ type: 'result', result: room.result });
     this.announceSpectators(room);
   }
 
+  /**
+   * Walk out of whatever this session is in.
+   *
+   * `silent` is for a session that is leaving in order to do something else -
+   * queue, open a room, join or watch another - and is about to be told about
+   * that instead. It keeps the frames about the old room away from the leaver,
+   * whose screen has already moved on; the opponent is told either way, since
+   * from their side of the board it makes no difference why the other player
+   * went.
+   */
   private onLeave(session: Session, options: { silent?: boolean } = {}): void {
     this.removeFromQueues(session.id);
-
-    const watching = session.spectating ? this.rooms.get(session.spectating) : undefined;
-    session.spectating = null;
-    if (watching) {
-      watching.spectators.delete(session.id);
-      this.announceSpectators(watching);
-    }
+    this.stopWatching(session);
 
     const room = session.roomCode ? this.rooms.get(session.roomCode) : undefined;
     session.roomCode = null;
@@ -631,7 +685,11 @@ export class Lobby {
     if (this.isLive(room)) {
       const seat = room.seats.find((candidate) => candidate.accountId === session.accountId);
       if (seat) {
-        this.settle(room, { winner: opponentOf(seat.player), reason: 'resign' });
+        this.settle(
+          room,
+          { winner: opponentOf(seat.player), reason: 'resign' },
+          options.silent ? (session.accountId ?? undefined) : undefined,
+        );
       }
     }
 
@@ -642,7 +700,7 @@ export class Lobby {
       return;
     }
 
-    if (!options.silent) this.broadcast(room, { type: 'opponentLeft' });
+    this.broadcast(room, { type: 'opponentLeft' });
     for (const seat of room.seats) {
       const other = this.sessionFor(seat.accountId);
       if (other) other.roomCode = null;
@@ -765,8 +823,10 @@ export class Lobby {
       return;
     }
     const { room, seat } = found;
-    // A rematch is for a finished game. Asking mid-game is a client bug.
-    if (room.game.status === 'playing') return;
+    // A rematch is for a finished game. Asking mid-game is a client bug. The
+    // board alone cannot say which that is: a game decided by resignation, on
+    // time, by abandonment or by agreement leaves it mid-game for good.
+    if (this.isLive(room)) return;
 
     seat.wantsRematch = true;
     if (!room.seats.every((candidate) => candidate.wantsRematch)) {
@@ -812,9 +872,10 @@ export class Lobby {
       const flagged = room.clock.flagged();
       if (flagged === null) continue;
 
-      room.clock.stop();
-      this.settle(room, { winner: opponentOf(flagged), reason: 'timeout' });
-      log.info('match.timeout', { room: room.code, loser: flagged });
+      this.guarded(room, 'timeout', () => {
+        this.settle(room, { winner: opponentOf(flagged), reason: 'timeout' });
+        log.info('match.timeout', { room: room.code, loser: flagged });
+      });
     }
   }
 
@@ -836,12 +897,15 @@ export class Lobby {
       );
       if (!gone) continue;
 
-      // If both sides have walked away there is nobody to award it to.
+      // If both sides have walked away there is nobody here to award it to;
+      // `sweepRooms` scores it once the grace period for coming back is over.
       const present = room.seats.find((seat) => seat.accountId !== gone.accountId);
       if (!present?.connected) continue;
 
-      this.settle(room, { winner: present.player, reason: 'abandoned' });
-      log.info('match.abandoned', { room: room.code, accountId: gone.accountId });
+      this.guarded(room, 'abandoned', () => {
+        this.settle(room, { winner: present.player, reason: 'abandoned' });
+        log.info('match.abandoned', { room: room.code, accountId: gone.accountId });
+      });
     }
   }
 
@@ -849,11 +913,50 @@ export class Lobby {
   private sweepRooms(): void {
     const cutoff = this.now() - this.reconnectGraceMs;
     for (const [code, room] of this.rooms) {
-      if (room.vacantSince !== null && room.vacantSince <= cutoff) {
-        this.closeRoom(room);
-        this.rooms.delete(code);
-      }
+      if (room.vacantSince === null || room.vacantSince > cutoff) continue;
+      // Scored before it goes, or a game both sides walked away from would
+      // vanish from both records - which, for whoever was losing it, is a
+      // rating loss avoided by closing the lid.
+      if (this.isLive(room)) this.guarded(room, 'deserted', () => this.settleDeserted(room));
+      this.closeRoom(room);
+      this.rooms.delete(code);
     }
+  }
+
+  /**
+   * One room's housekeeping failing - the database refusing a write, say -
+   * must not stop it for every other room. The step is logged; an unsettled
+   * room is tried again on the next tick.
+   */
+  private guarded(room: Room, step: string, work: () => void): void {
+    try {
+      work();
+    } catch (error) {
+      log.exception('room.tick.failed', error, { room: room.code, step });
+    }
+  }
+
+  /**
+   * Score a game both players walked away from.
+   *
+   * It goes to whoever stayed longer. The first to leave abandoned a game the
+   * other was still there to play, which is exactly what `checkAbandoned`
+   * punishes when only one side goes; the second leaving afterwards does not
+   * undo that. When both dropped at the same instant - the server's own
+   * network going, say - there is nobody to hold responsible, so it is a draw
+   * rather than a win handed out at random.
+   */
+  private settleDeserted(room: Room): void {
+    const [first, second] = room.seats;
+    if (!first || !second) return;
+
+    const firstLeft = first.disconnectedAt ?? this.now();
+    const secondLeft = second.disconnectedAt ?? this.now();
+    const winner =
+      firstLeft === secondLeft ? null : firstLeft > secondLeft ? first.player : second.player;
+
+    this.settle(room, { winner, reason: 'abandoned' });
+    log.info('match.deserted', { room: room.code, winner });
   }
 
   // ---------------------------------------------------------------------------
@@ -868,14 +971,16 @@ export class Lobby {
    * the statistics, the achievements and the stored record cannot get out of
    * step with each other or be applied twice.
    */
-  private settle(room: Room, outcome: Outcome): void {
+  private settle(room: Room, outcome: Outcome, quietFor?: string): void {
     if (room.settled) return;
-    room.settled = true;
-    room.clock?.stop();
 
     const x = room.seats.find((seat) => seat.player === X);
     const o = room.seats.find((seat) => seat.player === O);
-    if (!x || !o) return;
+    if (!x || !o) {
+      room.settled = true;
+      room.clock?.stop();
+      return;
+    }
 
     const ranked = room.kind === 'ranked';
     const score = outcome.winner === null ? 0.5 : outcome.winner === X ? 1 : 0;
@@ -885,9 +990,11 @@ export class Lobby {
 
     let rating: MatchResult['rating'] = null;
     if (ranked) {
+      // The K-factor follows ranked games only. A hundred casual games say
+      // nothing about how settled a ladder rating is.
       const next = updateRatings(
-        { rating: xStats.rating, played: xStats.played },
-        { rating: oStats.rating, played: oStats.played },
+        { rating: xStats.rating, played: xStats.rankedPlayed },
+        { rating: oStats.rating, played: oStats.rankedPlayed },
         score,
       );
       rating = {
@@ -902,37 +1009,48 @@ export class Lobby {
     const xOutcome = outcome.winner === null ? 'draw' : outcome.winner === X ? 'win' : 'loss';
     const oOutcome = xOutcome === 'draw' ? 'draw' : xOutcome === 'win' ? 'loss' : 'win';
 
-    const xAfter = this.accounts.recordResult(
-      x.accountId,
-      room.mode,
-      xOutcome,
-      rating?.x.after ?? xStats.rating,
-    );
-    const oAfter = this.accounts.recordResult(
-      o.accountId,
-      room.mode,
-      oOutcome,
-      rating?.o.after ?? oStats.rating,
-    );
+    // One transaction for every row the result touches. A failure part-way
+    // through rolls all of it back and leaves the room unsettled, rather than
+    // marking it decided with half a result written - or none at all.
+    const matchId = this.accounts.transaction(() => {
+      const xAfter = this.accounts.recordResult(
+        x.accountId,
+        room.mode,
+        xOutcome,
+        rating?.x.after ?? xStats.rating,
+        ranked,
+      );
+      const oAfter = this.accounts.recordResult(
+        o.accountId,
+        room.mode,
+        oOutcome,
+        rating?.o.after ?? oStats.rating,
+        ranked,
+      );
 
-    const matchId = this.matches.record({
-      mode: room.mode,
-      config: room.config,
-      kind: room.kind,
-      xId: x.accountId,
-      oId: o.accountId,
-      startingPlayer: startingPlayerOf(room.game),
-      moves: room.game.moves,
-      moveTimesMs: room.moveTimesMs,
-      winner: outcome.winner,
-      reason: outcome.reason,
-      playedAt: room.startedAt,
-      durationMs: Math.max(0, this.now() - room.startedAt),
-      rating,
+      const id = this.matches.record({
+        mode: room.mode,
+        config: room.config,
+        kind: room.kind,
+        xId: x.accountId,
+        oId: o.accountId,
+        startingPlayer: startingPlayerOf(room.game),
+        moves: room.game.moves,
+        moveTimesMs: room.moveTimesMs,
+        winner: outcome.winner,
+        reason: outcome.reason,
+        playedAt: room.startedAt,
+        durationMs: Math.max(0, this.now() - room.startedAt),
+        rating,
+      });
+
+      this.grantAchievements(x.accountId, xAfter, xOutcome === 'win', room, outcome);
+      this.grantAchievements(o.accountId, oAfter, oOutcome === 'win', room, outcome);
+      return id;
     });
 
-    this.grantAchievements(x.accountId, xAfter, xOutcome === 'win', room);
-    this.grantAchievements(o.accountId, oAfter, oOutcome === 'win', room);
+    room.settled = true;
+    room.clock?.stop();
 
     const result: MatchResult = {
       matchId,
@@ -941,9 +1059,10 @@ export class Lobby {
       kind: room.kind,
       rating,
     };
+    room.result = result;
 
-    this.broadcastState(room);
-    this.broadcast(room, { type: 'result', result });
+    this.broadcastState(room, quietFor);
+    this.broadcast(room, { type: 'result', result }, quietFor);
     for (const id of room.spectators) {
       this.sessions.get(id)?.transport.send({ type: 'result', result });
     }
@@ -965,6 +1084,7 @@ export class Lobby {
     stats: { played: number; won: number; streak: number; rating: number },
     won: boolean,
     room: Room,
+    outcome: Outcome,
   ): void {
     const all = this.accounts.allStats(accountId);
     const totals = all.reduce(
@@ -985,6 +1105,7 @@ export class Lobby {
         bestRating: totals.best,
         modesPlayed: this.matches.modesPlayed(accountId),
         won,
+        reason: outcome.reason,
         moveCount: room.game.moves.length,
         winLength: room.config.winLength,
       }),
@@ -1012,6 +1133,7 @@ export class Lobby {
       lastMoveAt: this.now(),
       moveTimesMs: [],
       settled: true,
+      result: null,
     };
     this.rooms.set(room.code, room);
     return room;
@@ -1038,6 +1160,7 @@ export class Lobby {
     room.lastMoveAt = this.now();
     room.moveTimesMs = [];
     room.settled = false;
+    room.result = null;
 
     for (const seat of room.seats) {
       seat.ratingBefore = this.accounts.statsFor(seat.accountId, room.mode).rating;
@@ -1081,6 +1204,9 @@ export class Lobby {
     room.seats.push(seat);
     session.roomCode = room.code;
     room.vacantSince = null;
+    // A mute is about one opponent. Carried into the next room it would hide a
+    // stranger's emotes behind a switch the client has already shown as off.
+    session.muted = false;
     return seat;
   }
 
@@ -1108,13 +1234,13 @@ export class Lobby {
     }));
   }
 
-  private broadcastState(room: Room): void {
+  private broadcastState(room: Room, exceptAccountId?: string): void {
     const message: ServerMessage = {
       type: 'state',
       snapshot: toSnapshot(room.game),
       clock: room.clock?.snapshot() ?? null,
     };
-    this.broadcast(room, message);
+    this.broadcast(room, message, exceptAccountId);
     for (const id of room.spectators) this.sessions.get(id)?.transport.send(message);
   }
 
@@ -1156,6 +1282,33 @@ export class Lobby {
   private sessionFor(accountId: string): Session | undefined {
     const id = this.byAccount.get(accountId);
     return id ? this.sessions.get(id) : undefined;
+  }
+
+  private stopWatching(session: Session): void {
+    const watching = session.spectating ? this.rooms.get(session.spectating) : undefined;
+    session.spectating = null;
+    if (!watching) return;
+    watching.spectators.delete(session.id);
+    this.announceSpectators(watching);
+  }
+
+  /**
+   * Close connections that have not introduced themselves in time.
+   *
+   * Every one costs a socket and a slot under the session ceiling, and one
+   * that never sends `hello` could hold both for as long as it answered pings.
+   * No error goes with the close: a real client that was merely slow should
+   * reconnect as it would after any drop, and the `unauthorized` it would
+   * otherwise get tells it to stop trying.
+   */
+  private closeUnintroduced(): void {
+    const cutoff = this.now() - this.helloTimeoutMs;
+    for (const session of this.sessions.values()) {
+      if (session.accountId || session.connectedAt > cutoff) continue;
+      log.info('conn.helloTimeout', { sessionId: session.id });
+      session.transport.close();
+      this.disconnect(session);
+    }
   }
 
   private removeFromQueues(sessionId: string): void {

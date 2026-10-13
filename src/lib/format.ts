@@ -25,7 +25,8 @@ export function timeAgo(timestamp: number, now = Date.now()): string {
   const magnitude = Math.abs(delta);
 
   for (const [unit, size] of UNITS) {
-    if (magnitude >= size) return relative.format(Math.round(delta / size), unit);
+    // Truncated, not rounded: 59.6 minutes is "59 minutes", never "60 minutes".
+    if (magnitude >= size) return relative.format(Math.trunc(delta / size), unit);
   }
   return relative.format(0, 'second');
 }
@@ -35,6 +36,11 @@ export function fullDate(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
     timestamp,
   );
+}
+
+/** A calendar date with no time, in the reader's locale. */
+export function longDate(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(timestamp);
 }
 
 /** "4m 12s" - a match length, where the seconds still matter. */

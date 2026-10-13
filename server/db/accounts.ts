@@ -30,6 +30,8 @@ export interface ModeStats {
   mode: string;
   rating: number;
   played: number;
+  /** Ranked games only, out of `played`. Drives the K-factor and placement. */
+  rankedPlayed: number;
   won: number;
   lost: number;
   drawn: number;
@@ -70,7 +72,7 @@ function constantTimeEquals(a: Buffer, b: Buffer): boolean {
 }
 
 /** Case-insensitive key for the name namespace. */
-function nameKey(displayName: string): string {
+export function nameKey(displayName: string): string {
   return displayName.trim().toLocaleLowerCase('en-US');
 }
 
@@ -89,12 +91,15 @@ interface StatsRecord {
   mode: string;
   rating: number;
   played: number;
+  ranked_played: number;
   won: number;
   lost: number;
   drawn: number;
   streak: number;
   best_streak: number;
 }
+
+const STATS_COLUMNS = 'mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak';
 
 export class Accounts {
   constructor(
@@ -244,7 +249,7 @@ export class Accounts {
   statsFor(accountId: string, mode: string): ModeStats {
     const row = this.db
       .prepare<[string, string], StatsRecord>(
-        'SELECT mode, rating, played, won, lost, drawn, streak, best_streak FROM stats WHERE account_id = ? AND mode = ?',
+        `SELECT ${STATS_COLUMNS} FROM stats WHERE account_id = ? AND mode = ?`,
       )
       .get(accountId, mode);
 
@@ -253,6 +258,7 @@ export class Accounts {
       mode,
       rating: STARTING_RATING,
       played: 0,
+      rankedPlayed: 0,
       won: 0,
       lost: 0,
       drawn: 0,
@@ -264,7 +270,7 @@ export class Accounts {
   allStats(accountId: string): ModeStats[] {
     return this.db
       .prepare<[string], StatsRecord>(
-        'SELECT mode, rating, played, won, lost, drawn, streak, best_streak FROM stats WHERE account_id = ? ORDER BY played DESC',
+        `SELECT ${STATS_COLUMNS} FROM stats WHERE account_id = ? ORDER BY played DESC`,
       )
       .all(accountId)
       .map(toModeStats);
@@ -276,12 +282,16 @@ export class Accounts {
    * `rating` is passed in rather than computed here because both players' new
    * ratings have to be derived from both old ones before either is written; the
    * repository's job is to store the answer, not to decide it.
+   *
+   * `ranked` says whether the game counts towards the ladder as well as the
+   * profile: every game adds to `played`, only a ranked one to `rankedPlayed`.
    */
   recordResult(
     accountId: string,
     mode: string,
     outcome: 'win' | 'loss' | 'draw',
     rating: number,
+    ranked: boolean,
   ): ModeStats {
     const before = this.statsFor(accountId, mode);
     // A streak counts consecutive wins and is reset - not decremented - by
@@ -292,6 +302,7 @@ export class Accounts {
       mode,
       rating,
       played: before.played + 1,
+      rankedPlayed: before.rankedPlayed + (ranked ? 1 : 0),
       won: before.won + (outcome === 'win' ? 1 : 0),
       lost: before.lost + (outcome === 'loss' ? 1 : 0),
       drawn: before.drawn + (outcome === 'draw' ? 1 : 0),
@@ -301,10 +312,11 @@ export class Accounts {
 
     this.db
       .prepare(
-        `INSERT INTO stats (account_id, mode, rating, played, won, lost, drawn, streak, best_streak)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO stats (account_id, mode, rating, played, ranked_played, won, lost, drawn, streak, best_streak)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(account_id, mode) DO UPDATE SET
-           rating = excluded.rating, played = excluded.played, won = excluded.won,
+           rating = excluded.rating, played = excluded.played,
+           ranked_played = excluded.ranked_played, won = excluded.won,
            lost = excluded.lost, drawn = excluded.drawn, streak = excluded.streak,
            best_streak = excluded.best_streak`,
       )
@@ -313,6 +325,7 @@ export class Accounts {
         mode,
         next.rating,
         next.played,
+        next.rankedPlayed,
         next.won,
         next.lost,
         next.drawn,
@@ -321,6 +334,16 @@ export class Accounts {
       );
 
     return next;
+  }
+
+  /**
+   * Run `work` as one transaction, so a failure part-way through writes nothing.
+   *
+   * Exposed because a result spans more than this repository - the match
+   * record lives in `Matches` - and both share the one database.
+   */
+  transaction<T>(work: () => T): T {
+    return this.db.transaction(work)();
   }
 
   // -------------------------------------------------------------------------
@@ -351,6 +374,12 @@ export class Accounts {
   // Leaderboard
   // -------------------------------------------------------------------------
 
+  /**
+   * The top of a mode's ladder.
+   *
+   * `minimumGames` is checked against ranked games only: casual and private
+   * games never move a rating, so they cannot be what makes one settled.
+   */
   leaderboard(
     mode: string,
     limit: number,
@@ -358,9 +387,9 @@ export class Accounts {
   ): { account: AccountRow; stats: ModeStats }[] {
     const rows = this.db
       .prepare<[string, number, number], AccountRecord & StatsRecord>(
-        `SELECT a.*, s.mode, s.rating, s.played, s.won, s.lost, s.drawn, s.streak, s.best_streak
+        `SELECT a.*, s.mode, s.rating, s.played, s.ranked_played, s.won, s.lost, s.drawn, s.streak, s.best_streak
          FROM stats s JOIN accounts a ON a.id = s.account_id
-         WHERE s.mode = ? AND s.played >= ?
+         WHERE s.mode = ? AND s.ranked_played >= ?
          ORDER BY s.rating DESC, s.played DESC, a.display_name ASC
          LIMIT ?`,
       )
@@ -373,14 +402,14 @@ export class Accounts {
   rankOf(accountId: string, mode: string, minimumGames: number): number | null {
     const own = this.db
       .prepare<[string, string], StatsRecord>(
-        'SELECT mode, rating, played, won, lost, drawn, streak, best_streak FROM stats WHERE account_id = ? AND mode = ?',
+        `SELECT ${STATS_COLUMNS} FROM stats WHERE account_id = ? AND mode = ?`,
       )
       .get(accountId, mode);
-    if (!own || own.played < minimumGames) return null;
+    if (!own || own.ranked_played < minimumGames) return null;
 
     const ahead = this.db
       .prepare<[string, number, number], { count: number }>(
-        'SELECT COUNT(*) AS count FROM stats WHERE mode = ? AND played >= ? AND rating > ?',
+        'SELECT COUNT(*) AS count FROM stats WHERE mode = ? AND ranked_played >= ? AND rating > ?',
       )
       .get(mode, minimumGames, own.rating);
 
@@ -436,6 +465,7 @@ function toModeStats(row: StatsRecord): ModeStats {
     mode: row.mode,
     rating: row.rating,
     played: row.played,
+    rankedPlayed: row.ranked_played,
     won: row.won,
     lost: row.lost,
     drawn: row.drawn,

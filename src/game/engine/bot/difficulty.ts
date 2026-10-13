@@ -69,6 +69,9 @@ export function profileFor(difficulty: BotDifficulty): DifficultyProfile {
   return PROFILES[difficulty];
 }
 
+/** Boards with at most this many cells are small enough to search exhaustively. */
+const SMALL_BOARD = 16;
+
 /**
  * How far from the existing marks to look, given how many there are.
  *
@@ -77,8 +80,18 @@ export function profileFor(difficulty: BotDifficulty): DifficultyProfile {
  * a search that sees more moves one ply shallower is a worse search. So the
  * profile's radius is a ceiling used in the opening, and play settles to the
  * immediate neighbourhood as soon as there is a position to read.
+ *
+ * A small board is the exception. Every square there is already on a line with
+ * the marks, so the neighbourhood rule saves nothing and only hides moves - on
+ * 3x3 the far corner is not "near" anything, and it is sometimes the one move
+ * that keeps a solved game won. The radius there is the whole board.
  */
-export function radiusFor(profile: DifficultyProfile, stonesOnBoard: number): number {
+export function radiusFor(
+  profile: DifficultyProfile,
+  stonesOnBoard: number,
+  cells = Number.POSITIVE_INFINITY,
+): number {
+  if (cells <= SMALL_BOARD) return Math.ceil(Math.sqrt(cells));
   return stonesOnBoard <= 4 ? profile.radius : 1;
 }
 
@@ -102,7 +115,7 @@ export function profileForBoard(
   // strong take that; levels that are meant to be beatable keep their limit,
   // which is the only thing making them beatable here.
   if (
-    cells <= 16 &&
+    cells <= SMALL_BOARD &&
     (difficulty === 'hard' || difficulty === 'expert' || difficulty === 'master')
   ) {
     return { ...base, plies: Math.max(base.plies, emptyCells), timeMs: Math.max(base.timeMs, 400) };

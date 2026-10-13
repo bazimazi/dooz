@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
-const BASE = process.env.DOOZ_URL ?? 'http://127.0.0.1:4173';
+const BASE = process.env.AUDIT_URL ?? process.env.DOOZ_URL ?? 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ channel: 'chrome' });
 const errors = [];
 await mkdir('build/navigation', { recursive: true });

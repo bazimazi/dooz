@@ -8,6 +8,8 @@ interface OpenerBannerProps {
   player: Player;
   /** "You go first", "Pip goes first". */
   label: string;
+  /** False for a round restored part-way through, which has no toss to show. */
+  fresh: boolean;
 }
 
 /** Matches the `banner` animation, which fades itself out at the end. */
@@ -26,13 +28,13 @@ const SHOW_MS = 1700;
  * opener and the label are captured when the round starts, so the banner does
  * not change its mind as the turn passes underneath it.
  */
-export function OpenerBanner({ round, player, label }: OpenerBannerProps) {
+export function OpenerBanner({ round, player, label, fresh }: OpenerBannerProps) {
   const [shown, setShown] = useState<{ round: number; player: Player; label: string } | null>(null);
 
   const [seenRound, setSeenRound] = useState<number | null>(null);
   if (seenRound !== round) {
     setSeenRound(round);
-    setShown({ round, player, label });
+    setShown(fresh ? { round, player, label } : null);
   }
 
   useEffect(() => {

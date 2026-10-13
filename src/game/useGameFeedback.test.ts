@@ -102,4 +102,28 @@ describe('useGameFeedback', () => {
     view.rerender({ game: play(gravity, 45) });
     expect(sfx.drop).toHaveBeenCalledWith(X, 45, 7, 7);
   });
+
+  it('keeps the result cue when the same final position arrives again', () => {
+    const start = createGame(3, X);
+    const { rerender } = renderHook(({ game }) => useGameFeedback(game, { you: X }), {
+      initialProps: { game: play(start, 0, 3, 1, 4) },
+    });
+    const won = play(start, 0, 3, 1, 4, 2);
+    rerender({ game: won });
+    // A server echoes its final state as a new object.
+    rerender({ game: { ...won } });
+    vi.advanceTimersByTime(2000);
+    expect(sfx.win).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the result cue when the move is taken back before it sounds', () => {
+    const start = createGame(3, X);
+    const { rerender } = renderHook(({ game }) => useGameFeedback(game, { you: X }), {
+      initialProps: { game: play(start, 0, 3, 1, 4) },
+    });
+    rerender({ game: play(start, 0, 3, 1, 4, 2) });
+    rerender({ game: play(start, 0, 3, 1, 4) });
+    vi.advanceTimersByTime(2000);
+    expect(sfx.win).not.toHaveBeenCalled();
+  });
 });

@@ -1,21 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { emptyIndices } from './board.js';
+import { emptyIndices, ultimateCells } from './board.js';
 import {
   BOT_DIFFICULTIES,
   type BotDifficulty,
+  candidateMoves,
   chooseMove,
   findBestMove,
+  findForkMove,
   profileFor,
 } from './bot/index.js';
+import { MATE_THRESHOLD, search, withProvenScores } from './bot/search.js';
 import { applyMove, createGame, legalMoves } from './game.js';
 import { GAME_MODES, modeById } from './modes.js';
 import { blank, board, fromMoves, seeded } from './testing.js';
-import { type GameConfig, type GameState, O, type Player, X } from './types.js';
+import { type Cell, Empty, type GameConfig, type GameState, O, type Player, X } from './types.js';
 
 const CLASSIC = modeById('classic').config;
 const GRID_6 = modeById('grid-6').config;
 const MISERE = modeById('misere').config;
 const ULTIMATE = modeById('ultimate').config;
+const GOMOKU_15 = modeById('gomoku-15').config;
 
 /**
  * Timeout for the tests that play whole games rather than checking a position.
@@ -143,6 +147,28 @@ describe('difficulty', () => {
     }
   });
 
+  it('finds a fork whose second threat is next to the new mark only', () => {
+    // X holds 13 and 14 on 6x6, four in a row. Playing 15 threatens both 12 and
+    // 16 - and 16 is two squares from every mark already down, so a scan that
+    // only looks at the old neighbourhood sees one threat and no fork.
+    const game = position(GRID_6, X, '.....O', blank(6), '.XX...', blank(6), blank(6), '.....O');
+    expect(findForkMove(game.board.slice(), 6, X, 4, candidateMoves(game.board, 6, 1))).toBe(15);
+
+    const chosen = chooseMove(game, { difficulty: 'medium', random: seeded(3) })!;
+    expect(chosen).toMatchObject({ move: 15, reason: 'fork' });
+  });
+
+  it('sees the far corner of a 3x3 board from hard upwards', () => {
+    // X on 0, O on 8, X to move: 2 and 6 win by force, and neither is next to
+    // a mark. 1, the obvious-looking move, loses.
+    const game = position(CLASSIC, X, 'X..', '...', '..O');
+    for (const difficulty of ['hard', 'expert', 'master'] as const) {
+      const chosen = chooseMove(game, { difficulty, random: seeded(5) })!;
+      expect([2, 6]).toContain(chosen.move);
+      expect(chosen.score).toBeGreaterThanOrEqual(MATE_THRESHOLD);
+    }
+  });
+
   it('is deterministic for a given position and seed', () => {
     for (const difficulty of BOT_DIFFICULTIES) {
       const game = position(
@@ -160,36 +186,40 @@ describe('difficulty', () => {
     }
   });
 
-  it('gives the weaker levels a wider spread of acceptable moves', () => {
-    const game = position(
-      GRID_6,
-      X,
-      '.XO...',
-      '..X...',
-      '...O..',
-      ...Array<string>(3).fill(blank(6)),
-    );
-    const spread = (difficulty: BotDifficulty) => {
-      const moves = new Set<number>();
-      for (let seed = 0; seed < 24; seed++) {
-        moves.add(
-          findBestMove(game, {
-            difficulty,
-            random: seeded(seed),
-            timeBudgetMs: 10,
-            now: tickingClock(),
-          })!,
-        );
-      }
-      return moves.size;
-    };
+  it(
+    'gives the weaker levels a wider spread of acceptable moves',
+    () => {
+      const game = position(
+        GRID_6,
+        X,
+        '.XO...',
+        '..X...',
+        '...O..',
+        ...Array<string>(3).fill(blank(6)),
+      );
+      const spread = (difficulty: BotDifficulty) => {
+        const moves = new Set<number>();
+        for (let seed = 0; seed < 24; seed++) {
+          moves.add(
+            findBestMove(game, {
+              difficulty,
+              random: seeded(seed),
+              timeBudgetMs: 10,
+              now: tickingClock(),
+            })!,
+          );
+        }
+        return moves.size;
+      };
 
-    // A level with slack picks among near-equal moves; a level without one
-    // always plays the same best move.
-    expect(spread('easy')).toBeGreaterThan(1);
-    expect(spread('hard')).toBe(1);
-    expect(spread('master')).toBe(1);
-  });
+      // A level with slack picks among near-equal moves; a level without one
+      // always plays the same best move.
+      expect(spread('easy')).toBeGreaterThan(1);
+      expect(spread('hard')).toBe(1);
+      expect(spread('master')).toBe(1);
+    },
+    SLOW,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -387,6 +417,60 @@ describe('time budget', () => {
     expect(Date.now() - started).toBeLessThan(2500);
   });
 
+  it(
+    'plays a forced win that a pass cut short by the clock had proved',
+    () => {
+      // The win here is first seen five plies deep. Stopping the search part way
+      // through that pass leaves its proof in hand but the pass unfinished, and
+      // the proof still has to decide the move - not the shallower scores of the
+      // last pass that completed.
+      const game = fromMoves(GOMOKU_15, X, [112, 98, 114, 97, 113, 111, 84, 99, 96, 85]);
+      let provenMidPass = 0;
+      for (let stopAfter = 1; stopAfter <= 8; stopAfter++) {
+        let polls = 0;
+        const chosen = chooseMove(game, {
+          difficulty: 'expert',
+          timeBudgetMs: 60_000,
+          shouldStop: () => ++polls >= stopAfter,
+        })!;
+        // Only the runs that proved the win are being checked.
+        if (chosen.score < MATE_THRESHOLD) continue;
+        if (chosen.depth < 5) provenMidPass++;
+
+        // The move played is one that wins: after it, O is lost.
+        const after = applyMove(game, chosen.move)!;
+        const reply = search(after.board, O, {
+          size: 15,
+          winLength: 5,
+          maxDepth: 6,
+          deadline: Number.POSITIVE_INFINITY,
+          radius: 1,
+          branchLimit: 14,
+        });
+        expect(reply.score).toBeLessThanOrEqual(-MATE_THRESHOLD);
+      }
+      expect(provenMidPass).toBeGreaterThan(0);
+    },
+    SLOW,
+  );
+
+  it('keeps the proofs from an unfinished pass, and nothing else from it', () => {
+    const complete = [
+      { move: 1, score: 40 },
+      { move: 2, score: 30 },
+      { move: 3, score: 20 },
+    ];
+    const partial = [
+      { move: 1, score: -(MATE_THRESHOLD + 5) },
+      { move: 2, score: 25 },
+    ];
+    expect(withProvenScores(complete, partial)).toEqual([
+      { move: 1, score: -(MATE_THRESHOLD + 5) },
+      { move: 2, score: 30 },
+      { move: 3, score: 20 },
+    ]);
+  });
+
   it('never takes a stale move from an earlier position', () => {
     // A move found for one board must be checked against the board it is
     // played on, which is what the legality assertion here stands for.
@@ -411,10 +495,27 @@ describe('time budget', () => {
 
 describe('misere bot', () => {
   it('does not complete a line when it has any other move', () => {
-    // O to move. Taking 2 would complete O's top row and lose the game.
+    // O to move. Taking 2 would complete O's top row and lose the game - at
+    // every level, beginner included: a move that loses on the spot is not
+    // weak play, it is a bot that does not know the rules.
     const game = position(MISERE, O, 'OO.', 'X..', '..X');
-    const move = findBestMove(game, { difficulty: 'master' });
-    expect(move).not.toBe(2);
+    for (const difficulty of BOT_DIFFICULTIES) {
+      for (let seed = 0; seed < 12; seed++) {
+        expect(findBestMove(game, { difficulty, random: seeded(seed) })).not.toBe(2);
+      }
+    }
+  });
+
+  it('holds out rather than completing a line when every move loses', () => {
+    // X to move. 6 and 8 complete a diagonal at once; 7 loses too, but only
+    // after O has had to find 6. A level with slack used to pick among the
+    // three at random once all of them were lost.
+    const game = position(MISERE, X, 'XOX', 'OXO', '...');
+    for (const difficulty of BOT_DIFFICULTIES) {
+      for (let seed = 0; seed < 12; seed++) {
+        expect(findBestMove(game, { difficulty, random: seeded(seed) })).toBe(7);
+      }
+    }
   });
 
   it(
@@ -479,6 +580,42 @@ describe('ultimate bot', () => {
     expect(legalMoves(game)).toContain(move);
   });
 
+  it('takes a game-winning move at every level, beginner included', () => {
+    // X holds boards 0 and 1 and two of board 2's top row, and is sent to
+    // board 2: its third square wins the game.
+    const game = ultimatePosition(X, 2, { 0: X, 1: X, 3: O, 5: O }, [
+      [X, 2, 0],
+      [X, 2, 1],
+      [O, 2, 4],
+    ]);
+    for (const difficulty of BOT_DIFFICULTIES) {
+      for (let seed = 0; seed < 6; seed++) {
+        const move = findBestMove(game, { difficulty, random: seeded(seed), timeBudgetMs: 40 });
+        expect(move).toBe(ultimateCells(2)[2]);
+      }
+    }
+  });
+
+  it('does not send the opponent where they win the game, even as a beginner', () => {
+    // O holds boards 3 and 4 and two of board 5's top row, so O wins the game
+    // the moment it is let into board 5. X is in board 2: its square 5 sends O
+    // there directly, and 3 and 4 point at finished boards, which frees O to
+    // go there anyway.
+    const game = ultimatePosition(X, 2, { 0: X, 3: O, 4: O }, [
+      [O, 5, 0],
+      [O, 5, 1],
+      [X, 5, 4],
+      [X, 2, 0],
+      [O, 2, 8],
+    ]);
+    const losing = [3, 4, 5].map((cell) => ultimateCells(2)[cell]);
+    for (let seed = 0; seed < 24; seed++) {
+      const chosen = chooseMove(game, { difficulty: 'beginner', random: seeded(seed) })!;
+      expect(losing).not.toContain(chosen.move);
+      expect(chosen.reason).toBe('block');
+    }
+  });
+
   it(
     'beats a beginner over a series',
     () => {
@@ -487,3 +624,44 @@ describe('ultimate bot', () => {
     SLOW,
   );
 });
+
+/**
+ * An Ultimate position built by hand.
+ *
+ * `won` lists the sub-boards already taken, each drawn as its owner's top row,
+ * and `marks` the other marks as (player, board, cell). The rules never ask how
+ * a position was reached, only what is on it, so this is enough to test what
+ * the bot does next.
+ */
+function ultimatePosition(
+  toMove: Player,
+  active: number | null,
+  won: Partial<Record<number, Player>>,
+  marks: readonly (readonly [Player, number, number])[],
+): GameState {
+  const cells: Cell[] = Array.from({ length: 81 }, () => Empty);
+  const boards: Cell[] = Array.from({ length: 9 }, () => Empty);
+  for (let sub = 0; sub < 9; sub++) {
+    const owner = won[sub];
+    if (owner === undefined) continue;
+    boards[sub] = owner;
+    for (const cell of [0, 1, 2]) cells[ultimateCells(sub)[cell]!] = owner;
+  }
+  for (const [player, sub, cell] of marks) cells[ultimateCells(sub)[cell]!] = player;
+  return {
+    config: ULTIMATE,
+    board: cells,
+    currentPlayer: toMove,
+    status: 'playing',
+    winner: null,
+    winLine: null,
+    lastMove: null,
+    moves: [],
+    ultimate: {
+      boards,
+      drawn: Array.from({ length: 9 }, () => false),
+      activeBoard: active,
+      winBoards: null,
+    },
+  };
+}

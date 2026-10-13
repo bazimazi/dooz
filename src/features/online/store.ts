@@ -63,7 +63,6 @@ interface OnlineState {
   drawRequested: boolean;
   muted: boolean;
   emotes: IncomingEmote[];
-
   connect: () => void;
   disconnect: () => void;
   queue: (config: GameConfig, ranked: boolean) => void;
@@ -96,6 +95,13 @@ let emoteId = 0;
  * disconnect, or the server told us this client cannot be talked to.
  */
 let stopReconnecting = false;
+/** The last queue or private-room request, so a lost one can be asked for again. */
+type WaitRequest =
+  | { type: 'queue'; config: GameConfig; ranked: boolean }
+  | { type: 'createRoom'; config: GameConfig };
+let lastRequest: WaitRequest | null = null;
+/** Set when the server has forgotten that request; sent again after `welcome`. */
+let resendRequest: WaitRequest | null = null;
 
 /** Fields reset whenever a new game or a new room starts. */
 const FRESH_MATCH = {
@@ -126,7 +132,8 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
 
   function handle(message: ServerMessage) {
     switch (message.type) {
-      case 'welcome':
+      case 'welcome': {
+        const before = get().phase;
         set({
           profile: message.profile,
           // A resumed connection is not idle: the room it belongs to is on its
@@ -137,7 +144,16 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           error: null,
         });
         attempt = 0;
+        if (message.resumed) return;
+        // A new session with nothing to resume: whatever this client was
+        // waiting in or playing no longer exists on the server.
+        forgetSession(before);
+        const again = resendRequest;
+        resendRequest = null;
+        if (again?.type === 'queue') get().queue(again.config, again.ranked);
+        else if (again?.type === 'createRoom') get().createRoom(again.config);
         return;
+      }
 
       case 'searching':
         set({
@@ -249,7 +265,12 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
           message.code === 'alreadyPlaying'
         ) {
           stopReconnecting = true;
+          // The session ends here, so the next one has to know what was lost.
+          if (message.code === 'unauthorized') forgetSession(get().phase);
           set({ phase: 'offline', reconnecting: false });
+          // A refused token is not this socket's to fix: the account store
+          // replaces it, and the screen reconnects once the account is ready.
+          if (message.code === 'unauthorized') void useAccountStore.getState().dropCredentials();
         }
         return;
 
@@ -329,6 +350,22 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     });
   }
 
+  /**
+   * The server no longer has this client's session. A queue place or a room
+   * it was waiting in is asked for again on the next welcome; a game it was in
+   * is gone, and the player is told so.
+   */
+  function forgetSession(phase: OnlinePhase) {
+    if (phase === 'searching' || phase === 'hosting') {
+      resendRequest = lastRequest;
+      resetRoom();
+    } else if (phase === 'playing' || phase === 'watching' || phase === 'opponentLeft') {
+      const unfinished = get().result === null;
+      resetRoom();
+      if (unfinished) set({ error: 'The connection dropped and the game could not be resumed.' });
+    }
+  }
+
   /** Clear whatever the last room left behind before asking for a new one. */
   function resetRoom() {
     set({
@@ -388,12 +425,14 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
     },
 
     queue: (config, ranked) => {
+      lastRequest = { type: 'queue', config, ranked };
       resetRoom();
       set({ config, ranked });
       send({ type: 'queue', config, ranked });
     },
 
     createRoom: (config) => {
+      lastRequest = { type: 'createRoom', config };
       resetRoom();
       set({ config });
       send({ type: 'createRoom', config });
@@ -439,6 +478,7 @@ export const useOnlineStore = create<OnlineState>((set, get) => {
       set((state) => ({ emotes: state.emotes.filter((entry) => entry.id !== id) })),
 
     leave: (reset = true) => {
+      resendRequest = null;
       send({ type: 'leave' });
       if (!reset) return;
       resetRoom();

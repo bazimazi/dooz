@@ -60,6 +60,15 @@ function restoreGame(config: GameConfig, storageKey?: string): GameState | null 
   }
 }
 
+/** Drops the position saved under `storageKey`, so the next visit starts fresh. */
+export function forgetGame(storageKey: string): void {
+  try {
+    localStorage.removeItem(`dooz.game:${storageKey}`);
+  } catch {
+    /* Nothing was saved if storage is unavailable. */
+  }
+}
+
 /**
  * A game of dooz held in component state.
  *

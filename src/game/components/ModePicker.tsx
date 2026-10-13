@@ -1,4 +1,11 @@
-import { GAME_MODES, type GameMode, type ModeGroup, type ModeId, modeById } from '@/game/engine';
+import {
+  GAME_MODES,
+  type GameMode,
+  isModeId,
+  type ModeGroup,
+  type ModeId,
+  modeById,
+} from '@/game/engine';
 import { useRef } from 'react';
 import { CheckIcon } from '@/components/art/icons';
 import { TrophyIcon } from '@/components/art/ui-icons';
@@ -39,27 +46,43 @@ export function ModePicker({
   /**
    * Arrow keys move the selection, as a radio group requires.
    *
-   * The visual order is the array order, so left and right are neighbours in
-   * the list and up and down move by a row - which is two on the widest layout
-   * this ever renders at.
+   * Left and right step through the tiles in reading order. Up and down go to
+   * the nearest tile in the row above or below as laid out, because the groups
+   * have odd counts and the narrowest phones show a single column.
    */
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    const deltas: Record<string, number> = {
-      ArrowRight: 1,
-      ArrowLeft: -1,
-      ArrowDown: 2,
-      ArrowUp: -2,
-    };
-    const delta = deltas[event.key];
-    if (delta === undefined) return;
+    const tiles = [
+      ...(containerRef.current?.querySelectorAll<HTMLButtonElement>('[data-mode]') ?? []),
+    ];
+    const index = tiles.findIndex((tile) => tile.dataset['mode'] === value);
+    const current = tiles[index];
+    if (!current) return;
 
-    const index = GAME_MODES.findIndex((mode) => mode.id === value);
-    const next = GAME_MODES[Math.min(GAME_MODES.length - 1, Math.max(0, index + delta))];
-    if (!next || next.id === value) return;
+    let next: HTMLButtonElement | undefined;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      next = tiles[index + (event.key === 'ArrowRight' ? 1 : -1)];
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const down = event.key === 'ArrowDown';
+      const from = current.getBoundingClientRect();
+      let best = Infinity;
+      for (const tile of tiles) {
+        const to = tile.getBoundingClientRect();
+        const dy = down ? to.top - from.bottom : from.top - to.bottom;
+        if (dy < -1) continue;
+        // Rows first, then the closest column within the row.
+        const score = dy * 1000 + Math.abs(to.left - from.left);
+        if (score < best) {
+          best = score;
+          next = tile;
+        }
+      }
+    } else return;
 
+    const id = next?.dataset['mode'];
+    if (!next || !isModeId(id) || id === value) return;
     event.preventDefault();
-    onChange(next.id);
-    containerRef.current?.querySelector<HTMLButtonElement>(`[data-mode="${next.id}"]`)?.focus();
+    onChange(id);
+    next.focus();
   }
 
   return (

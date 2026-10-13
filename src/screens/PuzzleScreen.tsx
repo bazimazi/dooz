@@ -14,8 +14,9 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Screen } from '@/components/ui/Screen';
 import { useGameFeedback } from '@/game/useGameFeedback';
 import { useTurnTint } from '@/game/useTurnTint';
-import { liveDailyStreak, useProgressStore } from '@/features/progress/store';
+import { dayNumber, liveDailyStreak, useProgressStore } from '@/features/progress/store';
 import {
+  dailyPuzzle,
   type Puzzle,
   puzzleById,
   PUZZLES,
@@ -67,6 +68,10 @@ type Phase = 'solving' | 'replying' | 'wrong' | 'solved';
  * than silently refused, because seeing why a move fails is most of what a
  * puzzle teaches. There is no limit on tries and no penalty beyond the tally.
  */
+function isToday(puzzle: Puzzle): boolean {
+  return dailyPuzzle(dayNumber())?.id === puzzle.id;
+}
+
 function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
   const navigate = useNavigate();
   const recordPuzzle = useProgressStore((state) => state.recordPuzzle);
@@ -82,8 +87,23 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
   // Whether a hint was ever shown on this attempt; `hinted` clears per move.
   const [helped, setHelped] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const buzz = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [reviewing, setReviewing] = useState(false);
+  // A result reopened with "Show result" appears at once, not after the reveal.
+  const [reopened, setReopened] = useState(false);
+  // Only the daily, opened as the daily, counts towards the streak - and only
+  // while it is still today's: a daily left open past midnight, or an old
+  // daily link, is a plain puzzle.
+  const [today, setToday] = useState(() => isToday(puzzle));
+  const asDaily = daily && today;
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      clearTimeout(buzz.current);
+    },
+    [],
+  );
   useGameFeedback(game, { you: solver });
   useTurnTint(game);
 
@@ -102,7 +122,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
       setGame(next);
       setPhase('wrong');
       setMisses((count) => count + 1);
-      setTimeout(() => {
+      buzz.current = setTimeout(() => {
         sfx.wrong();
         haptics.buzz([12, 40, 12]);
       }, 180);
@@ -117,7 +137,9 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
     setHinted(false);
     if (next.status === 'won') {
       setPhase('solved');
-      recordPuzzle(puzzle.id, daily);
+      const stillToday = isToday(puzzle);
+      setToday(stillToday);
+      recordPuzzle(puzzle.id, daily && stillToday);
       return;
     }
 
@@ -135,6 +157,9 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
 
   function retry() {
     clearTimeout(timer.current);
+    clearTimeout(buzz.current);
+    setReviewing(false);
+    setReopened(false);
     setGame(start);
     setStep(0);
     setPhase('solving');
@@ -171,7 +196,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
         </IconButton>
         <div className="flex min-w-0 flex-col">
           <h1 className="font-display text-xl leading-tight">
-            {daily ? 'Daily puzzle' : `Puzzle #${puzzle.number}`}
+            {asDaily ? 'Daily puzzle' : `Puzzle #${puzzle.number}`}
           </h1>
           <span className="truncate text-xs text-ink-faint">
             {mode.name} · {TIER_NAMES[puzzle.tier]}
@@ -235,7 +260,19 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
         </p>
       </main>
 
-      <footer className="flex items-center justify-center gap-3 pb-4">
+      <footer className="flex flex-wrap items-center justify-center gap-3 pb-4">
+        {phase === 'solved' && reviewing ? (
+          <Button
+            size="small"
+            variant="ghost"
+            onClick={() => {
+              setReopened(true);
+              setReviewing(false);
+            }}
+          >
+            Show result
+          </Button>
+        ) : null}
         <IconButton label="Start over" onClick={retry} disabled={game === start}>
           <RefreshIcon />
         </IconButton>
@@ -253,8 +290,9 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
         </IconButton>
       </footer>
 
-      {phase === 'solved' ? (
+      {phase === 'solved' && !reviewing ? (
         <ResultModal
+          onDismiss={() => setReviewing(true)}
           title="Solved!"
           art={<Mark player={solver} hole="var(--color-surface)" className="size-20" />}
           note={
@@ -265,7 +303,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
               : `Solved after ${misses} ${misses === 1 ? 'miss' : 'misses'}.`
           }
           celebrate
-          revealDelay={revealDelayFor(game)}
+          revealDelay={reopened ? 0 : revealDelayFor(game)}
           actions={
             <>
               {nextPuzzle ? (
@@ -284,7 +322,7 @@ function PuzzleBoard({ puzzle, daily }: { puzzle: Puzzle; daily: boolean }) {
                   Next puzzle
                 </Button>
               ) : null}
-              {daily ? <ShareDaily misses={misses} helped={helped} /> : null}
+              {asDaily ? <ShareDaily misses={misses} helped={helped} /> : null}
               <Button variant="ghost" size="small" block onClick={retry}>
                 Play it again
               </Button>

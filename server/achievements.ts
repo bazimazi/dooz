@@ -1,4 +1,5 @@
 import { RANKED_MODES } from '@/game/engine';
+import type { EndReason } from '@/protocol';
 
 /**
  * Achievements, all of them derived from authoritative match results.
@@ -60,6 +61,8 @@ export interface AchievementContext {
   readonly modesPlayed: ReadonlySet<string>;
   /** Set only when the player won the match that triggered this check. */
   readonly won: boolean;
+  /** How the match ended. Only a completed line says anything about the moves. */
+  readonly reason: EndReason;
   readonly moveCount: number;
   /** Marks needed in a row, used to work out the fastest possible win. */
   readonly winLength: number;
@@ -86,7 +89,11 @@ export function earnedAchievements(context: AchievementContext): string[] {
   if (context.bestRating >= 1500) earned.push('climber');
   if (context.bestRating >= 1800) earned.push('summit');
 
-  if (context.won) {
+  // Both of these are about how the board was won, so a match the opponent
+  // resigned, flagged or walked away from earns neither: five moves and a
+  // resignation is not a five-move win, and sixty moves and a timeout is not a
+  // sixty-move one.
+  if (context.won && context.reason === 'line') {
     // The fastest possible win is the winner's marks plus the opponent's
     // replies, which is one fewer because the winner moved last - and only if
     // the winner opened. A win in that many moves cannot be bettered.

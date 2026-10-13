@@ -12,9 +12,9 @@ import {
   reportRequestSchema,
   updateProfileRequestSchema,
 } from '@/protocol';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import type { Accounts, AccountRow } from './db/accounts.js';
-import { toPublicProfile } from './db/accounts.js';
+import { nameKey, toPublicProfile } from './db/accounts.js';
 import type { Db } from './db/database.js';
 import type { Matches } from './db/matches.js';
 import { log } from './log.js';
@@ -34,14 +34,26 @@ export interface ApiOptions {
   readonly matches: Matches;
   readonly db: Db;
   readonly now?: () => number;
-  /** Requests per minute per address for the account-creation routes. */
+  /** Requests per hour per address for the account-creation and login routes. */
   readonly signupsPerHour?: number;
+  /** Failed logins one account name may take in a window before it is locked. */
+  readonly loginFailuresPerName?: number;
+  /**
+   * Believe `X-Forwarded-For` for the client's address.
+   *
+   * Only for a deployment behind a reverse proxy that sets the header itself;
+   * anywhere else it is whatever the client chose to write in it.
+   */
+  readonly trustProxy?: boolean;
   readonly health: () => { sessions: number; rooms: number; queued: number };
 }
 
 const MAX_LEADERBOARD = 100;
 const MAX_HISTORY = 50;
 const DEFAULT_SIGNUPS_PER_HOUR = 20;
+const DEFAULT_LOGIN_FAILURES_PER_NAME = 10;
+const HOUR_MS = 3_600_000;
+const LOGIN_LOCKOUT_MS = 15 * 60_000;
 
 export function createApi(options: ApiOptions): Hono {
   const { accounts, matches, db } = options;
@@ -53,20 +65,27 @@ export function createApi(options: ApiOptions): Hono {
    * worth rate limiting by address: without it a script could fill the accounts
    * table, and every name it took is a name a real player cannot have.
    */
-  const signups = new Map<string, { count: number; windowStart: number }>();
-  const signupLimit = options.signupsPerHour ?? DEFAULT_SIGNUPS_PER_HOUR;
+  const signups = new FixedWindowLimiter(
+    options.signupsPerHour ?? DEFAULT_SIGNUPS_PER_HOUR,
+    HOUR_MS,
+    now,
+  );
 
-  function allowSignup(address: string): boolean {
-    const hour = 3_600_000;
-    const entry = signups.get(address);
-    if (!entry || now() - entry.windowStart > hour) {
-      signups.set(address, { count: 1, windowStart: now() });
-      return true;
-    }
-    if (entry.count >= signupLimit) return false;
-    entry.count += 1;
-    return true;
-  }
+  /**
+   * Failed logins, counted per account name rather than per address.
+   *
+   * The address limit alone does nothing against guessing spread across many
+   * addresses, and a password is the one secret here a person chose. Only
+   * failures count, so a player signing in normally never comes near it; once
+   * it trips, even the right password is refused until the window is over, or
+   * the lock would tell a guesser exactly when they had found it.
+   */
+  const loginFailures = new FixedWindowLimiter(
+    options.loginFailuresPerName ?? DEFAULT_LOGIN_FAILURES_PER_NAME,
+    LOGIN_LOCKOUT_MS,
+    now,
+  );
+  const trustProxy = options.trustProxy ?? false;
 
   /** The account behind the `Authorization` header, or `null`. */
   function authenticate(header: string | undefined): AccountRow | null {
@@ -163,8 +182,8 @@ export function createApi(options: ApiOptions): Hono {
   // -------------------------------------------------------------------------
 
   app.post('/api/accounts', async (c) => {
-    const address = addressOf(c.req.raw, 'local');
-    if (!allowSignup(address)) return c.json({ error: 'Too many accounts from here' }, 429);
+    const address = addressOf(c, trustProxy);
+    if (!signups.hit(address)) return c.json({ error: 'Too many accounts from here' }, 429);
 
     const parsed = createAccountRequestSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
@@ -176,14 +195,23 @@ export function createApi(options: ApiOptions): Hono {
 
   /** Sign in on another device, for an account that has been given a password. */
   app.post('/api/accounts/login', async (c) => {
-    const address = addressOf(c.req.raw, 'local');
-    if (!allowSignup(address)) return c.json({ error: 'Too many attempts from here' }, 429);
+    const address = addressOf(c, trustProxy);
+    if (!signups.hit(address)) return c.json({ error: 'Too many attempts from here' }, 429);
 
     const parsed = loginRequestSchema.safeParse(await readJson(c.req.raw));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
 
+    // Checked whether or not the name exists, so the answer cannot be used to
+    // find out which names have a password behind them.
+    const name = nameKey(parsed.data.displayName);
+    if (loginFailures.exhausted(name)) {
+      log.warn('account.login.locked', { name: parsed.data.displayName });
+      return c.json({ error: 'Too many attempts for that name. Try again later.' }, 429);
+    }
+
     const result = accounts.login(parsed.data.displayName, parsed.data.password);
     if (!result) {
+      loginFailures.hit(name);
       log.warn('account.login.failed', { name: parsed.data.displayName });
       // Deliberately one message for both "no such name" and "wrong password".
       return c.json({ error: 'Those details did not match an account' }, 401);
@@ -314,15 +342,80 @@ export function createApi(options: ApiOptions): Hono {
 }
 
 /**
+ * Counts per key in fixed windows, for rate limiting.
+ *
+ * Keys whose window has closed are pruned as time passes, so a stream of
+ * one-off addresses cannot grow the map without bound.
+ */
+class FixedWindowLimiter {
+  private readonly entries = new Map<string, { count: number; windowStart: number }>();
+  private lastPrune: number;
+
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number,
+    private readonly now: () => number,
+  ) {
+    this.lastPrune = now();
+  }
+
+  /** Count one against `key`, and say whether it was within the limit. */
+  hit(key: string): boolean {
+    this.prune();
+    const entry = this.current(key);
+    if (!entry) {
+      this.entries.set(key, { count: 1, windowStart: this.now() });
+      return this.limit >= 1;
+    }
+    if (entry.count >= this.limit) return false;
+    entry.count += 1;
+    return true;
+  }
+
+  /** Whether `key` has used up its window, without counting against it. */
+  exhausted(key: string): boolean {
+    this.prune();
+    const entry = this.current(key);
+    return entry !== null && entry.count >= this.limit;
+  }
+
+  private current(key: string): { count: number; windowStart: number } | null {
+    const entry = this.entries.get(key);
+    if (!entry || this.now() - entry.windowStart > this.windowMs) return null;
+    return entry;
+  }
+
+  private prune(): void {
+    const at = this.now();
+    if (at - this.lastPrune < this.windowMs) return;
+    this.lastPrune = at;
+    for (const [key, entry] of this.entries) {
+      if (at - entry.windowStart > this.windowMs) this.entries.delete(key);
+    }
+  }
+}
+
+/**
  * The address a request came from, as far as it can be known.
  *
- * Behind a proxy the socket address is the proxy's, so the forwarded header is
- * preferred when present. It is client-controlled and therefore only good
- * enough for rate limiting, which is all it is used for.
+ * The socket's own address by default: it is the one thing in the request the
+ * client cannot write. `X-Forwarded-For` is believed only when the deployment
+ * says a proxy sets it, and then only its last entry - the one that proxy
+ * appended. Everything to the left of it arrived from the client and could be
+ * anything, so taking the first entry would let one machine claim a fresh
+ * address on every request.
+ *
+ * A request that did not come through the Node server (a test calling the app
+ * directly) has no socket, and shares one bucket with every other such request.
  */
-function addressOf(request: Request, fallback: string): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() || fallback;
+function addressOf(c: Context, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim();
+    if (forwarded) return forwarded;
+  }
+
+  const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;
+  return env?.incoming?.socket?.remoteAddress ?? 'unknown';
 }
 
 /** Parse a JSON body without throwing on an empty or malformed one. */

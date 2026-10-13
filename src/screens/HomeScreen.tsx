@@ -64,7 +64,8 @@ export function HomeScreen() {
 
   return (
     <Screen backdrop="home" scroll>
-      <div className="flex w-full flex-1 flex-col items-center gap-4 pb-4">
+      {/* The shortest phones (568px) tighten the spacing so the footer stays on screen. */}
+      <div className="flex w-full flex-1 flex-col items-center gap-4 pb-4 [@media(max-height:599px)]:gap-2">
         <div className="flex w-full items-center justify-between gap-2">
           <Link
             to="/learn"
@@ -78,7 +79,7 @@ export function HomeScreen() {
 
           {/* The wordmark animates its own parts, so it is left out of the
               stagger below and only the block it sits in is timed. */}
-          <Logo className="h-16 w-auto shrink-0" />
+          <Logo className="h-16 w-auto shrink-0 [@media(max-height:599px)]:h-12" />
 
           <IconButton
             tone="bare"
@@ -90,7 +91,7 @@ export function HomeScreen() {
           </IconButton>
         </div>
 
-        <div className="flex w-full flex-1 flex-col justify-center gap-4 py-3">
+        <div className="flex w-full flex-1 flex-col justify-center gap-4 py-3 [@media(max-height:599px)]:gap-3 [@media(max-height:599px)]:py-0">
           <section aria-label="Play" className="flex w-full flex-col gap-4">
             <button
               type="button"

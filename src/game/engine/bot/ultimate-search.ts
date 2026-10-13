@@ -1,7 +1,7 @@
 import { ultimateBoardOf, ultimateCellOf } from '../board.js';
 import { Empty, type GameState, type Player } from '../types.js';
 import { WIN_SCORE } from './evaluate.js';
-import type { RootScore, SearchResult } from './search.js';
+import { type RootScore, type SearchResult, withProvenScores } from './search.js';
 import { evaluateUltimate, UltimatePosition } from './ultimate.js';
 
 const MATE_THRESHOLD = WIN_SCORE - 1000;
@@ -30,9 +30,10 @@ interface Entry {
  * Iterative-deepening alpha-beta over an Ultimate position.
  *
  * Structurally the same as the line search - same table, same mate rebasing,
- * same rule that a partial iteration is thrown away - but over a position that
- * knows about sub-boards, because in Ultimate the board a move sends the
- * opponent to matters more than the mark it places.
+ * same handling of a pass the clock cuts short (its best move is kept, and so
+ * is any win or loss it proved, but its other scores are not) - but over a
+ * position that knows about sub-boards, because in Ultimate the board a move
+ * sends the opponent to matters more than the mark it places.
  */
 export function searchUltimate(state: GameState, options: UltimateSearchOptions): SearchResult {
   const now = options.now ?? Date.now;
@@ -191,7 +192,10 @@ export function searchUltimate(state: GameState, options: UltimateSearchOptions)
         rootScores = scored;
       }
     }
-    if (aborted) break;
+    if (aborted) {
+      rootScores = withProvenScores(rootScores, scored);
+      break;
+    }
     if (Math.abs(bestScore) >= MATE_THRESHOLD) break;
   }
 

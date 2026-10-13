@@ -22,12 +22,25 @@ import {
 import { isSkinUnlocked, SKIN_UNLOCKS } from '@/features/progress/unlocks';
 import { api, type Credentials, type MatchSummary, type ProfileResponse } from '@/lib/api';
 import { cx } from '@/lib/cx';
-import { duration, fullDate, signed, timeAgo, winRate } from '@/lib/format';
+import { duration, fullDate, longDate, signed, timeAgo, winRate } from '@/lib/format';
 import { ACHIEVEMENT_LABELS } from '@/lib/achievements';
 
 export function ProfileScreen() {
-  const { status, profile, credentials, initialise, rename, setAvatar, claim, error, clearError } =
-    useAccountStore();
+  const {
+    status,
+    profile,
+    credentials,
+    initialise,
+    rename,
+    setAvatar,
+    claim,
+    signIn,
+    signOut,
+    error,
+    claimError,
+    signInError,
+    clearError,
+  } = useAccountStore();
 
   const pendingChanges = useAccountStore((state) => Object.keys(state.changes).length > 0);
 
@@ -48,7 +61,7 @@ export function ProfileScreen() {
   const matches = credentials
     ? loadedMatches?.for === credentials
       ? loadedMatches.value
-      : (api.cachedMatches(credentials)?.matches ?? [])
+      : (api.cachedMatches(credentials)?.matches ?? null)
     : [];
   const [editing, setEditing] = useState(false);
 
@@ -69,7 +82,10 @@ export function ProfileScreen() {
     void api
       .matches(credentials, 20, controller.signal)
       .then((response) => setMatches({ for: credentials, value: response.matches }))
-      .catch(() => undefined);
+      // Unreachable with nothing cached: an empty history, not endless loading.
+      .catch(() => {
+        if (!controller.signal.aborted) setMatches({ for: credentials, value: [] });
+      });
 
     return () => controller.abort();
   }, [credentials]);
@@ -116,9 +132,12 @@ export function ProfileScreen() {
     }),
     { played: 0, won: 0, lost: 0, drawn: 0, best: 0 },
   );
+  // The mode the best streak was set in, not the one played most.
+  const streakMode = profile.stats.find(
+    (entry) => entry.bestStreak > 0 && entry.bestStreak === totals.best,
+  )?.mode;
 
   const rated = profile.stats.filter((entry) => entry.played > 0);
-  const favourite = rated.toSorted((a, b) => b.played - a.played)[0];
 
   return (
     <Screen width="wide" scroll>
@@ -137,9 +156,11 @@ export function ProfileScreen() {
               <AvatarBadge avatar={profile.avatar} className="size-16" />
             </button>
             <div className="flex min-w-0 flex-1 flex-col">
-              <h1 className="truncate font-display text-2xl">{profile.displayName}</h1>
+              <h1 className="truncate font-display text-xl min-[360px]:text-2xl">
+                {profile.displayName}
+              </h1>
               <p className="text-xs text-ink-faint">
-                Playing since {fullDate(profile.createdAt).split(',')[0]}
+                Playing since {longDate(profile.createdAt)}
                 {profile.claimed ? ' · Password set' : ''}
               </p>
             </div>
@@ -158,13 +179,19 @@ export function ProfileScreen() {
 
           {editing ? (
             <IdentityEditor
+              // A sign-in or sign-out swaps the account; its fields start over.
+              key={profile.accountId}
               currentName={profile.displayName}
               currentAvatar={profile.avatar}
               claimed={profile.claimed}
               error={error}
+              claimError={claimError}
+              signInError={signInError}
               onRename={rename}
               onAvatar={setAvatar}
               onClaim={claim}
+              onSignIn={signIn}
+              onSignOut={signOut}
             />
           ) : null}
         </Card>
@@ -190,7 +217,7 @@ export function ProfileScreen() {
           <StatTile
             label="Best streak"
             value={totals.best}
-            hint={favourite ? `in ${labelFor(favourite.mode)}` : undefined}
+            hint={streakMode ? `in ${labelFor(streakMode)}` : undefined}
           />
         </div>
 
@@ -366,20 +393,32 @@ function IdentityEditor({
   currentAvatar,
   claimed,
   error,
+  claimError,
+  signInError,
   onRename,
   onAvatar,
   onClaim,
+  onSignIn,
+  onSignOut,
 }: {
   currentName: string;
   currentAvatar: Avatar;
   claimed: boolean;
   error: string | null;
+  claimError: string | null;
+  signInError: string | null;
   onRename: (name: string) => Promise<boolean>;
   onAvatar: (avatar: Avatar) => Promise<void>;
   onClaim: (password: string) => Promise<boolean>;
+  onSignIn: (name: string, password: string) => Promise<boolean>;
+  onSignOut: () => void;
 }) {
   const [name, setName] = useState(currentName);
   const [password, setPassword] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+  const [loginName, setLoginName] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
 
   return (
@@ -449,6 +488,7 @@ function IdentityEditor({
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            error={claimError}
             hint="At least 8 characters. Requires internet to use this account on another device."
           />
           <Button
@@ -467,6 +507,84 @@ function IdentityEditor({
           {saved}
         </p>
       ) : null}
+
+      <div className="flex flex-col gap-2 border-t border-stroke-soft pt-4">
+        {signingIn ? (
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              const ok = await onSignIn(loginName.trim(), loginPassword);
+              setBusy(false);
+              if (ok) {
+                setLoginPassword('');
+                setSigningIn(false);
+                setSaved('Signed in');
+              }
+            }}
+          >
+            <Field
+              label="Account name"
+              value={loginName}
+              maxLength={20}
+              autoComplete="username"
+              onChange={(event) => setLoginName(event.target.value)}
+            />
+            <Field
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+              error={signInError}
+              hint={
+                claimed
+                  ? 'This device switches to that account.'
+                  : 'This device switches to that account. The current one has no password and cannot be signed back into.'
+              }
+            />
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                size="small"
+                className="w-auto px-4"
+                disabled={busy || loginName.trim().length < 2 || loginPassword.length < 8}
+              >
+                Sign in
+              </Button>
+              <Button
+                type="button"
+                size="small"
+                variant="ghost"
+                className="w-auto px-4"
+                onClick={() => setSigningIn(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="small"
+              variant="ghost"
+              className="w-auto px-4"
+              onClick={() => {
+                setSaved(null);
+                setSigningIn(true);
+              }}
+            >
+              Sign in to another account
+            </Button>
+            {claimed ? (
+              <Button size="small" variant="ghost" className="w-auto px-4" onClick={onSignOut}>
+                Sign out
+              </Button>
+            ) : null}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

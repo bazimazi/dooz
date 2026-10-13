@@ -77,6 +77,10 @@ interface AccountState {
   changes: Changes;
   revision: number;
   error: string | null;
+  /** Why setting a password failed; shown by the password field. */
+  claimError: string | null;
+  /** Why signing in to another account failed. */
+  signInError: string | null;
   syncError: string | null;
   /** Local identity is always available; no server request is needed. */
   initialise: () => Promise<void>;
@@ -88,9 +92,17 @@ interface AccountState {
   claim: (password: string) => Promise<boolean>;
   signIn: (displayName: string, password: string) => Promise<boolean>;
   signOut: () => void;
+  /**
+   * The server no longer accepts the stored token - the account was signed in
+   * elsewhere, or the server's data was reset. A guest account is replaced by a
+   * new one; a claimed account asks for its password again.
+   */
+  dropCredentials: () => Promise<boolean>;
   clearError: () => void;
 }
 let pending: Promise<boolean> | null = null;
+/** When credentials were last dropped, so a server that keeps refusing cannot loop. */
+let droppedAt = 0;
 let generation = 0;
 
 export const useAccountStore = create<AccountState>((set, get) => {
@@ -116,6 +128,8 @@ export const useAccountStore = create<AccountState>((set, get) => {
     changes: initial.changes,
     revision: 0,
     error: null,
+    claimError: null,
+    signInError: null,
     syncError: null,
     initialise: async () => {
       if (!get().profile) {
@@ -152,15 +166,37 @@ export const useAccountStore = create<AccountState>((set, get) => {
           }
           while (Object.keys(get().changes).length > 0) {
             revision = get().revision;
-            profile = (await api.updateProfile(credentials, get().changes)).profile;
+            const sent = get().changes;
+            try {
+              profile = (await api.updateProfile(credentials, sent)).profile;
+            } catch (error) {
+              if (!isRejection(error)) throw error;
+              if (!active()) return false;
+              // The server refused the edit itself - a name already taken. It
+              // will refuse it every time, so drop it rather than let it block
+              // every later sync, keep any edit made since, and say why.
+              const changes = Object.fromEntries(
+                Object.entries(get().changes).filter(
+                  ([key, value]) => sent[key as keyof Changes] !== value,
+                ),
+              ) as Changes;
+              const merged = { ...profile, ...changes };
+              saveLocal(merged, changes);
+              set({ profile: merged, changes, error: messageFor(error) });
+              continue;
+            }
             if (!active()) return false;
             acceptRemote(profile, revision);
           }
           set({ onlineStatus: 'ready', syncError: null });
           return true;
         } catch (error) {
-          if (active())
-            set({ onlineStatus: alreadyReady ? 'ready' : 'error', syncError: messageFor(error) });
+          if (!active()) return false;
+          if (error instanceof ApiError && error.status === 401) {
+            pending = null;
+            return get().dropCredentials();
+          }
+          set({ onlineStatus: alreadyReady ? 'ready' : 'error', syncError: messageFor(error) });
           return false;
         }
       })();
@@ -189,7 +225,7 @@ export const useAccountStore = create<AccountState>((set, get) => {
     },
     claim: async (password) => {
       if (!(await get().ensureOnline())) {
-        set({ error: get().syncError });
+        set({ claimError: get().syncError });
         return false;
       }
       const ownGeneration = generation;
@@ -198,10 +234,10 @@ export const useAccountStore = create<AccountState>((set, get) => {
         const { profile } = await api.claim(get().credentials!, password);
         if (ownGeneration !== generation) return false;
         acceptRemote(profile, revision);
-        set({ error: null });
+        set({ claimError: null });
         return true;
       } catch (error) {
-        if (ownGeneration === generation) set({ error: messageFor(error) });
+        if (ownGeneration === generation) set({ claimError: messageFor(error) });
         return false;
       }
     },
@@ -220,12 +256,17 @@ export const useAccountStore = create<AccountState>((set, get) => {
           credentials,
           profile: result.profile,
           changes: {},
+          revision: 0,
           error: null,
+          claimError: null,
+          signInError: null,
           syncError: null,
         });
         return true;
       } catch (error) {
-        if (ownGeneration === generation) set({ error: messageFor(error), onlineStatus: 'error' });
+        // The current account is untouched; the next sync simply runs again.
+        if (ownGeneration === generation)
+          set({ signInError: messageFor(error), onlineStatus: 'idle' });
         return false;
       }
     },
@@ -243,12 +284,52 @@ export const useAccountStore = create<AccountState>((set, get) => {
         changes: {},
         revision: 0,
         error: null,
+        claimError: null,
+        signInError: null,
         syncError: null,
       });
     },
-    clearError: () => set({ error: null }),
+    dropCredentials: async () => {
+      if (Date.now() - droppedAt < 10_000) {
+        set({ onlineStatus: 'error', syncError: 'The server did not accept this account' });
+        return false;
+      }
+      droppedAt = Date.now();
+      ++generation;
+      pending = null;
+      saveCredentials(null);
+      const claimed = get().profile?.claimed ?? false;
+      if (claimed) {
+        // Only the password gets this account back; a new one would hide it.
+        const profile = newProfile();
+        saveLocal(profile, {});
+        set({
+          credentials: null,
+          profile,
+          changes: {},
+          revision: 0,
+          onlineStatus: 'error',
+          syncError: 'You were signed out. Sign in again from your profile.',
+        });
+        return false;
+      }
+      set({ credentials: null, onlineStatus: 'idle' });
+      return get().ensureOnline();
+    },
+    clearError: () => set({ error: null, claimError: null, signInError: null }),
   };
 });
+
+/** A 4xx other than an expired token: retrying the same request cannot help. */
+function isRejection(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 401 &&
+    error.status !== 429
+  );
+}
 function messageFor(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Could not reach the server';
 }

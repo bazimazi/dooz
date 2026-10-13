@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes, type ReactNode, useId } from 'react';
+import { type InputHTMLAttributes, type KeyboardEvent, type ReactNode, useId } from 'react';
 import { cx } from '@/lib/cx';
 
 interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
@@ -91,10 +91,29 @@ export function Segmented<T extends string>({
     options.findIndex((option) => option.value === value),
   );
 
+  // Arrow keys choose the neighbouring option and only the chosen one is a
+  // tab stop, as the radio group pattern expects.
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const step =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? -1
+          : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const next = (index + step + options.length) % options.length;
+    const option = options[next];
+    if (!option) return;
+    onChange(option.value);
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+  }
+
   return (
     <div
       role="radiogroup"
       aria-label={label}
+      onKeyDown={handleKeyDown}
       className={cx('relative grid rounded-tile border border-stroke bg-surface/40 p-1', className)}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
@@ -107,12 +126,13 @@ export function Segmented<T extends string>({
         }}
       />
 
-      {options.map((option) => (
+      {options.map((option, at) => (
         <button
           key={option.value}
           type="button"
           role="radio"
           aria-checked={option.value === value}
+          tabIndex={at === index ? 0 : -1}
           aria-label={option.title}
           title={option.title ?? undefined}
           onClick={() => onChange(option.value)}

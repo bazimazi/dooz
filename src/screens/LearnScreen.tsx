@@ -49,7 +49,7 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
               <Button
                 size="small"
                 variant="primary"
-                className="mt-1 w-auto self-start px-5"
+                className="mt-1 w-auto self-start px-5 whitespace-nowrap"
                 onClick={() => setTutorial(true)}
               >
                 Start the walkthrough
@@ -100,8 +100,7 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
                 <dd>{detail.config.winLength}</dd>
                 <dt className="text-ink-faint">Clock</dt>
                 <dd>
-                  {Math.round(detail.clock.initialSeconds / 60)} min +{' '}
-                  {detail.clock.incrementSeconds}s
+                  {clockLength(detail.clock.initialSeconds)} + {detail.clock.incrementSeconds}s
                 </dd>
                 <dt className="text-ink-faint">Ranked</dt>
                 <dd>{detail.ranked ? 'Yes' : 'Casual only'}</dd>
@@ -192,4 +191,12 @@ export function LearnScreen({ mode }: { mode: ModeId }) {
       {tutorial ? <OnboardingSheet mode={selected} onClose={() => setTutorial(false)} /> : null}
     </Screen>
   );
+}
+
+/** "3 min", or "2:30" for a clock that is not a whole number of minutes. */
+function clockLength(seconds: number): string {
+  const rest = seconds % 60;
+  return rest === 0
+    ? `${seconds / 60} min`
+    : `${Math.floor(seconds / 60)}:${String(rest).padStart(2, '0')}`;
 }

@@ -175,4 +175,13 @@ export function applyTheme(theme: ThemeChoice): void {
 
   // Keep the browser's own chrome - the address bar, the scrollbars - in step.
   root.style.colorScheme = theme === 'system' ? 'light dark' : theme;
+  // The theme-color metas are chosen by the OS scheme, so a pinned theme
+  // overrides both of them.
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+    const scheme = meta.media.includes('light') ? 'light' : 'dark';
+    meta.content = THEME_COLORS[theme === 'system' ? scheme : theme];
+  }
 }
+
+/** Mirrors the canvas colours in `index.html`. */
+const THEME_COLORS = { light: '#eef1ff', dark: '#232599' } as const;

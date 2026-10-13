@@ -16,7 +16,7 @@ const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 try {
-  await p.goto('http://127.0.0.1:3000');
+  await p.goto(process.env.AUDIT_URL ?? 'http://127.0.0.1:3000');
   await p.waitForTimeout(1200);
   for (const [width, height] of [
     [320, 568],
@@ -32,7 +32,10 @@ try {
     );
     const card = await p.locator('.home-mode-card').boundingBox();
     const footer = await p.getByRole('navigation', { name: 'Explore' }).boundingBox();
-    assert(footer.y + footer.height <= height, 'footer below viewport');
+    assert(
+      footer.y + footer.height <= height,
+      `footer below viewport at ${width}x${height}: ${footer.y + footer.height}`,
+    );
     assert(height < 740 || card.height > 230, 'tall phone missing board preview');
     await p.screenshot({ path: join(out, `home-${width}-${height}.png`) });
   }

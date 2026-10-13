@@ -86,10 +86,12 @@ export function useReplay(record: MatchRecord | null): Replay | null {
   }, []);
 
   const toggle = useCallback(() => {
+    // A match with no moves has nothing to play through.
+    if (total <= 1) return;
     // Pressing play at the end starts again rather than doing nothing.
     if (!playing && atEnd) setAt(0);
     setPlaying(!playing);
-  }, [playing, atEnd]);
+  }, [playing, atEnd, total]);
 
   if (!frames || frames.length === 0) return null;
   const current = frames[at] ?? frames[0]!;

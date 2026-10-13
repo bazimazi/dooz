@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 import { cx } from '@/lib/cx';
+import { loadPreferences } from '@/lib/preferences';
 
 export interface TabOption<T extends string> {
   value: T;
@@ -45,7 +46,7 @@ export function Tabs<T extends string>({
     // list must keep its restored position while centering the filter tab.
     strip.scrollTo({
       left: strip.scrollLeft + tab.left - bounds.left - (bounds.width - tab.width) / 2,
-      behavior: 'smooth',
+      behavior: loadPreferences().graphics === 'low' ? 'auto' : 'smooth',
     });
   }, [value]);
 

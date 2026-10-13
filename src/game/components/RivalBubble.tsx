@@ -1,3 +1,7 @@
+import { useEffect, useState } from 'react';
+
+const SHOW_MS = 2600;
+
 /**
  * A journey rival saying something, under their seat.
  *
@@ -7,11 +11,19 @@
  * there to give the opponent a voice, not to be read carefully.
  */
 export function RivalBubble({ text }: { text: string }) {
+  // Leaves on a timer as well as by its fade, which Low graphics does not play.
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(false), SHOW_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!shown) return null;
+
   return (
     <div
       aria-live="polite"
       className="pointer-events-none absolute top-full right-0 z-30 mt-3 flex max-w-[12rem] animate-banner justify-end"
-      style={{ animationDuration: '2.6s' }}
+      style={{ animationDuration: `${SHOW_MS}ms` }}
     >
       <span className="relative rounded-2xl rounded-tr-sm border border-stroke bg-surface px-3 py-1.5 text-sm shadow-[0_12px_28px_-14px_var(--color-shadow)]">
         {/* The tail points up at the rival's card. */}

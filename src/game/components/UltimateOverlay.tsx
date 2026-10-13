@@ -60,7 +60,7 @@ export function UltimateOverlay({ game }: { game: GameState }) {
                 <span className="absolute inset-[3%] animate-subboard-in">
                   <span
                     className={cx(
-                      'absolute inset-0 rounded-lg ring-2 ring-b8/80',
+                      'active-board-ring absolute inset-0 rounded-lg ring-2 ring-b8/80',
                       meta.activeBoard !== null && 'animate-pulse-soft',
                     )}
                   />
@@ -93,7 +93,7 @@ export function UltimateOverlay({ game }: { game: GameState }) {
               ) : null}
 
               {drawn ? (
-                <span className="text-lg font-semibold text-g8/45 animate-fade-in">—</span>
+                <span className="text-lg font-semibold text-ink-faint animate-fade-in">—</span>
               ) : null}
             </div>
           );

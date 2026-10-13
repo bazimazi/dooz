@@ -79,6 +79,8 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   const [renaming, setRenaming] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [reviewedRound, setReviewedRound] = useState(-1);
+  // A result reopened with "Show result" appears at once, not after the reveal.
+  const [reopenedRound, setReopenedRound] = useState(-1);
   const [score, setScore] = useState<Score>(() => loadScore(mode));
   const recordLocalGame = useProgressStore((state) => state.recordLocalGame);
 
@@ -95,6 +97,9 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
   // Count each finished game once. A take-back that reopens it and finishes it
   // differently replaces its result rather than adding a second one.
   const counted = useRef<{ round: number; result: 'x' | 'o' | 'draws' } | null>(null);
+  // The profile's game count is per round: re-finishing after a take-back is
+  // the same game.
+  const recordedRound = useRef(-1);
   useEffect(() => {
     if (!finished) {
       if (counted.current?.round === round) {
@@ -108,7 +113,10 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
     const result = game.winner === X ? 'x' : game.winner === O ? 'o' : 'draws';
     counted.current = { round, result };
     setScore((current) => ({ ...current, [result]: current[result] + 1 }));
-    recordLocalGame();
+    if (recordedRound.current !== round) {
+      recordedRound.current = round;
+      recordLocalGame();
+    }
   }, [finished, round, game.winner, recordLocalGame]);
 
   // A new mode is a new series.
@@ -169,8 +177,9 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           <Board game={game} onPlay={play} finishTone={finishTone} hints={hints} />
           <OpenerBanner
             round={round}
-            player={game.currentPlayer}
-            label={`${nameOf(game.currentPlayer)} starts`}
+            player={startingPlayerOf(game)}
+            label={`${nameOf(startingPlayerOf(game))} starts`}
+            fresh={game.moves.length === 0}
           />
         </div>
         <VariantStatus game={game} />
@@ -182,7 +191,14 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
         style={{ animationDelay: '0.22s' }}
       >
         {finished && reviewedRound === round ? (
-          <Button size="small" variant="ghost" onClick={() => setReviewedRound(-1)}>
+          <Button
+            size="small"
+            variant="ghost"
+            onClick={() => {
+              setReopenedRound(round);
+              setReviewedRound(-1);
+            }}
+          >
             Show result
           </Button>
         ) : null}
@@ -222,7 +238,7 @@ export function LocalGameScreen({ mode }: LocalGameScreenProps) {
           art={outcomeMark(game.winner)}
           detail={<SeriesDetail score={score} names={names} winner={game.winner} />}
           celebrate={game.winner !== null}
-          revealDelay={revealDelayFor(game)}
+          revealDelay={reopenedRound === round ? 0 : revealDelayFor(game)}
           actions={
             <>
               <Button variant="primary" size="small" block onClick={nextGame}>

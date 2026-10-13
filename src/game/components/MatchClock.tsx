@@ -64,11 +64,7 @@ export function MatchClock({
       // Update at the next visible digit change. CSS still animates the urgent
       // pulse continuously, without running React 60 times per second.
       const next =
-        left >= PRECISE_MS
-          ? left === PRECISE_MS
-            ? 1
-            : left % 1000 || 1000
-          : ((left + 50) % 100 || 100) + 1;
+        left >= PRECISE_MS ? (left === PRECISE_MS ? 1 : left % 1000 || 1000) : left % 100 || 100;
       timer = setTimeout(step, Math.min(left, next));
     };
     const visibilityChanged = () => {
@@ -126,7 +122,9 @@ export function MatchClock({
  */
 export function formatClock(ms: number): string {
   const clamped = Math.max(0, ms);
-  if (clamped < PRECISE_MS) return (clamped / 1000).toFixed(1);
+  // Rounded up to the tenth, as the seconds above are: the clock never reads
+  // lower than the time actually left, and only shows 0.0 once it has run out.
+  if (clamped < PRECISE_MS) return (Math.ceil(clamped / 100) / 10).toFixed(1);
 
   const total = Math.ceil(clamped / 1000);
   const minutes = Math.floor(total / 60);

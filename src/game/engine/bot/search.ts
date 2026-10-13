@@ -52,7 +52,9 @@ export interface SearchResult {
   /** True when the run was cut short, so the caller knows the answer is provisional. */
   readonly aborted: boolean;
   /**
-   * Every root move with the score the last completed iteration gave it.
+   * Every root move with the score the last completed iteration gave it - or,
+   * where an iteration the clock cut short had already proved a move won or
+   * lost, that proof instead.
    *
    * This is what makes the lower difficulties principled rather than random:
    * a weaker bot picks from the moves within a slack window of the best one, so
@@ -371,6 +373,7 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
         rootScores = scored;
       }
     }
+    if (aborted) rootScores = withProvenScores(rootScores, scored);
 
     if (aborted) break;
 
@@ -379,6 +382,30 @@ export function search(board: Board, me: Player, options: SearchOptions): Search
   }
 
   return { move: bestMove, score: bestScore, depth: completedDepth, nodes, aborted, rootScores };
+}
+
+/**
+ * The root scores to hand back once a pass has been cut short.
+ *
+ * The unfinished pass's numbers cannot stand beside the last complete pass's,
+ * because they come from different depths - but a mate score is a proof rather
+ * than an estimate, and it holds at any depth. So a root move the unfinished
+ * pass proved won or lost takes that score, and every other move keeps the one
+ * the complete pass gave it. Ignoring them is how a bot holding a forced win
+ * played a quiet move instead, because the clock ran out one move too late.
+ */
+export function withProvenScores(
+  complete: readonly RootScore[],
+  partial: readonly RootScore[],
+): RootScore[] {
+  const proven = new Map<number, number>();
+  for (const entry of partial) {
+    if (Math.abs(entry.score) >= MATE_THRESHOLD) proven.set(entry.move, entry.score);
+  }
+  return complete.map((entry) => ({
+    move: entry.move,
+    score: proven.get(entry.move) ?? entry.score,
+  }));
 }
 
 export { WIN_SCORE, MATE_THRESHOLD };

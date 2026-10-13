@@ -47,6 +47,19 @@ describe('vanish rules', () => {
     expect(vanishWinningMoves(game, X)).toEqual([]);
   });
 
+  it('counts the square the mover is about to vacate as a threat against them', () => {
+    // O to move. X holds 2 (oldest), 4 and 7; O holds 1 (oldest), 3 and 5.
+    // O's move lifts 1, and then X finishes 1-4-7 on it - whatever O plays,
+    // because the square is still O's own when O plays.
+    const game = fromMoves(VANISH, X, [0, 1, 2, 3, 4, 5, 7]);
+    expect(vanishingNext(game).mover).toBe(1);
+    expect(vanishWinningMoves(game, X)).toEqual([1]);
+    for (const move of legalMoves(game)) {
+      const after = applyMove(game, move)!;
+      if (after.status === 'playing') expect(applyMove(after, 1)?.winner).toBe(X);
+    }
+  });
+
   it('refuses the square of the mark about to vanish', () => {
     const game = fromMoves(VANISH, X, [0, 4, 8, 2, 6, 7]);
     expect(vanishingNext(game).mover).toBe(0);

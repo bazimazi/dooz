@@ -155,3 +155,13 @@ describe('useReplay: playback', () => {
     expect(result.current?.playing).toBe(true);
   });
 });
+
+describe('a match with no moves', () => {
+  it('does not start playback it can never finish', () => {
+    const { result } = renderHook(() =>
+      useReplay(record({ moves: [], moveTimesMs: [], moveCount: 0, winner: 2, reason: 'resign' })),
+    );
+    act(() => result.current!.toggle());
+    expect(result.current!.playing).toBe(false);
+  });
+});

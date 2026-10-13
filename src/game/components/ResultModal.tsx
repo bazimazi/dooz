@@ -215,11 +215,20 @@ export function outcomeFor(game: GameState, you: Player): 'win' | 'loss' | 'draw
   return game.winner === you ? 'win' : 'loss';
 }
 
-/** Plain words for how a match ended, from the point of view of the reader. */
-export function describeReason(reason: EndReason, outcome: 'win' | 'loss' | 'draw'): string {
+/**
+ * Plain words for how a match ended, from the point of view of the reader.
+ * Under misère the completed line belongs to whoever lost.
+ */
+export function describeReason(
+  reason: EndReason,
+  outcome: 'win' | 'loss' | 'draw',
+  misere = false,
+): string {
   switch (reason) {
     case 'line':
-      return outcome === 'win' ? 'You completed the line' : 'Your opponent completed the line';
+      return (outcome === 'win') !== misere
+        ? 'You completed the line'
+        : 'Your opponent completed the line';
     case 'draw':
       return 'The board filled up';
     case 'agreed':
@@ -230,5 +239,27 @@ export function describeReason(reason: EndReason, outcome: 'win' | 'loss' | 'dra
       return outcome === 'win' ? 'Your opponent ran out of time' : 'You ran out of time';
     case 'abandoned':
       return outcome === 'win' ? 'Your opponent left the game' : 'You left the game';
+  }
+}
+
+/** The same, told about two other people: for spectators and shared replays. */
+export function describeReasonFor(
+  reason: EndReason,
+  names: { winner: string; loser: string },
+  misere = false,
+): string {
+  switch (reason) {
+    case 'line':
+      return `${misere ? names.loser : names.winner} completed the line`;
+    case 'draw':
+      return 'The board filled up';
+    case 'agreed':
+      return 'Draw by agreement';
+    case 'resign':
+      return `${names.loser} resigned`;
+    case 'timeout':
+      return `${names.loser} ran out of time`;
+    case 'abandoned':
+      return `${names.loser} left the game`;
   }
 }

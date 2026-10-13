@@ -160,7 +160,7 @@ export function PlayerCard({
       </div>
 
       {isYou ? (
-        <span className="absolute -top-2 left-1/2 animate-badge-in rounded-full border border-stroke-soft bg-seat-idle px-2 py-0.5 text-[0.6875rem] tracking-wide text-ink uppercase">
+        <span className="absolute -top-2 left-1/2 -translate-x-1/2 animate-badge-in rounded-full border border-stroke-soft bg-seat-idle px-2 py-0.5 text-[0.6875rem] tracking-wide text-ink uppercase">
           you
         </span>
       ) : null}
@@ -168,7 +168,7 @@ export function PlayerCard({
       {active ? (
         <TurnCaret
           color={accent}
-          className="absolute -bottom-[0.9rem] left-1/2 h-2 w-4 animate-caret-in"
+          className="absolute -bottom-[0.9rem] left-1/2 h-2 w-4 -translate-x-1/2 animate-caret-in"
         />
       ) : null}
     </div>

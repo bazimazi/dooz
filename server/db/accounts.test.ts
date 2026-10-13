@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PLACEMENT_GAMES, STARTING_RATING } from '../rating.js';
 import { Accounts } from './accounts.js';
 import { type Db, openDatabase } from './database.js';
+import { Matches } from './matches.js';
+import { migrate } from './schema.js';
 
 let db: Db;
 let accounts: Accounts;
@@ -165,9 +167,9 @@ describe('statistics', () => {
 
   it('counts each outcome in its own column', () => {
     const { account } = accounts.create('Ada', 'fox');
-    accounts.recordResult(account.id, 'classic', 'win', 1210);
-    accounts.recordResult(account.id, 'classic', 'loss', 1195);
-    accounts.recordResult(account.id, 'classic', 'draw', 1196);
+    accounts.recordResult(account.id, 'classic', 'win', 1210, true);
+    accounts.recordResult(account.id, 'classic', 'loss', 1195, true);
+    accounts.recordResult(account.id, 'classic', 'draw', 1196, true);
 
     const stats = accounts.statsFor(account.id, 'classic');
     expect(stats).toMatchObject({ played: 3, won: 1, lost: 1, drawn: 1, rating: 1196 });
@@ -175,7 +177,7 @@ describe('statistics', () => {
 
   it('keeps modes apart', () => {
     const { account } = accounts.create('Ada', 'fox');
-    accounts.recordResult(account.id, 'classic', 'win', 1240);
+    accounts.recordResult(account.id, 'classic', 'win', 1240, true);
 
     expect(accounts.statsFor(account.id, 'grid-6').played).toBe(0);
     expect(accounts.statsFor(account.id, 'grid-6').rating).toBe(STARTING_RATING);
@@ -184,11 +186,11 @@ describe('statistics', () => {
   it('counts a streak of wins and resets it on anything else', () => {
     const { account } = accounts.create('Ada', 'fox');
     for (let win = 0; win < 4; win++) {
-      accounts.recordResult(account.id, 'classic', 'win', 1200 + win);
+      accounts.recordResult(account.id, 'classic', 'win', 1200 + win, true);
     }
     expect(accounts.statsFor(account.id, 'classic').streak).toBe(4);
 
-    accounts.recordResult(account.id, 'classic', 'draw', 1204);
+    accounts.recordResult(account.id, 'classic', 'draw', 1204, true);
     const after = accounts.statsFor(account.id, 'classic');
     expect(after.streak).toBe(0);
     // The best is remembered even though the current one is gone.
@@ -213,7 +215,7 @@ describe('leaderboard', () => {
   function seed(name: string, rating: number, played: number): string {
     const { account } = accounts.create(name, 'fox');
     for (let game = 0; game < played; game++) {
-      accounts.recordResult(account.id, 'classic', 'win', rating);
+      accounts.recordResult(account.id, 'classic', 'win', rating, true);
     }
     return account.id;
   }
@@ -242,5 +244,54 @@ describe('leaderboard', () => {
   it('gives no rank to an account still in placement', () => {
     const rookie = seed('Rookie', 1800, 1);
     expect(accounts.rankOf(rookie, 'classic', PLACEMENT_GAMES)).toBeNull();
+  });
+
+  it('does not let casual games count towards placement', () => {
+    seed('Ranked', 1300, PLACEMENT_GAMES);
+    const { account } = accounts.create('Casual', 'fox');
+    for (let game = 0; game < PLACEMENT_GAMES * 2; game++) {
+      accounts.recordResult(account.id, 'classic', 'win', 1200, false);
+    }
+
+    const stats = accounts.statsFor(account.id, 'classic');
+    expect(stats).toMatchObject({ played: PLACEMENT_GAMES * 2, rankedPlayed: 0, won: 10 });
+    const table = accounts.leaderboard('classic', 10, PLACEMENT_GAMES);
+    expect(table.map((row) => row.account.displayName)).toEqual(['Ranked']);
+    expect(accounts.rankOf(account.id, 'classic', PLACEMENT_GAMES)).toBeNull();
+  });
+});
+
+describe('migrations', () => {
+  it('backfills ranked games for statistics written before they were counted', () => {
+    const { account: ada } = accounts.create('Ada', 'fox');
+    const { account: bob } = accounts.create('Bob', 'owl');
+    const matches = new Matches(db);
+    for (const kind of ['ranked', 'ranked', 'casual'] as const) {
+      matches.record({
+        mode: 'classic',
+        config: { variant: 'classic', size: 3, winLength: 3 },
+        kind,
+        xId: ada.id,
+        oId: bob.id,
+        startingPlayer: 1,
+        moves: [0, 3, 1, 4, 2],
+        moveTimesMs: [100, 100, 100, 100, 100],
+        winner: 1,
+        reason: 'line',
+        playedAt: clock,
+        durationMs: 500,
+        rating: null,
+      });
+      accounts.recordResult(ada.id, 'classic', 'win', 1200, kind === 'ranked');
+      accounts.recordResult(bob.id, 'classic', 'loss', 1200, kind === 'ranked');
+    }
+
+    // Wind the database back to before the column existed, then forward again.
+    db.exec('ALTER TABLE stats DROP COLUMN ranked_played');
+    db.pragma('user_version = 1');
+    migrate(db);
+
+    expect(accounts.statsFor(ada.id, 'classic')).toMatchObject({ played: 3, rankedPlayed: 2 });
+    expect(accounts.statsFor(bob.id, 'classic')).toMatchObject({ played: 3, rankedPlayed: 2 });
   });
 });
