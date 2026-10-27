@@ -1,0 +1,44 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Served at https://<GAME>.bazimazi.games
+  GAME: dooz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy to https://dooz.bazimazi.games
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          release="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          ssh "deploy@$HOST" mkdir -p "/var/www/games/$GAME/releases"
+          rsync -az --chmod=D755,F644 dist/ "deploy@$HOST:/var/www/games/$GAME/releases/$release/"
+          ssh "deploy@$HOST" bazimazi-game-activate "$GAME" "$release"
